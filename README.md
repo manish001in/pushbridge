@@ -23,11 +23,15 @@ A Manifest V3 compatible Chrome extension that replicates core Pushbullet functi
 
 ## 🔧 Installation
 
-### From Chrome Web Store (Recommended)
+### From Release Packages (Recommended)
 
-1. Visit the [Chrome Web Store listing](https://chrome.google.com/webstore/detail/pushbridge)
-2. Click "Add to Chrome"
-3. Follow the setup instructions below
+1. Download the latest release package from the [Releases page](https://github.com/manish001in/pushbridge/releases)
+2. Extract the contents
+3. Load the extension in Chrome Developer Mode
+   - Open Chrome and go to `chrome://extensions/`
+   - Enable "Developer mode"
+   - Click "Load unpacked"
+   - Select the unzipped release package folder
 
 ### Manual Installation (Development)
 
