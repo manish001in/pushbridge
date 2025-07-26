@@ -4,6 +4,7 @@
  */
 
 import { getLocal, setLocal } from '../../src/background/storage';
+import { UnifiedNotificationTracker, NotificationData } from '../../src/background/unifiedNotificationTracker';
 
 // Mock storage
 jest.mock('../../src/background/storage', () => ({
@@ -13,9 +14,6 @@ jest.mock('../../src/background/storage', () => ({
 
 const mockGetLocal = getLocal as jest.MockedFunction<typeof getLocal>;
 const mockSetLocal = setLocal as jest.MockedFunction<typeof setLocal>;
-
-// Import the class directly to create fresh instances for each test
-import { UnifiedNotificationTracker, NotificationData, NotificationType } from '../../src/background/unifiedNotificationTracker';
 
 describe('UnifiedNotificationTracker Integration', () => {
   let tracker: UnifiedNotificationTracker;

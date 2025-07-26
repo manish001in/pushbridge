@@ -4,8 +4,6 @@
 
 import { jest } from '@jest/globals';
 
-import { SmsApiClient } from '../../src/background/smsApiClient';
-
 // Mock dependencies
 jest.mock('../../src/background/errorManager');
 jest.mock('../../src/background/httpClient');
@@ -13,10 +11,11 @@ jest.mock('../../src/background/storage');
 jest.mock('../../src/background/deviceManager');
 
 // Import after mocking
+import { getDevices } from '../../src/background/deviceManager';
 import { reportError } from '../../src/background/errorManager';
 import { httpClient } from '../../src/background/httpClient';
+import { SmsApiClient } from '../../src/background/smsApiClient';
 import { getLocal } from '../../src/background/storage';
-import { getDevices } from '../../src/background/deviceManager';
 
 // Mock fetch
 global.fetch = jest.fn();

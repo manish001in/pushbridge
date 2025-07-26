@@ -4,7 +4,7 @@
  */
 
 import { getLocal, setLocal } from '../../src/background/storage';
-import { unifiedNotificationTracker, NotificationData, NotificationType, UnifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
+import { unifiedNotificationTracker, NotificationData, UnifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
 
 // Mock storage
 jest.mock('../../src/background/storage', () => ({

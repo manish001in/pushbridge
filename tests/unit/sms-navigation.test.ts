@@ -10,13 +10,10 @@ describe('SMS Navigation', () => {
   let mockConversationTitle: HTMLSpanElement;
   let mockConversationListView: HTMLElement;
   let mockSmsThreadView: HTMLElement;
-  let conversationSelectedEvent: CustomEvent | null = null;
-  let backButtonClicked = false;
+
 
   beforeEach(() => {
     // Reset mocks
-    conversationSelectedEvent = null;
-    backButtonClicked = false;
 
     // Mock conversation list component
     mockConversationList = {

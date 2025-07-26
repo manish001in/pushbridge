@@ -13,8 +13,8 @@ const mockChrome = {
     setBadgeBackgroundColor: jest.fn(),
   },
   notifications: {
-    create: jest.fn((...args) => Promise.resolve('test-uuid-12345')),
-    clear: jest.fn((...args) => Promise.resolve(true)),
+    create: jest.fn(() => Promise.resolve('test-uuid-12345')),
+    clear: jest.fn(() => Promise.resolve(true)),
     get: jest.fn(),
     update: jest.fn(),
   },

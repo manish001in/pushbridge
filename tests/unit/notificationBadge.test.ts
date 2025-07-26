@@ -2,7 +2,10 @@
  * Tests for Notification Badge Manager
  */
 
-import { notificationBadge, NotificationCounts } from '../../src/background/notificationBadge';
+import { notificationBadge } from '../../src/background/notificationBadge';
+import { getTotalUnreadCount } from '../../src/background/smsBridge';
+import { getLocal, setLocal } from '../../src/background/storage';
+import { unifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
 
 // Mock chrome.action API
 const mockSetBadgeText = jest.fn();
@@ -39,10 +42,6 @@ jest.mock('../../src/background/unifiedNotificationTracker', () => ({
     clearAllNotifications: jest.fn(),
   },
 }));
-
-import { getTotalUnreadCount } from '../../src/background/smsBridge';
-import { getLocal, setLocal } from '../../src/background/storage';
-import { unifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
 
 const mockGetLocal = getLocal as jest.MockedFunction<typeof getLocal>;
 const mockSetLocal = setLocal as jest.MockedFunction<typeof setLocal>;
