@@ -296,7 +296,10 @@ export class PbConversationList extends LitElement {
 
     // Find the conversation to get its name
     const conversation = this.conversations.find(c => c.id === conversationId);
-    const conversationName = conversation?.name || conversation?.recipients?.map(r => r.name).join(', ') || 'Unknown';
+    const conversationName =
+      conversation?.name ||
+      conversation?.recipients?.map(r => r.name).join(', ') ||
+      'Unknown';
 
     // Dispatch custom event to parent
     this.dispatchEvent(

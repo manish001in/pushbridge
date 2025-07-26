@@ -146,7 +146,7 @@ export async function getDevices(
       devices,
       lastFetched: Date.now(),
       cursor: await getLocal<string>('pb_devices_cursor'),
-      hasMore: await getLocal<boolean>('pb_devices_has_more') || false,
+      hasMore: (await getLocal<boolean>('pb_devices_has_more')) || false,
     };
     await setLocal('pb_device_cache', cache);
 
@@ -192,7 +192,9 @@ export async function getPushableDevices(
  * @param forceRefresh - Whether to force refresh (ignore stored cursor)
  * @returns Promise resolving to array of devices
  */
-async function fetchDevicesFromAPI(forceRefresh = false): Promise<PushbulletDevice[]> {
+async function fetchDevicesFromAPI(
+  forceRefresh = false
+): Promise<PushbulletDevice[]> {
   const token = await getLocal<string>('pb_token');
   if (!token) {
     throw new Error('No token available');
@@ -210,7 +212,7 @@ async function fetchDevicesFromAPI(forceRefresh = false): Promise<PushbulletDevi
     params.append('cursor', cursor);
   }
 
-  const url = cursor 
+  const url = cursor
     ? `https://api.pushbullet.com/v2/devices?${params}`
     : 'https://api.pushbullet.com/v2/devices';
 
@@ -236,7 +238,7 @@ async function fetchDevicesFromAPI(forceRefresh = false): Promise<PushbulletDevi
   }
 
   const data: DeviceApiResponse = await response.json();
-  
+
   // Store cursor for next pagination
   if (data.cursor) {
     await setLocal('pb_devices_cursor', data.cursor);
@@ -304,31 +306,40 @@ export async function activateDevice(deviceIden: string): Promise<void> {
 export async function getSmsCapableDevices(
   forceRefresh = false
 ): Promise<PushbulletDevice[]> {
-  console.log('[DeviceManager] Getting SMS-capable devices, forceRefresh:', forceRefresh);
+  console.log(
+    '[DeviceManager] Getting SMS-capable devices, forceRefresh:',
+    forceRefresh
+  );
   const allDevices = await getDevices(forceRefresh);
   console.log('[DeviceManager] Total devices:', allDevices.length);
-  
+
   // Log all devices with their SMS properties
-  console.log('[DeviceManager] All devices with SMS info:', allDevices.map(d => ({
-    iden: d.iden,
-    nickname: d.nickname,
-    has_sms: d.has_sms,
-    active: d.active,
-    created: d.created,
-    type: d.type
-  })));
-  
+  console.log(
+    '[DeviceManager] All devices with SMS info:',
+    allDevices.map(d => ({
+      iden: d.iden,
+      nickname: d.nickname,
+      has_sms: d.has_sms,
+      active: d.active,
+      created: d.created,
+      type: d.type,
+    }))
+  );
+
   const smsDevices = allDevices
     .filter(device => device.has_sms === true && device.active)
     .sort((a, b) => a.nickname.localeCompare(b.nickname));
-  
-  console.log('[DeviceManager] SMS-capable devices:', smsDevices.map(d => ({
-    iden: d.iden,
-    nickname: d.nickname,
-    has_sms: d.has_sms,
-    active: d.active
-  })));
-  
+
+  console.log(
+    '[DeviceManager] SMS-capable devices:',
+    smsDevices.map(d => ({
+      iden: d.iden,
+      nickname: d.nickname,
+      has_sms: d.has_sms,
+      active: d.active,
+    }))
+  );
+
   return smsDevices;
 }
 
@@ -341,34 +352,45 @@ export async function getDefaultSmsDevice(
   forceRefresh = false
 ): Promise<PushbulletDevice | null> {
   try {
-    console.log('[DeviceManager] Getting default SMS device, forceRefresh:', forceRefresh);
-    
+    console.log(
+      '[DeviceManager] Getting default SMS device, forceRefresh:',
+      forceRefresh
+    );
+
     // Check if we have a stored default SMS device
     const storedIden = await getLocal<string>('defaultSmsDevice');
     console.log('[DeviceManager] Stored default SMS device ID:', storedIden);
-    
+
     if (storedIden && !forceRefresh) {
       const devices = await getDevices();
       console.log('[DeviceManager] Found', devices.length, 'total devices');
-      
+
       // Log all devices to see what we have
-      console.log('[DeviceManager] All devices:', devices.map(d => ({
-        iden: d.iden,
-        nickname: d.nickname,
-        has_sms: d.has_sms,
-        active: d.active,
-        type: d.type
-      })));
-      
+      console.log(
+        '[DeviceManager] All devices:',
+        devices.map(d => ({
+          iden: d.iden,
+          nickname: d.nickname,
+          has_sms: d.has_sms,
+          active: d.active,
+          type: d.type,
+        }))
+      );
+
       const device = devices.find(
         d => d.iden === storedIden && d.has_sms === true
       );
       if (device) {
-        console.log('[DeviceManager] Using stored default SMS device:', device.nickname);
+        console.log(
+          '[DeviceManager] Using stored default SMS device:',
+          device.nickname
+        );
         return device;
       } else {
-        console.log('[DeviceManager] Stored device not found or not SMS-capable');
-        
+        console.log(
+          '[DeviceManager] Stored device not found or not SMS-capable'
+        );
+
         // Check if device exists but doesn't meet criteria
         const deviceExists = devices.find(d => d.iden === storedIden);
         if (deviceExists) {
@@ -376,10 +398,14 @@ export async function getDefaultSmsDevice(
             iden: deviceExists.iden,
             nickname: deviceExists.nickname,
             has_sms: deviceExists.has_sms,
-            active: deviceExists.active
+            active: deviceExists.active,
           });
         } else {
-          console.log('[DeviceManager] Device with ID', storedIden, 'not found in device list');
+          console.log(
+            '[DeviceManager] Device with ID',
+            storedIden,
+            'not found in device list'
+          );
         }
       }
     }
@@ -387,12 +413,19 @@ export async function getDefaultSmsDevice(
     // Find the first SMS-capable device
     console.log('[DeviceManager] Looking for SMS-capable devices...');
     const smsDevices = await getSmsCapableDevices(forceRefresh);
-    console.log('[DeviceManager] Found', smsDevices.length, 'SMS-capable devices');
-    
+    console.log(
+      '[DeviceManager] Found',
+      smsDevices.length,
+      'SMS-capable devices'
+    );
+
     if (smsDevices.length > 0) {
       const defaultDevice = smsDevices[0];
       await setLocal('defaultSmsDevice', defaultDevice.iden);
-      console.log('[DeviceManager] Set default SMS device:', defaultDevice.nickname);
+      console.log(
+        '[DeviceManager] Set default SMS device:',
+        defaultDevice.nickname
+      );
       return defaultDevice;
     }
 
@@ -458,36 +491,47 @@ export async function checkChromeDevice(): Promise<boolean> {
 /**
  * Handle default SMS device change
  */
-export async function handleDefaultSmsDeviceChange(newDeviceIden: string): Promise<void> {
+export async function handleDefaultSmsDeviceChange(
+  newDeviceIden: string
+): Promise<void> {
   try {
-    console.log(`[DeviceManager] Handling default SMS device change to: ${newDeviceIden}`);
-    
+    console.log(
+      `[DeviceManager] Handling default SMS device change to: ${newDeviceIden}`
+    );
+
     // Get the new device
     const devices = await getDevices();
     const newDevice = devices.find(d => d.iden === newDeviceIden);
-    
+
     if (!newDevice) {
       console.error(`[DeviceManager] New device ${newDeviceIden} not found`);
       return;
     }
-    
+
     if (!newDevice.has_sms) {
-      console.error(`[DeviceManager] New device ${newDeviceIden} is not SMS-capable`);
+      console.error(
+        `[DeviceManager] New device ${newDeviceIden} is not SMS-capable`
+      );
       return;
     }
-    
+
     // Clear existing SMS cache
     await clearSmsCache();
-    
+
     // Load SMS data for new device
     await syncSmsHistoryFromApi(newDeviceIden);
-    
+
     // Update stored default device
     await setLocal('defaultSmsDevice', newDeviceIden);
-    
-    console.log(`[DeviceManager] Successfully switched to SMS device: ${newDevice.nickname}`);
+
+    console.log(
+      `[DeviceManager] Successfully switched to SMS device: ${newDevice.nickname}`
+    );
   } catch (error) {
-    console.error('[DeviceManager] Failed to handle default SMS device change:', error);
+    console.error(
+      '[DeviceManager] Failed to handle default SMS device change:',
+      error
+    );
     await reportError(PBError.Unknown, {
       message: 'Failed to handle default SMS device change',
       code: error instanceof Error ? undefined : 500,
@@ -498,27 +542,29 @@ export async function handleDefaultSmsDeviceChange(newDeviceIden: string): Promi
 /**
  * Set default SMS device
  */
-export async function setDefaultSmsDevice(deviceIden: string): Promise<boolean> {
+export async function setDefaultSmsDevice(
+  deviceIden: string
+): Promise<boolean> {
   try {
     console.log(`[DeviceManager] Setting default SMS device to: ${deviceIden}`);
-    
+
     // Verify device exists and has SMS capability
     const devices = await getDevices();
     const device = devices.find(d => d.iden === deviceIden);
-    
+
     if (!device) {
       console.error(`[DeviceManager] Device ${deviceIden} not found`);
       return false;
     }
-    
+
     if (!device.has_sms) {
       console.error(`[DeviceManager] Device ${deviceIden} is not SMS-capable`);
       return false;
     }
-    
+
     // Handle device change
     await handleDefaultSmsDeviceChange(deviceIden);
-    
+
     return true;
   } catch (error) {
     console.error('[DeviceManager] Failed to set default SMS device:', error);

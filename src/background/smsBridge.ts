@@ -8,7 +8,12 @@ import { SmsThread, SmsMsg } from '../types/pushbullet';
 import { getDefaultSmsDevice } from './deviceManager';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
-import { getTotalUnreadSmsCount, syncAllSmsData, getThreadById, updateThreadWithSentMessage } from './simpleSmsSync';
+import {
+  getTotalUnreadSmsCount,
+  syncAllSmsData,
+  getThreadById,
+  updateThreadWithSentMessage,
+} from './simpleSmsSync';
 import { smsApiClient } from './smsApiClient';
 import { SmsDataMapper } from './smsDataMapper';
 import { getLocal, setLocal } from './storage';
@@ -27,7 +32,7 @@ const STORAGE_KEYS = {
   SMS_THREADS: (deviceIden: string) => `smsThreads_${deviceIden}`,
   SMS_DEVICE_INFO: (deviceIden: string) => `smsDeviceInfo_${deviceIden}`,
   SMS_LAST_SYNC: (deviceIden: string) => `smsLastSync_${deviceIden}`,
-  DEFAULT_SMS_DEVICE: 'defaultSmsDevice' // existing
+  DEFAULT_SMS_DEVICE: 'defaultSmsDevice', // existing
 };
 
 /**
@@ -163,7 +168,7 @@ export async function addMessageToThread(
       isInbound: message.inbound,
       timestamp: message.timestamp,
       timestampISO: new Date(message.timestamp).toISOString(),
-      contactName: contactName || 'unknown'
+      contactName: contactName || 'unknown',
     });
 
     let thread = conversationCache.get(conversationId);
@@ -191,7 +196,9 @@ export async function addMessageToThread(
       if (contactName && contactName !== conversationId) {
         thread.name = contactName;
       }
-      console.log(`📝 [SMSBridge] Updated existing thread: ${conversationId}, unreadCount: ${thread.unreadCount}`);
+      console.log(
+        `📝 [SMSBridge] Updated existing thread: ${conversationId}, unreadCount: ${thread.unreadCount}`
+      );
     }
 
     // Check for duplicate message
@@ -199,7 +206,10 @@ export async function addMessageToThread(
       m => m.pb_guid === message.pb_guid
     );
     if (isDuplicate) {
-      console.log('⏭️ [SMSBridge] Skipping duplicate message:', message.pb_guid);
+      console.log(
+        '⏭️ [SMSBridge] Skipping duplicate message:',
+        message.pb_guid
+      );
       return;
     }
 
@@ -216,11 +226,17 @@ export async function addMessageToThread(
 
     // Just mark as processed for deduplication, don't increment count
     if (message.inbound) {
-      await unifiedNotificationTracker.markAsProcessed('sms', message.pb_guid, message.timestamp);
+      await unifiedNotificationTracker.markAsProcessed(
+        'sms',
+        message.pb_guid,
+        message.timestamp
+      );
       console.log(`📝 [SMSBridge] Marked SMS as processed: ${message.pb_guid}`);
     }
 
-    console.log(`✅ [SMSBridge] Added message to thread: ${conversationId}, total messages: ${thread.messages.length}`);
+    console.log(
+      `✅ [SMSBridge] Added message to thread: ${conversationId}, total messages: ${thread.messages.length}`
+    );
   } catch (error) {
     console.error('Failed to add message to thread:', error);
     await reportError(PBError.Unknown, {
@@ -317,7 +333,7 @@ export async function sendSms(
     // Get the conversation to extract recipient phone numbers
     // Use simple SMS system instead of conversationCache
     let conversation = await getThreadById(deviceIden, conversationId);
-    
+
     // If conversation not found, fail gracefully - UI will show reload option
     if (!conversation) {
       console.log(`📱 [SMS] Conversation ${conversationId} not found in cache`);
@@ -385,8 +401,11 @@ export async function sendSms(
 
     // Add sent message to local cache
     const sentMessage: SmsMsg = {
-      id: result.id || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      pb_guid: result.guid || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id:
+        result.id || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      pb_guid:
+        result.guid ||
+        `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: Date.now(),
       inbound: false,
       text: message,
@@ -418,7 +437,7 @@ export async function markConversationAsRead(
     if (thread && thread.unreadCount > 0) {
       thread.unreadCount = 0;
       console.log('Marked conversation as read:', conversationId);
-      
+
       // Clear SMS notifications in unified tracker
       await unifiedNotificationTracker.clearNotifications('sms');
     }
@@ -439,7 +458,10 @@ export async function getTotalUnreadCount(): Promise<number> {
       return simpleCount;
     }
   } catch (error) {
-    console.warn('[SMSBridge] Simple SMS count failed, falling back to cache:', error);
+    console.warn(
+      '[SMSBridge] Simple SMS count failed, falling back to cache:',
+      error
+    );
   }
 
   // Fallback to old cache system
@@ -801,7 +823,7 @@ export async function loadOlderMessagesFromApi(
     const messages: SmsMsg[] = conversationMessages.map((text: any) => ({
       id: text.id,
       pb_guid: text.guid || text.id,
-              timestamp: fromPushbulletTime(text.timestamp),
+      timestamp: fromPushbulletTime(text.timestamp),
       inbound: text.direction === 'incoming',
       text: text.body || '',
       conversation_iden: conversationId,
@@ -826,9 +848,13 @@ export async function loadOlderMessagesFromApi(
 /**
  * Get SMS threads from API for a specific device
  */
-export async function getSmsThreadsFromApi(deviceIden: string): Promise<SmsThread[]> {
+export async function getSmsThreadsFromApi(
+  deviceIden: string
+): Promise<SmsThread[]> {
   try {
-    console.log(`[SMSBridge] Getting SMS threads from API for device: ${deviceIden}`);
+    console.log(
+      `[SMSBridge] Getting SMS threads from API for device: ${deviceIden}`
+    );
 
     // Verify device has SMS capability
     const hasSms = await smsApiClient.verifyDeviceSmsCapability(deviceIden);
@@ -839,7 +865,7 @@ export async function getSmsThreadsFromApi(deviceIden: string): Promise<SmsThrea
 
     // Get threads from API
     const response = await smsApiClient.getSmsThreadsList(deviceIden);
-    
+
     // Convert API threads to internal format
     const threads: SmsThread[] = response.threads.map(apiThread =>
       SmsDataMapper.mapApiThreadToSmsThread(apiThread, deviceIden)
@@ -848,7 +874,10 @@ export async function getSmsThreadsFromApi(deviceIden: string): Promise<SmsThrea
     console.log(`[SMSBridge] Retrieved ${threads.length} SMS threads from API`);
     return threads;
   } catch (error) {
-    console.error(`[SMSBridge] Failed to get SMS threads from API for device ${deviceIden}:`, error);
+    console.error(
+      `[SMSBridge] Failed to get SMS threads from API for device ${deviceIden}:`,
+      error
+    );
     throw error;
   }
 }
@@ -861,20 +890,30 @@ export async function getSmsThreadMessagesFromApi(
   threadId: string
 ): Promise<SmsMsg[]> {
   try {
-    console.log(`[SMSBridge] Getting SMS thread messages from API for device: ${deviceIden}, thread: ${threadId}`);
+    console.log(
+      `[SMSBridge] Getting SMS thread messages from API for device: ${deviceIden}, thread: ${threadId}`
+    );
 
     // Get messages from API
-    const response = await smsApiClient.getSmsThreadMessages(deviceIden, threadId);
-    
+    const response = await smsApiClient.getSmsThreadMessages(
+      deviceIden,
+      threadId
+    );
+
     // Convert API messages to internal format
     const messages: SmsMsg[] = response.thread.map(apiMessage =>
       SmsDataMapper.mapApiMessageToSmsMsg(apiMessage, deviceIden, threadId)
     );
 
-    console.log(`[SMSBridge] Retrieved ${messages.length} SMS messages from API`);
+    console.log(
+      `[SMSBridge] Retrieved ${messages.length} SMS messages from API`
+    );
     return messages;
   } catch (error) {
-    console.error(`[SMSBridge] Failed to get SMS thread messages from API for device ${deviceIden}, thread ${threadId}:`, error);
+    console.error(
+      `[SMSBridge] Failed to get SMS thread messages from API for device ${deviceIden}, thread ${threadId}:`,
+      error
+    );
     throw error;
   }
 }
@@ -904,17 +943,18 @@ export async function clearSmsCache(deviceIden?: string): Promise<void> {
   try {
     if (deviceIden) {
       // Clear cache for specific device
-      const deviceThreads = Array.from(conversationCache.values())
-        .filter(thread => thread.deviceIden === deviceIden);
-      
+      const deviceThreads = Array.from(conversationCache.values()).filter(
+        thread => thread.deviceIden === deviceIden
+      );
+
       deviceThreads.forEach(thread => {
         conversationCache.delete(thread.id);
       });
-      
+
       // Clear device-specific storage
       const storageKey = STORAGE_KEYS.SMS_THREADS(deviceIden);
       await setLocal(storageKey, null);
-      
+
       console.log(`[SMSBridge] Cleared SMS cache for device ${deviceIden}`);
     } else {
       // Clear entire cache
@@ -929,12 +969,17 @@ export async function clearSmsCache(deviceIden?: string): Promise<void> {
 /**
  * Get last sync timestamp for a device
  */
-export async function getLastSyncTimestamp(deviceIden: string): Promise<number | null> {
+export async function getLastSyncTimestamp(
+  deviceIden: string
+): Promise<number | null> {
   try {
     const storageKey = STORAGE_KEYS.SMS_LAST_SYNC(deviceIden);
-    return await getLocal<number>(storageKey) || null;
+    return (await getLocal<number>(storageKey)) || null;
   } catch (error) {
-    console.error(`[SMSBridge] Failed to get last sync timestamp for device ${deviceIden}:`, error);
+    console.error(
+      `[SMSBridge] Failed to get last sync timestamp for device ${deviceIden}:`,
+      error
+    );
     return null;
   }
 }
@@ -942,12 +987,18 @@ export async function getLastSyncTimestamp(deviceIden: string): Promise<number |
 /**
  * Set last sync timestamp for a device
  */
-export async function setLastSyncTimestamp(deviceIden: string, timestamp: number): Promise<void> {
+export async function setLastSyncTimestamp(
+  deviceIden: string,
+  timestamp: number
+): Promise<void> {
   try {
     const storageKey = STORAGE_KEYS.SMS_LAST_SYNC(deviceIden);
     await setLocal(storageKey, timestamp);
   } catch (error) {
-    console.error(`[SMSBridge] Failed to set last sync timestamp for device ${deviceIden}:`, error);
+    console.error(
+      `[SMSBridge] Failed to set last sync timestamp for device ${deviceIden}:`,
+      error
+    );
   }
 }
 
@@ -964,14 +1015,17 @@ export async function getSyncStatus(deviceIden: string): Promise<{
     const lastSync = await getLastSyncTimestamp(deviceIden);
     const isOnline = await smsApiClient.isDeviceOnline(deviceIden);
     const hasSms = await smsApiClient.verifyDeviceSmsCapability(deviceIden);
-    
+
     return {
       lastSync,
       isOnline,
       hasSms,
     };
   } catch (error) {
-    console.error(`[SMSBridge] Failed to get sync status for device ${deviceIden}:`, error);
+    console.error(
+      `[SMSBridge] Failed to get sync status for device ${deviceIden}:`,
+      error
+    );
     return {
       lastSync: null,
       isOnline: false,
@@ -986,15 +1040,20 @@ export async function getSyncStatus(deviceIden: string): Promise<{
  */
 export async function forceSyncSmsHistory(deviceIden: string): Promise<void> {
   try {
-    console.log(`[SMSBridge] Force syncing SMS history for device: ${deviceIden}`);
-    
+    console.log(
+      `[SMSBridge] Force syncing SMS history for device: ${deviceIden}`
+    );
+
     // Clear last sync timestamp to force full sync
     await setLastSyncTimestamp(deviceIden, 0);
-    
+
     // Perform sync
     await syncSmsHistoryFromApi(deviceIden);
   } catch (error) {
-    console.error(`[SMSBridge] Force sync failed for device ${deviceIden}:`, error);
+    console.error(
+      `[SMSBridge] Force sync failed for device ${deviceIden}:`,
+      error
+    );
     throw error;
   }
 }

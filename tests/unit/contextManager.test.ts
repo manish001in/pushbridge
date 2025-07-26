@@ -14,24 +14,23 @@ const mockErrorManager = require('../../src/background/errorManager');
 const mockHttpClient = require('../../src/background/httpClient');
 const mockStorage = require('../../src/background/storage');
 
-
 describe('ContextManager', () => {
   let contextManager: ContextManager;
 
   beforeEach(() => {
     // Clear all mocks
     jest.clearAllMocks();
-    
+
     // Reset singleton instance
     (ContextManager as any).instance = null;
-    
+
     // Mock storage responses
     mockStorage.getLocal.mockResolvedValue('test-token');
     mockStorage.setLocal.mockResolvedValue(undefined);
-    
+
     // Mock error manager
     mockErrorManager.reportError.mockResolvedValue(undefined);
-    
+
     // Get fresh instance
     contextManager = ContextManager.getInstance();
   });
@@ -60,55 +59,58 @@ describe('ContextManager', () => {
       mockHttpClient.httpClient.fetch
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({
-            subscriptions: [
-              {
-                iden: 'sub1',
-                created: 1234567890,
-                modified: 1234567890,
-                active: true,
-                channel: {
-                  iden: 'channel1',
-                  tag: 'test-channel',
-                  name: 'Test Channel',
-                  description: 'Test description',
+          json: () =>
+            Promise.resolve({
+              subscriptions: [
+                {
+                  iden: 'sub1',
+                  created: 1234567890,
+                  modified: 1234567890,
+                  active: true,
+                  channel: {
+                    iden: 'channel1',
+                    tag: 'test-channel',
+                    name: 'Test Channel',
+                    description: 'Test description',
+                  },
                 },
-              },
-            ],
-          }),
+              ],
+            }),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({
-            channels: [
-              {
-                iden: 'owned1',
-                tag: 'owned-channel',
-                name: 'Owned Channel',
-                description: 'Owned description',
-                active: true,
-                created: 1234567890,
-                modified: 1234567890,
-              },
-            ],
-          }),
+          json: () =>
+            Promise.resolve({
+              channels: [
+                {
+                  iden: 'owned1',
+                  tag: 'owned-channel',
+                  name: 'Owned Channel',
+                  description: 'Owned description',
+                  active: true,
+                  created: 1234567890,
+                  modified: 1234567890,
+                },
+              ],
+            }),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({
-            devices: [
-              {
-                iden: 'device1',
-                nickname: 'Test Device',
-                type: 'chrome',
-                active: true,
-                created: 1234567890,
-                modified: 1234567890,
-                icon: 'chrome',
-                pushable: true,
-              },
-            ],
-          }),
+          json: () =>
+            Promise.resolve({
+              devices: [
+                {
+                  iden: 'device1',
+                  nickname: 'Test Device',
+                  type: 'chrome',
+                  active: true,
+                  created: 1234567890,
+                  modified: 1234567890,
+                  icon: 'chrome',
+                  pushable: true,
+                },
+              ],
+            }),
         });
 
       mockStorage.getLocal
@@ -132,15 +134,15 @@ describe('ContextManager', () => {
         timestamp: Date.now(),
       };
 
-      mockHttpClient.httpClient.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve({
+      mockHttpClient.httpClient.fetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             subscriptions: [],
             channels: [],
             devices: [],
           }),
-        });
+      });
 
       mockStorage.getLocal
         .mockResolvedValueOnce('test-token')
@@ -177,15 +179,15 @@ describe('ContextManager', () => {
         timestamp: Date.now(),
       };
 
-      mockHttpClient.httpClient.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve({
+      mockHttpClient.httpClient.fetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             subscriptions: [],
             channels: [],
             devices: [],
           }),
-        });
+      });
 
       mockStorage.getLocal
         .mockResolvedValueOnce('test-token')
@@ -206,10 +208,10 @@ describe('ContextManager', () => {
         timestamp: Date.now(),
       };
 
-      mockHttpClient.httpClient.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve({
+      mockHttpClient.httpClient.fetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             subscriptions: [
               {
                 iden: 'sub1',
@@ -248,7 +250,7 @@ describe('ContextManager', () => {
               },
             ],
           }),
-        });
+      });
 
       mockStorage.getLocal
         .mockResolvedValueOnce('test-token')
@@ -273,7 +275,10 @@ describe('ContextManager', () => {
     });
 
     it('should return false for unknown source', async () => {
-      const isKnown = await contextManager.isKnownSource('unknown-device', 'unknown-channel');
+      const isKnown = await contextManager.isKnownSource(
+        'unknown-device',
+        'unknown-channel'
+      );
       expect(isKnown).toBe(false);
     });
 
@@ -291,15 +296,15 @@ describe('ContextManager', () => {
         timestamp: Date.now(),
       };
 
-      mockHttpClient.httpClient.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve({
+      mockHttpClient.httpClient.fetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             subscriptions: [],
             channels: [],
             devices: [],
           }),
-        });
+      });
 
       mockStorage.getLocal
         .mockResolvedValueOnce('test-token')
@@ -308,7 +313,10 @@ describe('ContextManager', () => {
       await contextManager.getContext(trigger);
 
       // Now handle unknown source
-      await contextManager.handleUnknownSource('unknown-device', 'unknown-channel');
+      await contextManager.handleUnknownSource(
+        'unknown-device',
+        'unknown-channel'
+      );
 
       // Should have made additional API calls
       expect(mockHttpClient.httpClient.fetch).toHaveBeenCalledTimes(6); // 3 initial + 3 for refresh
@@ -332,7 +340,9 @@ describe('ContextManager', () => {
         .mockResolvedValueOnce('test-token')
         .mockResolvedValueOnce('device1');
 
-      await expect(contextManager.getContext(trigger)).rejects.toThrow('Token is invalid or revoked');
+      await expect(contextManager.getContext(trigger)).rejects.toThrow(
+        'Token is invalid or revoked'
+      );
       expect(mockErrorManager.reportError).toHaveBeenCalledWith(
         mockErrorManager.PBError.TokenRevoked,
         expect.objectContaining({
@@ -348,13 +358,17 @@ describe('ContextManager', () => {
         timestamp: Date.now(),
       };
 
-      mockHttpClient.httpClient.fetch.mockRejectedValue(new Error('Network error'));
+      mockHttpClient.httpClient.fetch.mockRejectedValue(
+        new Error('Network error')
+      );
 
       mockStorage.getLocal
         .mockResolvedValueOnce('test-token')
         .mockResolvedValueOnce('device1');
 
-      await expect(contextManager.getContext(trigger)).rejects.toThrow('Network error');
+      await expect(contextManager.getContext(trigger)).rejects.toThrow(
+        'Network error'
+      );
       expect(mockErrorManager.reportError).toHaveBeenCalledWith(
         mockErrorManager.PBError.Unknown,
         expect.objectContaining({
@@ -371,15 +385,15 @@ describe('ContextManager', () => {
         timestamp: Date.now(),
       };
 
-      mockHttpClient.httpClient.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve({
+      mockHttpClient.httpClient.fetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             subscriptions: [],
             channels: [],
             devices: [],
           }),
-        });
+      });
 
       mockStorage.getLocal
         .mockResolvedValueOnce('test-token')
@@ -388,8 +402,14 @@ describe('ContextManager', () => {
 
       await contextManager.getContext(trigger);
 
-      expect(mockStorage.setLocal).toHaveBeenCalledWith('user_context', expect.any(Object));
-      expect(mockStorage.setLocal).toHaveBeenCalledWith('context_refresh_triggers', expect.any(Array));
+      expect(mockStorage.setLocal).toHaveBeenCalledWith(
+        'user_context',
+        expect.any(Object)
+      );
+      expect(mockStorage.setLocal).toHaveBeenCalledWith(
+        'context_refresh_triggers',
+        expect.any(Array)
+      );
     });
 
     it('should load context from storage on initialization', async () => {
@@ -425,15 +445,15 @@ describe('ContextManager', () => {
         reason: 'Test refresh',
       };
 
-      mockHttpClient.httpClient.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve({
+      mockHttpClient.httpClient.fetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             subscriptions: [],
             channels: [],
             devices: [],
           }),
-        });
+      });
 
       mockStorage.getLocal
         .mockResolvedValueOnce('test-token')
@@ -464,15 +484,15 @@ describe('ContextManager', () => {
         .mockResolvedValueOnce('device1')
         .mockResolvedValueOnce(existingTriggers);
 
-      mockHttpClient.httpClient.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: () => Promise.resolve({
+      mockHttpClient.httpClient.fetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
             subscriptions: [],
             channels: [],
             devices: [],
           }),
-        });
+      });
 
       const trigger: ContextRefreshTrigger = {
         type: 'popup_open',
@@ -490,4 +510,4 @@ describe('ContextManager', () => {
       );
     });
   });
-}); 
+});

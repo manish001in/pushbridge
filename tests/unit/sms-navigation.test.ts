@@ -11,7 +11,6 @@ describe('SMS Navigation', () => {
   let mockConversationListView: HTMLElement;
   let mockSmsThreadView: HTMLElement;
 
-
   beforeEach(() => {
     // Reset mocks
 
@@ -39,7 +38,8 @@ describe('SMS Navigation', () => {
     mockSmsThreadView = document.createElement('div');
 
     // Setup initial classes
-    mockConversationListView.className = 'sms-view conversation-list-view active';
+    mockConversationListView.className =
+      'sms-view conversation-list-view active';
     mockSmsThreadView.className = 'sms-view sms-thread-view';
 
     // Mock getElementById
@@ -82,7 +82,10 @@ describe('SMS Navigation', () => {
     it('should switch to SMS thread view when conversation is selected', () => {
       // Simulate conversation selection
       const event = new CustomEvent('conversation-selected', {
-        detail: { conversationId: 'test-conversation-123', conversationName: 'John Doe' },
+        detail: {
+          conversationId: 'test-conversation-123',
+          conversationName: 'John Doe',
+        },
         bubbles: true,
         composed: true,
       });
@@ -92,7 +95,7 @@ describe('SMS Navigation', () => {
         const { conversationId, conversationName } = e.detail;
         mockSmsThread.conversationId = conversationId;
         mockConversationTitle.textContent = conversationName || 'Conversation';
-        
+
         // Switch to SMS thread view
         mockConversationListView.classList.remove('active');
         mockSmsThreadView.classList.add('active');
@@ -118,7 +121,7 @@ describe('SMS Navigation', () => {
         const { conversationId, conversationName } = e.detail;
         mockSmsThread.conversationId = conversationId;
         mockConversationTitle.textContent = conversationName || 'Conversation';
-        
+
         mockConversationListView.classList.remove('active');
         mockSmsThreadView.classList.add('active');
       };
@@ -140,7 +143,7 @@ describe('SMS Navigation', () => {
         // Switch back to conversation list view
         mockSmsThreadView.classList.remove('active');
         mockConversationListView.classList.add('active');
-        
+
         // Clear the conversation selection
         mockConversationList.selectedConversationId = '';
       };
@@ -180,4 +183,4 @@ describe('SMS Navigation', () => {
       expect(mockSmsThreadView.classList.contains('active')).toBe(false);
     });
   });
-}); 
+});

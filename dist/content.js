@@ -1,1 +1,13 @@
-console.log("Pushbridge content script loaded");(function(){const e=()=>{console.log("Pushbridge content script initialized"),chrome.runtime.onMessage.addListener((t,o,n)=>{console.log("Content script received message:",t),n({status:"received"})})};document.readyState==="loading"?document.addEventListener("DOMContentLoaded",e):e()})();
+console.log('Pushbridge content script loaded');
+(function () {
+  const e = () => {
+    (console.log('Pushbridge content script initialized'),
+      chrome.runtime.onMessage.addListener((t, o, n) => {
+        (console.log('Content script received message:', t),
+          n({ status: 'received' }));
+      }));
+  };
+  document.readyState === 'loading'
+    ? document.addEventListener('DOMContentLoaded', e)
+    : e();
+})();

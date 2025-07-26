@@ -233,66 +233,93 @@ async function switchToPollingMode(): Promise<void> {
  */
 async function handlePushTickle(): Promise<void> {
   try {
-    console.log('🔄 [WebSocket] Push tickle received, syncing history with unified tracker');
-    
+    console.log(
+      '🔄 [WebSocket] Push tickle received, syncing history with unified tracker'
+    );
+
     // Import the push manager to get push history directly
     const { getPushHistory } = await import('./pushManager');
-    const { unifiedNotificationTracker } = await import('./unifiedNotificationTracker');
+    const { unifiedNotificationTracker } = await import(
+      './unifiedNotificationTracker'
+    );
     const { notificationBadge } = await import('./notificationBadge');
-    
+
     // Get recent pushes and process them
     const history = await getPushHistory(50, 0, '');
-    
+
     if (history.pushes && history.pushes.length > 0) {
-      console.log(`🔄 [WebSocket] Found ${history.pushes.length} pushes to process`);
-      
+      console.log(
+        `🔄 [WebSocket] Found ${history.pushes.length} pushes to process`
+      );
+
       let processedCount = 0;
       let newPushesCount = 0;
-      
+
       for (const push of history.pushes) {
         // Only process non-dismissed pushes that are for this user/device
-        if (!push.dismissed && (push.receiver_iden || push.target_device_iden || push.type === 'mirror' || push.type === 'file' || push.channel_iden)) {
-          console.log(`🔔 [WebSocket] Processing push: ${push.iden} (type: ${push.type}, created: ${push.created})`);
-          
+        if (
+          !push.dismissed &&
+          (push.receiver_iden ||
+            push.target_device_iden ||
+            push.type === 'mirror' ||
+            push.type === 'file' ||
+            push.channel_iden)
+        ) {
+          console.log(
+            `🔔 [WebSocket] Processing push: ${push.iden} (type: ${push.type}, created: ${push.created})`
+          );
+
           // Use unified tracker to determine if we should show this notification
-          const shouldShow = await unifiedNotificationTracker.shouldShowNotification({
-            id: push.iden,
-            type: 'push',
-            created: push.created,
-            metadata: { pushIden: push.iden }
-          });
-          
+          const shouldShow =
+            await unifiedNotificationTracker.shouldShowNotification({
+              id: push.iden,
+              type: 'push',
+              created: push.created,
+              metadata: { pushIden: push.iden },
+            });
+
           if (shouldShow) {
-            console.log(`🆕 [WebSocket] New push detected: ${push.iden} (timestamp: ${push.created})`);
+            console.log(
+              `🆕 [WebSocket] New push detected: ${push.iden} (timestamp: ${push.created})`
+            );
             await notificationBadge.addPushNotifications(1);
-            await unifiedNotificationTracker.markAsProcessed('push', push.iden, new Date(push.created).getTime());
+            await unifiedNotificationTracker.markAsProcessed(
+              'push',
+              push.iden,
+              new Date(push.created).getTime()
+            );
             newPushesCount++;
           } else {
-            console.log(`⏭️ [WebSocket] Skipping already processed push: ${push.iden}`);
+            console.log(
+              `⏭️ [WebSocket] Skipping already processed push: ${push.iden}`
+            );
           }
-          
+
           processedCount++;
         }
       }
-      
-      console.log(`🔄 [WebSocket] Processed ${processedCount} pushes, ${newPushesCount} new pushes from tickle`);
+
+      console.log(
+        `🔄 [WebSocket] Processed ${processedCount} pushes, ${newPushesCount} new pushes from tickle`
+      );
     }
   } catch (error) {
     console.error('Failed to handle push tickle:', error);
   }
 }
 
-
 /**
  * Handle device tickle by refreshing device list
  */
 async function handleDeviceTickle(): Promise<void> {
   try {
-    console.log('🔄 [WebSocket] Device tickle received, refreshing devices directly');
-    
+    console.log(
+      '🔄 [WebSocket] Device tickle received, refreshing devices directly'
+    );
+
     // Import the device manager functions directly
     const { getDevices } = await import('./deviceManager');
-    
+
     // Refresh devices by calling getDevices with force refresh
     await getDevices(true);
     console.log('🔄 [WebSocket] Devices refreshed successfully');
@@ -300,7 +327,6 @@ async function handleDeviceTickle(): Promise<void> {
     console.error('Failed to handle device tickle:', error);
   }
 }
-
 
 /**
  * Handle push messages for mirror and dismissal

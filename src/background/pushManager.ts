@@ -389,7 +389,7 @@ export async function getPushHistory(
     }
 
     const data: PushesApiResponse = await response.json();
-    
+
     // Convert to legacy format for backward compatibility
     return {
       pushes: data.pushes as PushbulletPush[],
@@ -413,7 +413,11 @@ export async function getPushHistory(
  * @returns Promise resolving to enhanced push history
  */
 export async function getEnhancedPushHistory(
-  trigger: { type: 'popup_open' | 'unknown_source' | 'periodic' | 'manual'; timestamp: number; reason?: string },
+  trigger: {
+    type: 'popup_open' | 'unknown_source' | 'periodic' | 'manual';
+    timestamp: number;
+    reason?: string;
+  },
   limit = 200,
   modifiedAfter?: number,
   cursor?: string
@@ -461,7 +465,7 @@ export async function getEnhancedPushHistory(
     }
 
     const data: PushesApiResponse = await response.json();
-    
+
     // Enrich pushes with metadata
     const enrichedPushes = await PushEnricher.enrichPushesWithContextRefresh(
       data.pushes,

@@ -18,7 +18,7 @@ export class PushEnricher {
    */
   static enrichPush(push: PushApiResponse, context: UserContext): EnhancedPush {
     const metadata = this.computeMetadata(push, context);
-    
+
     return {
       ...push,
       metadata,
@@ -28,19 +28,30 @@ export class PushEnricher {
   /**
    * Enrich multiple pushes with metadata
    */
-  static enrichPushes(pushes: PushApiResponse[], context: UserContext): EnhancedPush[] {
+  static enrichPushes(
+    pushes: PushApiResponse[],
+    context: UserContext
+  ): EnhancedPush[] {
     return pushes.map(push => this.enrichPush(push, context));
   }
 
   /**
    * Compute metadata for a push based on context
    */
-  private static computeMetadata(push: PushApiResponse, context: UserContext): EnhancedPushMetadata {
+  private static computeMetadata(
+    push: PushApiResponse,
+    context: UserContext
+  ): EnhancedPushMetadata {
     const sourceType = this.determineSourceType(push, context);
     const isOwned = this.determineOwnership(push, context);
     const hasFile = this.determineFileInfo(push);
     const displaySource = this.computeDisplaySource(push, context, sourceType);
-    const ownershipReason = this.computeOwnershipReason(push, context, isOwned, sourceType);
+    const ownershipReason = this.computeOwnershipReason(
+      push,
+      context,
+      isOwned,
+      sourceType
+    );
 
     return {
       source_type: sourceType,
@@ -60,7 +71,10 @@ export class PushEnricher {
   /**
    * Determine the source type of a push
    */
-  private static determineSourceType(push: PushApiResponse, context: UserContext): 'device' | 'channel_broadcast' | 'channel_subscription' {
+  private static determineSourceType(
+    push: PushApiResponse,
+    context: UserContext
+  ): 'device' | 'channel_broadcast' | 'channel_subscription' {
     // If it has a channel_iden, it's from a channel
     if (push.channel_iden) {
       // Check if it's from an owned channel (broadcast)
@@ -82,7 +96,10 @@ export class PushEnricher {
   /**
    * Determine if the push is owned by the current user
    */
-  private static determineOwnership(push: PushApiResponse, context: UserContext): boolean {
+  private static determineOwnership(
+    push: PushApiResponse,
+    context: UserContext
+  ): boolean {
     // Check if it's from the current device
     if (push.source_device_iden === context.current_device_iden) {
       return true;
@@ -106,7 +123,9 @@ export class PushEnricher {
   /**
    * Get file metadata if present
    */
-  private static getFileMetadata(push: PushApiResponse): EnhancedPushMetadata['file_metadata'] | undefined {
+  private static getFileMetadata(
+    push: PushApiResponse
+  ): EnhancedPushMetadata['file_metadata'] | undefined {
     if (!this.determineFileInfo(push)) {
       return undefined;
     }
@@ -121,7 +140,10 @@ export class PushEnricher {
   /**
    * Get channel tag for the push
    */
-  private static getChannelTag(push: PushApiResponse, context: UserContext): string | undefined {
+  private static getChannelTag(
+    push: PushApiResponse,
+    context: UserContext
+  ): string | undefined {
     if (!push.channel_iden) {
       return undefined;
     }
@@ -144,7 +166,10 @@ export class PushEnricher {
   /**
    * Get channel name for the push
    */
-  private static getChannelName(push: PushApiResponse, context: UserContext): string | undefined {
+  private static getChannelName(
+    push: PushApiResponse,
+    context: UserContext
+  ): string | undefined {
     if (!push.channel_iden) {
       return undefined;
     }
@@ -167,7 +192,10 @@ export class PushEnricher {
   /**
    * Get device nickname for the push
    */
-  private static getDeviceNickname(push: PushApiResponse, context: UserContext): string | undefined {
+  private static getDeviceNickname(
+    push: PushApiResponse,
+    context: UserContext
+  ): string | undefined {
     if (!push.source_device_iden) {
       return undefined;
     }
@@ -244,7 +272,9 @@ export class PushEnricher {
   /**
    * Check if a push source is known and handle unknown sources
    */
-  static async checkAndHandleUnknownSource(push: PushApiResponse): Promise<void> {
+  static async checkAndHandleUnknownSource(
+    push: PushApiResponse
+  ): Promise<void> {
     const isKnown = await contextManager.isKnownSource(
       push.source_device_iden,
       push.channel_iden
@@ -263,7 +293,11 @@ export class PushEnricher {
    */
   static async enrichPushesWithContextRefresh(
     pushes: PushApiResponse[],
-    trigger: { type: 'popup_open' | 'unknown_source' | 'periodic' | 'manual'; timestamp: number; reason?: string }
+    trigger: {
+      type: 'popup_open' | 'unknown_source' | 'periodic' | 'manual';
+      timestamp: number;
+      reason?: string;
+    }
   ): Promise<EnhancedPush[]> {
     // Check for unknown sources and refresh if needed
     for (const push of pushes) {
@@ -276,4 +310,4 @@ export class PushEnricher {
     // Enrich all pushes
     return this.enrichPushes(pushes, freshContext);
   }
-} 
+}

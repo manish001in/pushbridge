@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch full history for semantic versioning
+          fetch-depth: 0 # Fetch full history for semantic versioning
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -104,15 +104,15 @@ jobs:
           name: PushBridge ${{ steps.get_version.outputs.version }}
           body: |
             ## PushBridge ${{ steps.get_version.outputs.version }}
-            
+
             ### Changes
             - See commit history for detailed changes
-            
+
             ### Installation
             1. Download the `pushbridge-${{ steps.get_version.outputs.version }}.zip` file
             2. Extract the contents
             3. Load the extension in Chrome Developer Mode
-            
+
             ### Compatibility
             - Chrome Extension Manifest V3
             - Node.js 24+ for development

@@ -107,12 +107,12 @@ export interface EnhancedPushMetadata {
   source_channel_tag?: string;
   source_channel_name?: string;
   source_device_nickname?: string;
-  
-  // Ownership information  
+
+  // Ownership information
   is_owned_by_user: boolean;
   can_delete: boolean;
   can_dismiss: boolean;
-  
+
   // File information
   has_file: boolean;
   file_metadata?: {
@@ -121,7 +121,7 @@ export interface EnhancedPushMetadata {
     size?: number;
     url?: string;
   };
-  
+
   // Computed fields
   display_source: string; // "Your iPhone", "Channel: Tech News", etc.
   ownership_reason: string; // "You sent this", "You own this channel", etc.
@@ -152,4 +152,4 @@ export interface ContextRefreshTrigger {
   type: 'popup_open' | 'unknown_source' | 'periodic' | 'manual';
   timestamp: number;
   reason?: string;
-} 
+}

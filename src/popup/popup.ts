@@ -20,7 +20,7 @@ import { getLocal } from '../background/storage';
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('🪟 [Popup] Popup opened, sending POPUP_OPEN message');
-  
+
   // Send POPUP_OPEN message to clear push notifications from badge
   try {
     await chrome.runtime.sendMessage({ cmd: 'POPUP_OPEN' });
@@ -105,7 +105,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Initialize tab switching
       setupTabNavigation();
-      
+
       // Setup SMS interface if available
       if (hasSms) {
         setupSmsInterface();
@@ -155,8 +155,11 @@ async function setupSmsInterface(): Promise<void> {
   try {
     const defaultDevice = await getDefaultSmsDevice();
     if (defaultDevice) {
-      const deviceName = defaultDevice.nickname || defaultDevice.model || `Device ${defaultDevice.iden.slice(0, 8)}`;
-      
+      const deviceName =
+        defaultDevice.nickname ||
+        defaultDevice.model ||
+        `Device ${defaultDevice.iden.slice(0, 8)}`;
+
       // Update SMS tab header
       const smsTab = document.querySelector('[data-tab="messages"]');
       if (smsTab) {
@@ -166,19 +169,35 @@ async function setupSmsInterface(): Promise<void> {
             <span class="device-info">from ${deviceName}</span>
           </div>
         `;
-        
       }
     }
-    
-    // Setup conversation list and thread components
-    const conversationList = document.getElementById('conversation-list') as any;
-    const smsThread = document.getElementById('sms-thread') as any;
-    const backButton = document.getElementById('sms-back-button') as HTMLButtonElement;
-    const conversationTitle = document.getElementById('conversation-title') as HTMLSpanElement;
-    const conversationListView = document.querySelector('.conversation-list-view') as HTMLElement;
-    const smsThreadView = document.querySelector('.sms-thread-view') as HTMLElement;
 
-    if (conversationList && smsThread && backButton && conversationTitle && conversationListView && smsThreadView) {
+    // Setup conversation list and thread components
+    const conversationList = document.getElementById(
+      'conversation-list'
+    ) as any;
+    const smsThread = document.getElementById('sms-thread') as any;
+    const backButton = document.getElementById(
+      'sms-back-button'
+    ) as HTMLButtonElement;
+    const conversationTitle = document.getElementById(
+      'conversation-title'
+    ) as HTMLSpanElement;
+    const conversationListView = document.querySelector(
+      '.conversation-list-view'
+    ) as HTMLElement;
+    const smsThreadView = document.querySelector(
+      '.sms-thread-view'
+    ) as HTMLElement;
+
+    if (
+      conversationList &&
+      smsThread &&
+      backButton &&
+      conversationTitle &&
+      conversationListView &&
+      smsThreadView
+    ) {
       // Listen for conversation selection
       conversationList.addEventListener(
         'conversation-selected',
@@ -186,11 +205,11 @@ async function setupSmsInterface(): Promise<void> {
           const { conversationId, conversationName } = e.detail;
           smsThread.conversationId = conversationId;
           conversationTitle.textContent = conversationName || 'Conversation';
-          
+
           // Switch to SMS thread view
           conversationListView.classList.remove('active');
           smsThreadView.classList.add('active');
-          
+
           // Scroll to bottom after view switch
           setTimeout(() => {
             if (smsThread.scrollToBottom) {
@@ -205,7 +224,7 @@ async function setupSmsInterface(): Promise<void> {
         // Switch back to conversation list view
         smsThreadView.classList.remove('active');
         conversationListView.classList.add('active');
-        
+
         // Clear the conversation selection
         conversationList.selectedConversationId = '';
       });
@@ -214,7 +233,6 @@ async function setupSmsInterface(): Promise<void> {
     console.error('Failed to setup SMS interface:', error);
   }
 }
-
 
 function setupAboutDialog() {
   const aboutButton = document.getElementById('about-button');

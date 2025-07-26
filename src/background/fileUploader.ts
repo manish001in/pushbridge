@@ -29,7 +29,7 @@ export type ProgressCallback = (progress: UploadProgress) => void;
 async function generateFileHash(file: File): Promise<string> {
   try {
     let buffer: ArrayBuffer;
-    
+
     // Try to get ArrayBuffer from the file
     if (file.arrayBuffer && typeof file.arrayBuffer === 'function') {
       buffer = await file.arrayBuffer();
@@ -42,7 +42,7 @@ async function generateFileHash(file: File): Promise<string> {
         reader.readAsArrayBuffer(file);
       });
     }
-    
+
     const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -118,8 +118,6 @@ async function getPendingUpload(
   return pendingUploads.find(upload => upload.fileHash === fileHash) || null;
 }
 
-
-
 /**
  * Upload file to S3 with progress tracking
  * @param uploadInfo - Upload information from requestUpload
@@ -165,10 +163,10 @@ export async function uploadFile(
 
     if (response.ok) {
       console.log('File upload completed successfully');
-      
+
       // Remove pending upload on success
       await removePendingUpload(fileHash);
-      
+
       // Simulate progress completion if callback provided
       if (onProgress) {
         onProgress({
@@ -206,7 +204,7 @@ export async function uploadFile(
     }
   } catch (error) {
     console.error('Failed to upload file:', error);
-    
+
     if (error instanceof TypeError && error.message.includes('fetch')) {
       await reportError(PBError.NetworkError, {
         message: 'Network error during file upload',
@@ -214,7 +212,7 @@ export async function uploadFile(
       });
       return { success: false, error: 'Network error during upload' };
     }
-    
+
     await reportError(PBError.Unknown, {
       message: 'Failed to upload file',
       code: error instanceof Error ? undefined : 500,

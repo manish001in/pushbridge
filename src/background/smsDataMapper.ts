@@ -19,11 +19,11 @@ export class SmsDataMapper {
   ): SmsThread {
     // Extract conversation ID from thread
     const conversationId = apiThread.id;
-    
+
     // Get primary recipient name (first recipient or fallback)
     const primaryRecipient = apiThread.recipients?.[0];
     const name = primaryRecipient?.name || `Thread ${conversationId}`;
-    
+
     // Convert latest message to SmsMsg format
     const latestMessage: SmsMsg = this.mapApiMessageToSmsMsg(
       apiThread.latest,
@@ -79,15 +79,15 @@ export class SmsDataMapper {
     if (device.nickname) {
       return device.nickname;
     }
-    
+
     if (device.model && device.manufacturer) {
       return `${device.manufacturer} ${device.model}`;
     }
-    
+
     if (device.model) {
       return device.model;
     }
-    
+
     return `Device ${device.iden.slice(0, 8)}`;
   }
 
@@ -129,24 +129,26 @@ export class SmsDataMapper {
     if (messages.length === 0) {
       return 0;
     }
-    
+
     return Math.max(...messages.map(msg => msg.timestamp));
   }
 
   /**
    * Extract conversation name from recipients
    */
-  static getConversationName(recipients: Array<{ name: string; address: string; number: string }>): string {
+  static getConversationName(
+    recipients: Array<{ name: string; address: string; number: string }>
+  ): string {
     if (recipients.length === 0) {
       return 'Unknown';
     }
-    
+
     if (recipients.length === 1) {
       return recipients[0].name || recipients[0].number || 'Unknown';
     }
-    
+
     // For group conversations, show first name + count
     const firstName = recipients[0].name || recipients[0].number || 'Unknown';
     return `${firstName} +${recipients.length - 1}`;
   }
-} 
+}

@@ -23,20 +23,20 @@ export interface NotificationData {
 }
 
 export interface NotificationTimestamps {
-  lastSeenTimestamp: number;           // When user last acknowledged notifications
-  lastProcessedPushTimestamp: number;  // For API efficiency tracking
+  lastSeenTimestamp: number; // When user last acknowledged notifications
+  lastProcessedPushTimestamp: number; // For API efficiency tracking
   lastProcessedMirrorTimestamp: number;
   lastProcessedSmsTimestamp: number;
   lastProcessedChannelTimestamp: number;
-  lastUpdated: number;                 // Tracker state update time
+  lastUpdated: number; // Tracker state update time
 }
 
 export interface RecentlyProcessedCache {
-  pushIds: string[];      // Last 50 entries
-  mirrorIds: string[];    // Last 50 entries
-  smsIds: string[];       // Last 50 entries
-  channelIds: string[];   // Last 50 entries
-  lastCleanup: number;    // Cache cleanup timestamp
+  pushIds: string[]; // Last 50 entries
+  mirrorIds: string[]; // Last 50 entries
+  smsIds: string[]; // Last 50 entries
+  channelIds: string[]; // Last 50 entries
+  lastCleanup: number; // Cache cleanup timestamp
 }
 
 export interface UnreadCounts {
@@ -55,7 +55,7 @@ const STORAGE_KEYS = {
   TIMESTAMPS: 'unified_notification_timestamps',
   CACHE: 'unified_notification_cache',
   COUNTS: 'unified_notification_counts',
-  VERSION: 'unified_notification_tracker_version'
+  VERSION: 'unified_notification_tracker_version',
 };
 
 class UnifiedNotificationTracker {
@@ -73,7 +73,7 @@ class UnifiedNotificationTracker {
       lastProcessedMirrorTimestamp: 0,
       lastProcessedSmsTimestamp: 0,
       lastProcessedChannelTimestamp: 0,
-      lastUpdated: Date.now()
+      lastUpdated: Date.now(),
     };
 
     this.cache = {
@@ -81,7 +81,7 @@ class UnifiedNotificationTracker {
       mirrorIds: [],
       smsIds: [],
       channelIds: [],
-      lastCleanup: Date.now()
+      lastCleanup: Date.now(),
     };
 
     this.counts = {
@@ -89,7 +89,7 @@ class UnifiedNotificationTracker {
       mirrors: 0,
       sms: 0,
       channels: 0,
-      total: 0
+      total: 0,
     };
   }
 
@@ -110,23 +110,27 @@ class UnifiedNotificationTracker {
 
     try {
       console.log('🔄 [UnifiedTracker] Initializing notification tracker');
-      
+
       // Load timestamps
-      const storedTimestamps = await getLocal<NotificationTimestamps>(STORAGE_KEYS.TIMESTAMPS);
+      const storedTimestamps = await getLocal<NotificationTimestamps>(
+        STORAGE_KEYS.TIMESTAMPS
+      );
       if (storedTimestamps) {
         this.timestamps = { ...this.timestamps, ...storedTimestamps };
         console.log('🔄 [UnifiedTracker] Loaded timestamps:', this.timestamps);
       }
 
       // Load cache
-      const storedCache = await getLocal<RecentlyProcessedCache>(STORAGE_KEYS.CACHE);
+      const storedCache = await getLocal<RecentlyProcessedCache>(
+        STORAGE_KEYS.CACHE
+      );
       if (storedCache) {
         this.cache = { ...this.cache, ...storedCache };
         console.log('🔄 [UnifiedTracker] Loaded cache with entries:', {
           pushIds: this.cache.pushIds.length,
           mirrorIds: this.cache.mirrorIds.length,
           smsIds: this.cache.smsIds.length,
-          channelIds: this.cache.channelIds.length
+          channelIds: this.cache.channelIds.length,
         });
       }
 
@@ -153,80 +157,105 @@ class UnifiedNotificationTracker {
   /**
    * Determine if a notification should be shown based on timestamp and cache
    */
-  async shouldShowNotification(notification: NotificationData): Promise<boolean> {
+  async shouldShowNotification(
+    notification: NotificationData
+  ): Promise<boolean> {
     await this.ensureInitialized();
 
-    const created = typeof notification.created === 'string' 
-      ? new Date(notification.created).getTime()
-      : notification.created;
+    const created =
+      typeof notification.created === 'string'
+        ? new Date(notification.created).getTime()
+        : notification.created;
 
     const lastSeenTimestampMs = this.timestamps.lastSeenTimestamp * 1000; // Convert seconds to milliseconds
     const bufferTimeMs = BUFFER_TIME;
     const cutoffTimestampMs = lastSeenTimestampMs - bufferTimeMs;
 
-    console.log(`🔍 [UnifiedTracker] Evaluating notification: ${notification.id}`, {
-      notificationId: notification.id,
-      notificationType: notification.type,
-      createdTimestamp: created,
-      createdISO: new Date(created).toISOString(),
-      lastSeenTimestamp: this.timestamps.lastSeenTimestamp,
-      lastSeenTimestampMs: lastSeenTimestampMs,
-      lastSeenISO: new Date(lastSeenTimestampMs).toISOString(),
-      bufferTimeMs: bufferTimeMs,
-      cutoffTimestampMs: cutoffTimestampMs,
-      cutoffISO: new Date(cutoffTimestampMs).toISOString(),
-      comparison: {
-        createdVsLastSeen: created - lastSeenTimestampMs,
-        createdVsCutoff: created - cutoffTimestampMs,
-        isNewerThanCutoff: created > cutoffTimestampMs
+    console.log(
+      `🔍 [UnifiedTracker] Evaluating notification: ${notification.id}`,
+      {
+        notificationId: notification.id,
+        notificationType: notification.type,
+        createdTimestamp: created,
+        createdISO: new Date(created).toISOString(),
+        lastSeenTimestamp: this.timestamps.lastSeenTimestamp,
+        lastSeenTimestampMs: lastSeenTimestampMs,
+        lastSeenISO: new Date(lastSeenTimestampMs).toISOString(),
+        bufferTimeMs: bufferTimeMs,
+        cutoffTimestampMs: cutoffTimestampMs,
+        cutoffISO: new Date(cutoffTimestampMs).toISOString(),
+        comparison: {
+          createdVsLastSeen: created - lastSeenTimestampMs,
+          createdVsCutoff: created - cutoffTimestampMs,
+          isNewerThanCutoff: created > cutoffTimestampMs,
+        },
       }
-    });
+    );
 
     // Check if notification is too old (with buffer time for clock skew)
     // Note: lastSeenTimestamp is in seconds, created is in milliseconds
     if (created <= this.timestamps.lastSeenTimestamp * 1000 - bufferTimeMs) {
-      console.log(`⏭️ [UnifiedTracker] REJECTED - Too old: ${notification.id}`, {
-        reason: 'timestamp_too_old',
-        createdMs: created,
-        cutoffMs: cutoffTimestampMs,
-        differenceMs: created - cutoffTimestampMs,
-        createdISO: new Date(created).toISOString(),
-        cutoffISO: new Date(cutoffTimestampMs).toISOString()
-      });
+      console.log(
+        `⏭️ [UnifiedTracker] REJECTED - Too old: ${notification.id}`,
+        {
+          reason: 'timestamp_too_old',
+          createdMs: created,
+          cutoffMs: cutoffTimestampMs,
+          differenceMs: created - cutoffTimestampMs,
+          createdISO: new Date(created).toISOString(),
+          cutoffISO: new Date(cutoffTimestampMs).toISOString(),
+        }
+      );
       return false;
     }
 
     // Check if notification was recently processed
-    const isRecentlyProcessed = this.isRecentlyProcessed(notification.id, notification.type);
+    const isRecentlyProcessed = this.isRecentlyProcessed(
+      notification.id,
+      notification.type
+    );
     if (isRecentlyProcessed) {
-      console.log(`⏭️ [UnifiedTracker] REJECTED - Recently processed: ${notification.id}`, {
-        reason: 'recently_processed',
-        notificationType: notification.type,
-        notificationId: notification.id
-      });
+      console.log(
+        `⏭️ [UnifiedTracker] REJECTED - Recently processed: ${notification.id}`,
+        {
+          reason: 'recently_processed',
+          notificationType: notification.type,
+          notificationId: notification.id,
+        }
+      );
       return false;
     }
 
-    console.log(`✅ [UnifiedTracker] APPROVED - Will show notification: ${notification.id}`, {
-      notificationId: notification.id,
-      notificationType: notification.type,
-      createdISO: new Date(created).toISOString(),
-      passedTimeCheck: true,
-      passedDuplicateCheck: true
-    });
+    console.log(
+      `✅ [UnifiedTracker] APPROVED - Will show notification: ${notification.id}`,
+      {
+        notificationId: notification.id,
+        notificationType: notification.type,
+        createdISO: new Date(created).toISOString(),
+        passedTimeCheck: true,
+        passedDuplicateCheck: true,
+      }
+    );
     return true;
   }
 
   /**
    * Mark notification as processed (for API efficiency)
    */
-  async markAsProcessed(type: NotificationType, id: string, timestamp: number): Promise<void> {
+  async markAsProcessed(
+    type: NotificationType,
+    id: string,
+    timestamp: number
+  ): Promise<void> {
     await this.ensureInitialized();
 
-    console.log(`📝 [UnifiedTracker] Marking as processed: ${id} (type: ${type}, timestamp: ${timestamp})`);
+    console.log(
+      `📝 [UnifiedTracker] Marking as processed: ${id} (type: ${type}, timestamp: ${timestamp})`
+    );
 
     // Update the appropriate timestamp
-    const timestampKey = `lastProcessed${type.charAt(0).toUpperCase() + type.slice(1)}Timestamp` as keyof NotificationTimestamps;
+    const timestampKey =
+      `lastProcessed${type.charAt(0).toUpperCase() + type.slice(1)}Timestamp` as keyof NotificationTimestamps;
     if (this.timestamps[timestampKey] < timestamp) {
       this.timestamps[timestampKey] = timestamp;
     }
@@ -249,7 +278,9 @@ class UnifiedNotificationTracker {
     await this.ensureInitialized();
 
     const seenTimestamp = (timestamp || Date.now()) / 1000;
-    console.log(`👁️ [UnifiedTracker] Marking notifications as seen at: ${seenTimestamp}`);
+    console.log(
+      `👁️ [UnifiedTracker] Marking notifications as seen at: ${seenTimestamp}`
+    );
 
     this.timestamps.lastSeenTimestamp = seenTimestamp;
     this.timestamps.lastUpdated = Date.now();
@@ -260,13 +291,16 @@ class UnifiedNotificationTracker {
   /**
    * Increment notification count for a specific type
    */
-  async incrementCount(type: NotificationType, amount: number = 1): Promise<void> {
+  async incrementCount(
+    type: NotificationType,
+    amount: number = 1
+  ): Promise<void> {
     await this.ensureInitialized();
 
     const countKey = this.getCountKey(type);
     const oldCount = this.counts[countKey];
     const newCount = Math.max(0, oldCount + amount);
-    
+
     this.counts[countKey] = newCount;
     this.updateTotalCount();
 
@@ -275,7 +309,7 @@ class UnifiedNotificationTracker {
       amount,
       oldCount,
       newCount,
-      total: this.counts.total
+      total: this.counts.total,
     });
 
     await this.saveState();
@@ -284,13 +318,16 @@ class UnifiedNotificationTracker {
   /**
    * Decrement notification count for a specific type
    */
-  async decrementCount(type: NotificationType, amount: number = 1): Promise<void> {
+  async decrementCount(
+    type: NotificationType,
+    amount: number = 1
+  ): Promise<void> {
     await this.ensureInitialized();
 
     const countKey = this.getCountKey(type);
     const oldCount = this.counts[countKey];
     const newCount = Math.max(0, oldCount - amount);
-    
+
     this.counts[countKey] = newCount;
     this.updateTotalCount();
 
@@ -299,7 +336,7 @@ class UnifiedNotificationTracker {
       amount,
       oldCount,
       newCount,
-      total: this.counts.total
+      total: this.counts.total,
     });
 
     await this.saveState();
@@ -314,7 +351,7 @@ class UnifiedNotificationTracker {
     const countKey = this.getCountKey(type);
     const oldCount = this.counts[countKey];
     const newCount = Math.max(0, count);
-    
+
     this.counts[countKey] = newCount;
     this.updateTotalCount();
 
@@ -322,7 +359,7 @@ class UnifiedNotificationTracker {
       type,
       oldCount,
       newCount,
-      total: this.counts.total
+      total: this.counts.total,
     });
 
     await this.saveState();
@@ -331,7 +368,9 @@ class UnifiedNotificationTracker {
   /**
    * Get unread counts for badge calculation
    */
-  async getUnreadCount(type?: NotificationType): Promise<UnreadCounts | number> {
+  async getUnreadCount(
+    type?: NotificationType
+  ): Promise<UnreadCounts | number> {
     await this.ensureInitialized();
 
     if (type) {
@@ -340,7 +379,7 @@ class UnifiedNotificationTracker {
         push: 'pushes',
         mirror: 'mirrors',
         sms: 'sms',
-        channel: 'channels'
+        channel: 'channels',
       };
       return this.counts[countMap[type]];
     }
@@ -364,7 +403,7 @@ class UnifiedNotificationTracker {
       lastProcessedMirrorTimestamp: now,
       lastProcessedSmsTimestamp: now,
       lastProcessedChannelTimestamp: now,
-      lastUpdated: now
+      lastUpdated: now,
     };
 
     // Clear cache
@@ -373,7 +412,7 @@ class UnifiedNotificationTracker {
       mirrorIds: [],
       smsIds: [],
       channelIds: [],
-      lastCleanup: now
+      lastCleanup: now,
     };
 
     // Clear counts
@@ -382,7 +421,7 @@ class UnifiedNotificationTracker {
       mirrors: 0,
       sms: 0,
       channels: 0,
-      total: 0
+      total: 0,
     };
 
     await this.saveState();
@@ -396,7 +435,7 @@ class UnifiedNotificationTracker {
 
     const countKey = this.getCountKey(type);
     const oldCount = this.counts[countKey];
-    
+
     this.counts[countKey] = 0;
     this.updateTotalCount();
 
@@ -404,7 +443,7 @@ class UnifiedNotificationTracker {
       type,
       oldCount,
       newCount: 0,
-      total: this.counts.total
+      total: this.counts.total,
     });
 
     await this.saveState();
@@ -434,9 +473,11 @@ class UnifiedNotificationTracker {
     const isValid = validateCurrentState();
 
     if (!isValid) {
-      console.warn('⚠️ [UnifiedTracker] State validation failed, attempting recovery');
+      console.warn(
+        '⚠️ [UnifiedTracker] State validation failed, attempting recovery'
+      );
       await this.recoverState();
-      
+
       // Re-validate after recovery
       return validateCurrentState();
     }
@@ -447,11 +488,15 @@ class UnifiedNotificationTracker {
   /**
    * Get current tracker state for debugging
    */
-  getState(): { timestamps: NotificationTimestamps; cache: RecentlyProcessedCache; counts: UnreadCounts } {
+  getState(): {
+    timestamps: NotificationTimestamps;
+    cache: RecentlyProcessedCache;
+    counts: UnreadCounts;
+  } {
     return {
       timestamps: { ...this.timestamps },
       cache: { ...this.cache },
-      counts: { ...this.counts }
+      counts: { ...this.counts },
     };
   }
 
@@ -490,7 +535,7 @@ class UnifiedNotificationTracker {
       push: 'pushes',
       mirror: 'mirrors',
       sms: 'sms',
-      channel: 'channels'
+      channel: 'channels',
     };
     return countMap[type];
   }
@@ -499,7 +544,11 @@ class UnifiedNotificationTracker {
    * Update total count based on individual counts
    */
   private updateTotalCount(): void {
-    this.counts.total = this.counts.pushes + this.counts.mirrors + this.counts.sms + this.counts.channels;
+    this.counts.total =
+      this.counts.pushes +
+      this.counts.mirrors +
+      this.counts.sms +
+      this.counts.channels;
   }
 
   /**
@@ -507,7 +556,7 @@ class UnifiedNotificationTracker {
    */
   private async cleanupCache(): Promise<void> {
     const now = Date.now();
-    
+
     // Only cleanup if enough time has passed
     if (now - this.cache.lastCleanup < CACHE_CLEANUP_INTERVAL) {
       return;
@@ -538,7 +587,7 @@ class UnifiedNotificationTracker {
       await Promise.all([
         setLocal(STORAGE_KEYS.TIMESTAMPS, this.timestamps),
         setLocal(STORAGE_KEYS.CACHE, this.cache),
-        setLocal(STORAGE_KEYS.COUNTS, this.counts)
+        setLocal(STORAGE_KEYS.COUNTS, this.counts),
       ]);
     } catch (error) {
       console.error('❌ [UnifiedTracker] Failed to save state:', error);
@@ -550,7 +599,7 @@ class UnifiedNotificationTracker {
    */
   private async recoverState(): Promise<void> {
     console.log('🔄 [UnifiedTracker] Recovering from invalid state');
-    
+
     // Reset to current time
     const now = Date.now();
     this.timestamps = {
@@ -559,7 +608,7 @@ class UnifiedNotificationTracker {
       lastProcessedMirrorTimestamp: now,
       lastProcessedSmsTimestamp: now,
       lastProcessedChannelTimestamp: now,
-      lastUpdated: now
+      lastUpdated: now,
     };
 
     // Clear cache
@@ -568,7 +617,7 @@ class UnifiedNotificationTracker {
       mirrorIds: [],
       smsIds: [],
       channelIds: [],
-      lastCleanup: now
+      lastCleanup: now,
     };
 
     // Reset counts
@@ -577,7 +626,7 @@ class UnifiedNotificationTracker {
       mirrors: 0,
       sms: 0,
       channels: 0,
-      total: 0
+      total: 0,
     };
 
     await this.saveState();
@@ -585,5 +634,6 @@ class UnifiedNotificationTracker {
 }
 
 // Export singleton instance and class for testing
-export const unifiedNotificationTracker = UnifiedNotificationTracker.getInstance();
-export { UnifiedNotificationTracker }; 
+export const unifiedNotificationTracker =
+  UnifiedNotificationTracker.getInstance();
+export { UnifiedNotificationTracker };

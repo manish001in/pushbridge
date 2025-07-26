@@ -9,7 +9,7 @@ describe('Push Type Detection Logic', () => {
 
     // Strip whitespace from message
     const trimmedMessage = message.trim();
-    
+
     if (!trimmedMessage) return 'note';
 
     // Extract URLs from message using improved regex
@@ -27,7 +27,9 @@ describe('Push Type Detection Logic', () => {
 
   describe('Push Type Detection', () => {
     it('should detect file type when file is attached', () => {
-      const file = new File(['test content'], 'test.txt', { type: 'text/plain' });
+      const file = new File(['test content'], 'test.txt', {
+        type: 'text/plain',
+      });
       const result = determinePushType('some message', file);
       expect(result).toBe('file');
     });
@@ -43,7 +45,9 @@ describe('Push Type Detection Logic', () => {
     });
 
     it('should detect note type when message contains multiple URLs', () => {
-      const result = determinePushType('https://example1.com and https://example2.com');
+      const result = determinePushType(
+        'https://example1.com and https://example2.com'
+      );
       expect(result).toBe('note');
     });
 
@@ -80,7 +84,7 @@ describe('Push Type Detection Logic', () => {
         'https://subdomain.example.com',
         'https://example.com/path',
         'https://example.com/path?param=value',
-        'https://example.com/path#fragment'
+        'https://example.com/path#fragment',
       ];
 
       urls.forEach(url => {
@@ -109,8 +113,10 @@ describe('Push Type Detection Logic', () => {
 
     it('should validate when title is provided', () => {
       let errorMessage = '';
-      const setErrorMessage = (msg: string) => { errorMessage = msg; };
-      
+      const setErrorMessage = (msg: string) => {
+        errorMessage = msg;
+      };
+
       const result = validateForm('Test Title', '', null, setErrorMessage);
       expect(result).toBe(true);
       expect(errorMessage).toBe('');
@@ -118,8 +124,10 @@ describe('Push Type Detection Logic', () => {
 
     it('should validate when message is provided', () => {
       let errorMessage = '';
-      const setErrorMessage = (msg: string) => { errorMessage = msg; };
-      
+      const setErrorMessage = (msg: string) => {
+        errorMessage = msg;
+      };
+
       const result = validateForm('', 'Test message', null, setErrorMessage);
       expect(result).toBe(true);
       expect(errorMessage).toBe('');
@@ -127,9 +135,13 @@ describe('Push Type Detection Logic', () => {
 
     it('should validate when file is selected', () => {
       let errorMessage = '';
-      const setErrorMessage = (msg: string) => { errorMessage = msg; };
-      
-      const file = new File(['test content'], 'test.txt', { type: 'text/plain' });
+      const setErrorMessage = (msg: string) => {
+        errorMessage = msg;
+      };
+
+      const file = new File(['test content'], 'test.txt', {
+        type: 'text/plain',
+      });
       const result = validateForm('', '', file, setErrorMessage);
       expect(result).toBe(true);
       expect(errorMessage).toBe('');
@@ -137,18 +149,29 @@ describe('Push Type Detection Logic', () => {
 
     it('should validate when title and message are provided', () => {
       let errorMessage = '';
-      const setErrorMessage = (msg: string) => { errorMessage = msg; };
-      
-      const result = validateForm('Test Title', 'Test message', null, setErrorMessage);
+      const setErrorMessage = (msg: string) => {
+        errorMessage = msg;
+      };
+
+      const result = validateForm(
+        'Test Title',
+        'Test message',
+        null,
+        setErrorMessage
+      );
       expect(result).toBe(true);
       expect(errorMessage).toBe('');
     });
 
     it('should validate when title and file are provided', () => {
       let errorMessage = '';
-      const setErrorMessage = (msg: string) => { errorMessage = msg; };
-      
-      const file = new File(['test content'], 'test.txt', { type: 'text/plain' });
+      const setErrorMessage = (msg: string) => {
+        errorMessage = msg;
+      };
+
+      const file = new File(['test content'], 'test.txt', {
+        type: 'text/plain',
+      });
       const result = validateForm('Test Title', '', file, setErrorMessage);
       expect(result).toBe(true);
       expect(errorMessage).toBe('');
@@ -156,9 +179,13 @@ describe('Push Type Detection Logic', () => {
 
     it('should validate when message and file are provided', () => {
       let errorMessage = '';
-      const setErrorMessage = (msg: string) => { errorMessage = msg; };
-      
-      const file = new File(['test content'], 'test.txt', { type: 'text/plain' });
+      const setErrorMessage = (msg: string) => {
+        errorMessage = msg;
+      };
+
+      const file = new File(['test content'], 'test.txt', {
+        type: 'text/plain',
+      });
       const result = validateForm('', 'Test message', file, setErrorMessage);
       expect(result).toBe(true);
       expect(errorMessage).toBe('');
@@ -166,18 +193,29 @@ describe('Push Type Detection Logic', () => {
 
     it('should validate when all fields are provided', () => {
       let errorMessage = '';
-      const setErrorMessage = (msg: string) => { errorMessage = msg; };
-      
-      const file = new File(['test content'], 'test.txt', { type: 'text/plain' });
-      const result = validateForm('Test Title', 'Test message', file, setErrorMessage);
+      const setErrorMessage = (msg: string) => {
+        errorMessage = msg;
+      };
+
+      const file = new File(['test content'], 'test.txt', {
+        type: 'text/plain',
+      });
+      const result = validateForm(
+        'Test Title',
+        'Test message',
+        file,
+        setErrorMessage
+      );
       expect(result).toBe(true);
       expect(errorMessage).toBe('');
     });
 
     it('should not validate when no content is provided', () => {
       let errorMessage = '';
-      const setErrorMessage = (msg: string) => { errorMessage = msg; };
-      
+      const setErrorMessage = (msg: string) => {
+        errorMessage = msg;
+      };
+
       const result = validateForm('', '', null, setErrorMessage);
       expect(result).toBe(false);
       expect(errorMessage).toBe('Please provide a title, message, or file');
@@ -185,8 +223,10 @@ describe('Push Type Detection Logic', () => {
 
     it('should not validate when only whitespace is provided', () => {
       let errorMessage = '';
-      const setErrorMessage = (msg: string) => { errorMessage = msg; };
-      
+      const setErrorMessage = (msg: string) => {
+        errorMessage = msg;
+      };
+
       const result = validateForm('   ', '   ', null, setErrorMessage);
       expect(result).toBe(false);
       expect(errorMessage).toBe('Please provide a title, message, or file');
@@ -202,7 +242,7 @@ describe('Push Type Detection Logic', () => {
 
       // Strip whitespace from message
       const trimmedMessage = message.trim();
-      
+
       if (!trimmedMessage) return 'note';
 
       // Extract URLs from message using improved regex
@@ -219,7 +259,9 @@ describe('Push Type Detection Logic', () => {
     };
 
     it('should handle URLs with query parameters', () => {
-      const result = determinePushType('https://example.com?param=value&other=123');
+      const result = determinePushType(
+        'https://example.com?param=value&other=123'
+      );
       expect(result).toBe('link');
     });
 
@@ -239,12 +281,16 @@ describe('Push Type Detection Logic', () => {
     });
 
     it('should handle URLs with complex paths', () => {
-      const result = determinePushType('https://example.com/path/to/resource/123');
+      const result = determinePushType(
+        'https://example.com/path/to/resource/123'
+      );
       expect(result).toBe('link');
     });
 
     it('should handle multiple URLs in text', () => {
-      const result = determinePushType('Check out https://example1.com and also https://example2.com');
+      const result = determinePushType(
+        'Check out https://example1.com and also https://example2.com'
+      );
       expect(result).toBe('note');
     });
 
@@ -264,8 +310,10 @@ describe('Push Type Detection Logic', () => {
     });
 
     it('should handle mixed content with URLs', () => {
-      const result = determinePushType('Hello world! Check https://example.com for more info.');
+      const result = determinePushType(
+        'Hello world! Check https://example.com for more info.'
+      );
       expect(result).toBe('note');
     });
   });
-}); 
+});

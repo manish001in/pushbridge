@@ -142,7 +142,7 @@ describe('Pushbridge E2E Regression Suite', function () {
       // Add optional title and message
       const titleInput = await popup.$('input[placeholder*="title" i]');
       const bodyInput = await popup.$('textarea[placeholder*="message" i]');
-      
+
       await titleInput.setValue('Test File');
       await bodyInput.setValue('This is a test file upload');
 

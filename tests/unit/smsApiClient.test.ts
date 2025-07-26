@@ -30,7 +30,9 @@ Object.defineProperty(global, 'crypto', {
 // Mock storage functions
 const mockGetLocal = getLocal as jest.MockedFunction<typeof getLocal>;
 const mockReportError = reportError as jest.MockedFunction<typeof reportError>;
-const mockHttpClientFetch = httpClient.fetch as jest.MockedFunction<typeof httpClient.fetch>;
+const mockHttpClientFetch = httpClient.fetch as jest.MockedFunction<
+  typeof httpClient.fetch
+>;
 const mockGetDevices = getDevices as jest.MockedFunction<typeof getDevices>;
 
 describe('SmsApiClient', () => {
@@ -39,7 +41,7 @@ describe('SmsApiClient', () => {
   beforeEach(() => {
     smsApiClient = new SmsApiClient();
     jest.clearAllMocks();
-    
+
     // Default mocks
     mockGetLocal.mockResolvedValue('test-token');
     mockHttpClientFetch.mockResolvedValue({
@@ -63,16 +65,18 @@ describe('SmsApiClient', () => {
   describe('initialize', () => {
     it('should initialize with valid token', async () => {
       mockGetLocal.mockResolvedValue('valid-token');
-      
+
       await smsApiClient.initialize();
-      
+
       expect(mockGetLocal).toHaveBeenCalledWith('pb_token');
     });
 
     it('should throw error when no token available', async () => {
       mockGetLocal.mockResolvedValue(null);
-      
-      await expect(smsApiClient.initialize()).rejects.toThrow('No Pushbullet token available');
+
+      await expect(smsApiClient.initialize()).rejects.toThrow(
+        'No Pushbullet token available'
+      );
     });
   });
 
@@ -82,7 +86,13 @@ describe('SmsApiClient', () => {
         threads: [
           {
             id: 'thread1',
-            recipients: [{ name: 'John Doe', address: '+1234567890', number: '+1234567890' }],
+            recipients: [
+              {
+                name: 'John Doe',
+                address: '+1234567890',
+                number: '+1234567890',
+              },
+            ],
             latest: {
               id: 'msg1',
               type: 'sms' as const,
@@ -118,9 +128,9 @@ describe('SmsApiClient', () => {
     it('should handle device not found', async () => {
       mockGetDevices.mockResolvedValue([]);
 
-      await expect(smsApiClient.getSmsThreadsList('invalid-device')).rejects.toThrow(
-        'Device invalid-device not found'
-      );
+      await expect(
+        smsApiClient.getSmsThreadsList('invalid-device')
+      ).rejects.toThrow('Device invalid-device not found');
     });
 
     it('should handle device without SMS capability', async () => {
@@ -136,9 +146,9 @@ describe('SmsApiClient', () => {
         },
       ]);
 
-      await expect(smsApiClient.getSmsThreadsList('test-device')).rejects.toThrow(
-        'Device test-device is not SMS-capable'
-      );
+      await expect(
+        smsApiClient.getSmsThreadsList('test-device')
+      ).rejects.toThrow('Device test-device is not SMS-capable');
     });
 
     it('should handle 401 unauthorized', async () => {
@@ -148,9 +158,9 @@ describe('SmsApiClient', () => {
         statusText: 'Unauthorized',
       });
 
-      await expect(smsApiClient.getSmsThreadsList('test-device')).rejects.toThrow(
-        'Token is invalid or revoked'
-      );
+      await expect(
+        smsApiClient.getSmsThreadsList('test-device')
+      ).rejects.toThrow('Token is invalid or revoked');
 
       expect(mockReportError).toHaveBeenCalled();
     });
@@ -162,7 +172,9 @@ describe('SmsApiClient', () => {
         statusText: 'Not Found',
       });
 
-      await expect(smsApiClient.getSmsThreadsList('test-device')).rejects.toThrow(
+      await expect(
+        smsApiClient.getSmsThreadsList('test-device')
+      ).rejects.toThrow(
         'SMS threads not found for device test-device - device may not support SMS or may be offline'
       );
     });
@@ -195,7 +207,10 @@ describe('SmsApiClient', () => {
         json: jest.fn().mockResolvedValue(mockResponse),
       });
 
-      const result = await smsApiClient.getSmsThreadMessages('test-device', 'thread1');
+      const result = await smsApiClient.getSmsThreadMessages(
+        'test-device',
+        'thread1'
+      );
 
       expect(mockHttpClientFetch).toHaveBeenCalledWith(
         'https://api.pushbullet.com/v2/permanents/test-device_thread_thread1',
@@ -217,7 +232,9 @@ describe('SmsApiClient', () => {
         statusText: 'Not Found',
       });
 
-      await expect(smsApiClient.getSmsThreadMessages('test-device', 'invalid-thread')).rejects.toThrow(
+      await expect(
+        smsApiClient.getSmsThreadMessages('test-device', 'invalid-thread')
+      ).rejects.toThrow(
         'SMS thread invalid-thread not found for device test-device'
       );
     });
@@ -258,7 +275,8 @@ describe('SmsApiClient', () => {
 
   describe('verifyDeviceSmsCapability', () => {
     it('should return true for SMS-capable device', async () => {
-      const hasSms = await smsApiClient.verifyDeviceSmsCapability('test-device');
+      const hasSms =
+        await smsApiClient.verifyDeviceSmsCapability('test-device');
       expect(hasSms).toBe(true);
     });
 
@@ -275,14 +293,16 @@ describe('SmsApiClient', () => {
         },
       ]);
 
-      const hasSms = await smsApiClient.verifyDeviceSmsCapability('test-device');
+      const hasSms =
+        await smsApiClient.verifyDeviceSmsCapability('test-device');
       expect(hasSms).toBe(false);
     });
 
     it('should return false for device not found', async () => {
       mockGetDevices.mockResolvedValue([]);
 
-      const hasSms = await smsApiClient.verifyDeviceSmsCapability('invalid-device');
+      const hasSms =
+        await smsApiClient.verifyDeviceSmsCapability('invalid-device');
       expect(hasSms).toBe(false);
     });
   });
@@ -310,4 +330,4 @@ describe('SmsApiClient', () => {
       expect(isOnline).toBe(false);
     });
   });
-}); 
+});

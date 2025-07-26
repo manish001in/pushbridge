@@ -644,7 +644,7 @@ export class PbSmsThread extends LitElement {
     super.connectedCallback();
     this.loadThread();
     this.initializeRecipients();
-    
+
     // Scroll to bottom when component is first connected
     setTimeout(() => this.scrollToBottom(), 200);
   }
@@ -654,7 +654,7 @@ export class PbSmsThread extends LitElement {
       this.loadThread();
       this.initializeRecipients();
     }
-    
+
     // Scroll to bottom when thread data changes (after loading)
     if (changedProperties.has('thread') && this.thread) {
       this.scrollToBottom();
@@ -690,34 +690,50 @@ export class PbSmsThread extends LitElement {
 
     this.isLoading = true;
     try {
-      console.log('💬 [SmsThread] Loading conversation from API:', this.conversationId);
-      
+      console.log(
+        '💬 [SmsThread] Loading conversation from API:',
+        this.conversationId
+      );
+
       // Get device ID - use provided deviceIden or get default SMS device
       let deviceIden = this.deviceIden;
       if (!deviceIden) {
-        console.log('💬 [SmsThread] No device ID provided, getting default SMS device');
+        console.log(
+          '💬 [SmsThread] No device ID provided, getting default SMS device'
+        );
         try {
-          const response = await chrome.runtime.sendMessage({ cmd: 'GET_DEFAULT_SMS_DEVICE' });
-          console.log('💬 [SmsThread] GET_DEFAULT_SMS_DEVICE response:', response);
-          
+          const response = await chrome.runtime.sendMessage({
+            cmd: 'GET_DEFAULT_SMS_DEVICE',
+          });
+          console.log(
+            '💬 [SmsThread] GET_DEFAULT_SMS_DEVICE response:',
+            response
+          );
+
           if (response.success && response.device) {
             deviceIden = response.device.iden;
             console.log('💬 [SmsThread] Got default SMS device:', deviceIden);
           } else {
-            console.error('💬 [SmsThread] Failed to get default SMS device:', response.error);
+            console.error(
+              '💬 [SmsThread] Failed to get default SMS device:',
+              response.error
+            );
             throw new Error(response.error || 'No SMS device available');
           }
         } catch (error) {
-          console.error('💬 [SmsThread] Error getting default SMS device:', error);
+          console.error(
+            '💬 [SmsThread] Error getting default SMS device:',
+            error
+          );
           throw new Error('No SMS device available');
         }
       } else {
         console.log('💬 [SmsThread] Using provided device ID:', deviceIden);
       }
-      
+
       // Update the component property with the resolved device ID
       this.deviceIden = deviceIden;
-      
+
       // Load stored cursor for this conversation
       await this.loadStoredCursor();
 
@@ -732,30 +748,38 @@ export class PbSmsThread extends LitElement {
         this.thread = response.thread;
         this.messageCursor = response.cursor || null;
         this.hasMoreMessages = response.hasMore || false;
-        
+
         // Save cursor to storage
         await this.saveStoredCursor();
-        
+
         // Clear SMS notifications from badge when conversation is opened
-        console.log('💬 [SmsThread] Conversation opened, clearing SMS notifications from badge');
+        console.log(
+          '💬 [SmsThread] Conversation opened, clearing SMS notifications from badge'
+        );
         try {
           await chrome.runtime.sendMessage({ cmd: 'CLEAR_SMS_NOTIFICATIONS' });
           console.log('💬 [SmsThread] SMS notifications cleared from badge');
         } catch (error) {
-          console.error('💬 [SmsThread] Failed to clear SMS notifications:', error);
+          console.error(
+            '💬 [SmsThread] Failed to clear SMS notifications:',
+            error
+          );
         }
-        
+
         // Scroll to bottom with a single delay to ensure content is rendered
         this.scrollToBottom();
         setTimeout(() => this.scrollToBottom(), 300);
-        
+
         console.log('💬 [SmsThread] Loaded conversation from API:', {
           conversationId: this.conversationId,
           deviceIden: this.deviceIden,
-          messageCount: this.thread?.messages?.length || 0
+          messageCount: this.thread?.messages?.length || 0,
         });
       } else {
-        console.error('💬 [SmsThread] Failed to load thread from API:', response.error);
+        console.error(
+          '💬 [SmsThread] Failed to load thread from API:',
+          response.error
+        );
       }
     } catch (error) {
       console.error('💬 [SmsThread] Failed to load thread from API:', error);
@@ -786,7 +810,7 @@ export class PbSmsThread extends LitElement {
         };
         this.messageCursor = response.cursor || null;
         this.hasMoreMessages = response.hasMore || false;
-        
+
         // Save updated cursor to storage
         await this.saveStoredCursor();
       }
@@ -799,20 +823,20 @@ export class PbSmsThread extends LitElement {
 
   public scrollToBottom() {
     console.log('🔄 [SmsThread] scrollToBottom called');
-    
+
     this.updateComplete.then(() => {
       const container = this.shadowRoot?.querySelector('.messages-container');
       console.log('🔄 [SmsThread] Container found:', !!container);
-      
+
       if (container) {
         const containerElement = container as HTMLElement;
         console.log('🔄 [SmsThread] Container dimensions:', {
           scrollHeight: containerElement.scrollHeight,
           clientHeight: containerElement.clientHeight,
           scrollTop: containerElement.scrollTop,
-          offsetHeight: containerElement.offsetHeight
+          offsetHeight: containerElement.offsetHeight,
         });
-        
+
         // Wait for images to load before scrolling
         const images = container.querySelectorAll('img');
         const imagePromises = Array.from(images).map(img => {
@@ -824,29 +848,35 @@ export class PbSmsThread extends LitElement {
             img.onerror = resolve;
           });
         });
-        
+
         Promise.all(imagePromises).then(() => {
-                  // Check if there's actually content to scroll
-        if (containerElement.scrollHeight <= containerElement.clientHeight) {
-          console.log('🔄 [SmsThread] No scrollable content - scrollHeight <= clientHeight');
-          return;
-        }
-          
+          // Check if there's actually content to scroll
+          if (containerElement.scrollHeight <= containerElement.clientHeight) {
+            console.log(
+              '🔄 [SmsThread] No scrollable content - scrollHeight <= clientHeight'
+            );
+            return;
+          }
+
           // Use requestAnimationFrame to ensure DOM is fully rendered
           requestAnimationFrame(() => {
             console.log('🔄 [SmsThread] Scrolling to bottom...');
-            
+
             // Calculate the maximum scrollable position
-            const maxScrollTop = containerElement.scrollHeight - containerElement.clientHeight;
+            const maxScrollTop =
+              containerElement.scrollHeight - containerElement.clientHeight;
             containerElement.scrollTop = maxScrollTop;
-            
+
             // Verify scroll position after a brief delay
             setTimeout(() => {
               const currentScrollTop = containerElement.scrollTop;
-              const targetScrollTop = containerElement.scrollHeight - containerElement.clientHeight;
-              
+              const targetScrollTop =
+                containerElement.scrollHeight - containerElement.clientHeight;
+
               if (Math.abs(currentScrollTop - targetScrollTop) > 5) {
-                console.log(`🔄 [SmsThread] Final scroll adjustment - current: ${currentScrollTop}, target: ${targetScrollTop}`);
+                console.log(
+                  `🔄 [SmsThread] Final scroll adjustment - current: ${currentScrollTop}, target: ${targetScrollTop}`
+                );
                 containerElement.scrollTop = targetScrollTop;
               } else {
                 console.log('🔄 [SmsThread] Successfully scrolled to bottom');
@@ -873,7 +903,10 @@ export class PbSmsThread extends LitElement {
       const stored = await chrome.storage.local.get(this.smsCursorStorageKey);
       if (stored[this.smsCursorStorageKey]) {
         this.messageCursor = stored[this.smsCursorStorageKey];
-        console.log(`📱 [SMS Thread] Loaded stored cursor for ${this.conversationId}:`, this.messageCursor);
+        console.log(
+          `📱 [SMS Thread] Loaded stored cursor for ${this.conversationId}:`,
+          this.messageCursor
+        );
       }
     } catch (error) {
       console.error('Failed to load stored SMS cursor:', error);
@@ -886,15 +919,16 @@ export class PbSmsThread extends LitElement {
   private async saveStoredCursor(): Promise<void> {
     try {
       await chrome.storage.local.set({
-        [this.smsCursorStorageKey]: this.messageCursor
+        [this.smsCursorStorageKey]: this.messageCursor,
       });
-      console.log(`📱 [SMS Thread] Saved cursor for ${this.conversationId}:`, this.messageCursor);
+      console.log(
+        `📱 [SMS Thread] Saved cursor for ${this.conversationId}:`,
+        this.messageCursor
+      );
     } catch (error) {
       console.error('Failed to save SMS cursor:', error);
     }
   }
-
-
 
   handleInputChange(e: Event) {
     const target = e.target as HTMLTextAreaElement;
@@ -1010,16 +1044,18 @@ export class PbSmsThread extends LitElement {
       selectedFile: !!this.selectedFile,
       conversationId: this.conversationId,
       deviceIden: this.deviceIden,
-      isSending: this.isSending
+      isSending: this.isSending,
     });
-    
+
     if (
       (!this.messageText.trim() && !this.selectedFile) ||
       !this.conversationId ||
       !this.deviceIden ||
       this.isSending
     ) {
-      console.log('💬 [SmsThread] sendMessage early return - conditions not met');
+      console.log(
+        '💬 [SmsThread] sendMessage early return - conditions not met'
+      );
       return;
     }
 
@@ -1084,7 +1120,9 @@ export class PbSmsThread extends LitElement {
         this.requestUpdate();
 
         // Reload the thread to show the newly sent message
-        console.log('💬 [SmsThread] Message sent successfully, reloading thread to show new message');
+        console.log(
+          '💬 [SmsThread] Message sent successfully, reloading thread to show new message'
+        );
         await this.loadThread();
 
         // Trigger refresh of the conversation
@@ -1096,13 +1134,18 @@ export class PbSmsThread extends LitElement {
         );
       } else {
         console.error('Failed to send SMS:', response.error);
-        
+
         // Check if it's a conversation not found error
-        if (response.error && response.error.includes('CONVERSATION_NOT_FOUND:')) {
+        if (
+          response.error &&
+          response.error.includes('CONVERSATION_NOT_FOUND:')
+        ) {
           this.conversationNotFound = true;
-          console.log('💬 [SmsThread] Conversation not found, showing reload option');
+          console.log(
+            '💬 [SmsThread] Conversation not found, showing reload option'
+          );
         }
-        
+
         // TODO: Show other errors to user
       }
     } catch (error) {
@@ -1138,7 +1181,7 @@ export class PbSmsThread extends LitElement {
         console.log('💬 [SmsThread] Thread reloaded successfully');
         this.thread = response.thread;
         this.conversationNotFound = false;
-        
+
         // Trigger a refresh of the conversations list too
         this.dispatchEvent(
           new CustomEvent('thread-reloaded', {
@@ -1147,7 +1190,10 @@ export class PbSmsThread extends LitElement {
           })
         );
       } else {
-        console.error('💬 [SmsThread] Failed to reload thread:', response.error);
+        console.error(
+          '💬 [SmsThread] Failed to reload thread:',
+          response.error
+        );
         // Keep showing the reload button
       }
     } catch (error) {
@@ -1197,16 +1243,19 @@ export class PbSmsThread extends LitElement {
             />
           </svg>
           <p>This conversation could not be found.</p>
-          <p class="error-subtitle">The conversation may have been deleted or the data needs to be refreshed.</p>
+          <p class="error-subtitle">
+            The conversation may have been deleted or the data needs to be
+            refreshed.
+          </p>
           <button
             class="reload-button"
             @click="${this.reloadThread}"
             ?disabled="${this.isReloading}"
           >
-            ${this.isReloading 
-              ? html`<div class="spinner-small"></div> Reloading...`
-              : 'Reload Conversation'
-            }
+            ${this.isReloading
+              ? html`<div class="spinner-small"></div>
+                  Reloading...`
+              : 'Reload Conversation'}
           </button>
         </div>
       `;

@@ -6,7 +6,10 @@
 
 import { getTotalUnreadCount } from './smsBridge';
 import { getLocal, setLocal } from './storage';
-import { unifiedNotificationTracker, UnreadCounts } from './unifiedNotificationTracker';
+import {
+  unifiedNotificationTracker,
+  UnreadCounts,
+} from './unifiedNotificationTracker';
 
 export interface NotificationCounts {
   pushes: number;
@@ -23,7 +26,7 @@ class NotificationBadgeManager {
   private static instance: NotificationBadgeManager;
   private badgeState: BadgeState = {
     counts: { pushes: 0, sms: 0, total: 0 },
-    lastUpdated: 0
+    lastUpdated: 0,
   };
 
   private constructor() {
@@ -43,16 +46,21 @@ class NotificationBadgeManager {
   private async initializeBadge(): Promise<void> {
     try {
       console.log('🏷️ [NotificationBadge] Initializing badge from storage');
-      
+
       // Initialize the unified tracker first
       await unifiedNotificationTracker.initialize();
-      
+
       const stored = await getLocal<BadgeState>('notification_badge_state');
       if (stored) {
         this.badgeState = stored;
-        console.log('🏷️ [NotificationBadge] Loaded stored badge state:', this.badgeState);
+        console.log(
+          '🏷️ [NotificationBadge] Loaded stored badge state:',
+          this.badgeState
+        );
       } else {
-        console.log('🏷️ [NotificationBadge] No stored badge state found, using defaults');
+        console.log(
+          '🏷️ [NotificationBadge] No stored badge state found, using defaults'
+        );
       }
       await this.updateBadge();
     } catch (error) {
@@ -69,7 +77,7 @@ class NotificationBadgeManager {
     } else if (count < 0) {
       await unifiedNotificationTracker.decrementCount('push', Math.abs(count));
     }
-    
+
     await this.updateBadge();
   }
 
@@ -116,18 +124,22 @@ class NotificationBadgeManager {
   async getNotificationCounts(): Promise<NotificationCounts> {
     try {
       // Get unread counts from unified tracker
-      const unreadCounts = await unifiedNotificationTracker.getUnreadCount() as UnreadCounts;
-      
+      const unreadCounts =
+        (await unifiedNotificationTracker.getUnreadCount()) as UnreadCounts;
+
       // Update local state to match unified tracker
       this.badgeState.counts = {
         pushes: unreadCounts.pushes,
         sms: unreadCounts.sms,
-        total: unreadCounts.total
+        total: unreadCounts.total,
       };
-      
+
       return { ...this.badgeState.counts };
     } catch (error) {
-      console.error('Failed to get notification counts from unified tracker:', error);
+      console.error(
+        'Failed to get notification counts from unified tracker:',
+        error
+      );
       // Fallback to local state
       return { ...this.badgeState.counts };
     }
@@ -139,51 +151,63 @@ class NotificationBadgeManager {
   private async updateBadge(): Promise<void> {
     try {
       // Get current counts from unified tracker
-      const unreadCounts = await unifiedNotificationTracker.getUnreadCount() as UnreadCounts;
+      const unreadCounts =
+        (await unifiedNotificationTracker.getUnreadCount()) as UnreadCounts;
       const { total, pushes, sms } = unreadCounts;
-      
+
       // Update local state
       this.badgeState.counts = { pushes, sms, total };
       this.badgeState.lastUpdated = Date.now();
-      
+
       console.log('🏷️ [NotificationBadge] Updating badge:', {
         total,
         pushes,
         sms,
-        badgeState: this.badgeState
+        badgeState: this.badgeState,
       });
-      
+
       if (total === 0) {
         // Clear badge
         console.log('🏷️ [NotificationBadge] Clearing badge (no notifications)');
         await chrome.action.setBadgeText({ text: '' });
       } else if (total === 1) {
         // Show red dot for single notification
-        console.log('🏷️ [NotificationBadge] Setting badge to red dot (single notification)');
+        console.log(
+          '🏷️ [NotificationBadge] Setting badge to red dot (single notification)'
+        );
         await chrome.action.setBadgeText({ text: '•' });
         await chrome.action.setBadgeBackgroundColor({ color: '#ef4444' }); // Red
       } else {
         // Show count for multiple notifications
         const displayText = total > 99 ? '99+' : total.toString();
-        console.log('🏷️ [NotificationBadge] Setting badge to count:', displayText);
+        console.log(
+          '🏷️ [NotificationBadge] Setting badge to count:',
+          displayText
+        );
         await chrome.action.setBadgeText({ text: displayText });
-        
+
         // Use different colors based on notification types
         if (sms > 0 && pushes > 0) {
           // Mixed notifications - purple
-          console.log('🏷️ [NotificationBadge] Setting badge color to purple (mixed notifications)');
+          console.log(
+            '🏷️ [NotificationBadge] Setting badge color to purple (mixed notifications)'
+          );
           await chrome.action.setBadgeBackgroundColor({ color: '#8b5cf6' });
         } else if (sms > 0) {
           // SMS only - blue
-          console.log('🏷️ [NotificationBadge] Setting badge color to blue (SMS only)');
+          console.log(
+            '🏷️ [NotificationBadge] Setting badge color to blue (SMS only)'
+          );
           await chrome.action.setBadgeBackgroundColor({ color: '#3b82f6' });
         } else {
           // Pushes only - red
-          console.log('🏷️ [NotificationBadge] Setting badge color to red (pushes only)');
+          console.log(
+            '🏷️ [NotificationBadge] Setting badge color to red (pushes only)'
+          );
           await chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
         }
       }
-      
+
       // Save badge state
       await this.saveBadgeState();
     } catch (error) {
@@ -196,7 +220,10 @@ class NotificationBadgeManager {
    */
   private async saveBadgeState(): Promise<void> {
     try {
-      console.log('🏷️ [NotificationBadge] Saving badge state to storage:', this.badgeState);
+      console.log(
+        '🏷️ [NotificationBadge] Saving badge state to storage:',
+        this.badgeState
+      );
       await setLocal('notification_badge_state', this.badgeState);
     } catch (error) {
       console.error('Failed to save badge state:', error);
@@ -213,4 +240,4 @@ class NotificationBadgeManager {
 }
 
 // Export singleton instance
-export const notificationBadge = NotificationBadgeManager.getInstance(); 
+export const notificationBadge = NotificationBadgeManager.getInstance();

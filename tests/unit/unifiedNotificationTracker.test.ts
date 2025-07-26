@@ -4,7 +4,11 @@
  */
 
 import { getLocal, setLocal } from '../../src/background/storage';
-import { unifiedNotificationTracker, NotificationData, UnifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
+import {
+  unifiedNotificationTracker,
+  NotificationData,
+  UnifiedNotificationTracker,
+} from '../../src/background/unifiedNotificationTracker';
 
 // Mock storage
 jest.mock('../../src/background/storage', () => ({
@@ -27,21 +31,21 @@ describe('UnifiedNotificationTracker', () => {
       lastProcessedMirrorTimestamp: 0,
       lastProcessedSmsTimestamp: 0,
       lastProcessedChannelTimestamp: 0,
-      lastUpdated: 0
+      lastUpdated: 0,
     };
     (unifiedNotificationTracker as any).cache = {
       pushIds: [],
       mirrorIds: [],
       smsIds: [],
       channelIds: [],
-      lastCleanup: 0
+      lastCleanup: 0,
     };
     (unifiedNotificationTracker as any).counts = {
       pushes: 0,
       mirrors: 0,
       sms: 0,
       channels: 0,
-      total: 0
+      total: 0,
     };
     (unifiedNotificationTracker as any).isInitialized = false;
   });
@@ -58,7 +62,7 @@ describe('UnifiedNotificationTracker', () => {
         mirrors: 0,
         sms: 0,
         channels: 0,
-        total: 0
+        total: 0,
       });
       expect(state.timestamps.lastSeenTimestamp).toBe(0);
       expect(state.cache.pushIds).toEqual([]);
@@ -70,7 +74,7 @@ describe('UnifiedNotificationTracker', () => {
         mirrors: 2,
         sms: 3,
         channels: 1,
-        total: 11
+        total: 11,
       };
       const storedTimestamps = {
         lastSeenTimestamp: 1000,
@@ -78,12 +82,18 @@ describe('UnifiedNotificationTracker', () => {
         lastProcessedMirrorTimestamp: 3000,
         lastProcessedSmsTimestamp: 4000,
         lastProcessedChannelTimestamp: 5000,
-        lastUpdated: 6000
+        lastUpdated: 6000,
       };
 
       mockGetLocal
         .mockResolvedValueOnce(storedTimestamps)
-        .mockResolvedValueOnce({ pushIds: ['test1'], mirrorIds: [], smsIds: [], channelIds: [], lastCleanup: 1000 })
+        .mockResolvedValueOnce({
+          pushIds: ['test1'],
+          mirrorIds: [],
+          smsIds: [],
+          channelIds: [],
+          lastCleanup: 1000,
+        })
         .mockResolvedValueOnce(storedCounts);
 
       await unifiedNotificationTracker.initialize();
@@ -103,32 +113,36 @@ describe('UnifiedNotificationTracker', () => {
     describe('incrementCount', () => {
       it('should increment push count correctly', async () => {
         await unifiedNotificationTracker.incrementCount('push', 3);
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.pushes).toBe(3);
         expect(counts.total).toBe(3);
       });
 
       it('should increment mirror count correctly', async () => {
         await unifiedNotificationTracker.incrementCount('mirror', 2);
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.mirrors).toBe(2);
         expect(counts.total).toBe(2);
       });
 
       it('should increment SMS count correctly', async () => {
         await unifiedNotificationTracker.incrementCount('sms', 4);
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.sms).toBe(4);
         expect(counts.total).toBe(4);
       });
 
       it('should increment channel count correctly', async () => {
         await unifiedNotificationTracker.incrementCount('channel', 1);
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.channels).toBe(1);
         expect(counts.total).toBe(1);
       });
@@ -138,8 +152,9 @@ describe('UnifiedNotificationTracker', () => {
         await unifiedNotificationTracker.incrementCount('mirror', 1);
         await unifiedNotificationTracker.incrementCount('sms', 3);
         await unifiedNotificationTracker.incrementCount('channel', 1);
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.pushes).toBe(2);
         expect(counts.mirrors).toBe(1);
         expect(counts.sms).toBe(3);
@@ -156,24 +171,27 @@ describe('UnifiedNotificationTracker', () => {
 
       it('should decrement count correctly', async () => {
         await unifiedNotificationTracker.decrementCount('push', 2);
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.pushes).toBe(3);
         expect(counts.total).toBe(6);
       });
 
       it('should not go below zero', async () => {
         await unifiedNotificationTracker.decrementCount('push', 10);
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.pushes).toBe(0);
         expect(counts.total).toBe(3); // mirrors only
       });
 
       it('should handle negative amounts', async () => {
         await unifiedNotificationTracker.decrementCount('push', -2); // This should increment
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.pushes).toBe(7);
         expect(counts.total).toBe(10);
       });
@@ -182,16 +200,18 @@ describe('UnifiedNotificationTracker', () => {
     describe('setCount', () => {
       it('should set count correctly', async () => {
         await unifiedNotificationTracker.setCount('push', 10);
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.pushes).toBe(10);
         expect(counts.total).toBe(10);
       });
 
       it('should not allow negative counts', async () => {
         await unifiedNotificationTracker.setCount('push', -5);
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.pushes).toBe(0);
         expect(counts.total).toBe(0);
       });
@@ -206,8 +226,9 @@ describe('UnifiedNotificationTracker', () => {
 
       it('should clear specific notification type', async () => {
         await unifiedNotificationTracker.clearNotifications('push');
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.pushes).toBe(0);
         expect(counts.mirrors).toBe(2);
         expect(counts.sms).toBe(1);
@@ -225,8 +246,9 @@ describe('UnifiedNotificationTracker', () => {
 
       it('should clear all notification counts', async () => {
         await unifiedNotificationTracker.clearAllNotifications();
-        
-        const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+        const counts =
+          (await unifiedNotificationTracker.getUnreadCount()) as any;
         expect(counts.pushes).toBe(0);
         expect(counts.mirrors).toBe(0);
         expect(counts.sms).toBe(0);
@@ -240,7 +262,7 @@ describe('UnifiedNotificationTracker', () => {
     beforeEach(async () => {
       mockGetLocal.mockResolvedValue(null);
       await unifiedNotificationTracker.initialize();
-      
+
       await unifiedNotificationTracker.incrementCount('push', 2);
       await unifiedNotificationTracker.incrementCount('mirror', 1);
       await unifiedNotificationTracker.incrementCount('sms', 3);
@@ -248,23 +270,31 @@ describe('UnifiedNotificationTracker', () => {
     });
 
     it('should return all counts when no type specified', async () => {
-      const counts = await unifiedNotificationTracker.getUnreadCount() as any;
-      
+      const counts = (await unifiedNotificationTracker.getUnreadCount()) as any;
+
       expect(counts).toEqual({
         pushes: 2,
         mirrors: 1,
         sms: 3,
         channels: 1,
-        total: 7
+        total: 7,
       });
     });
 
     it('should return specific count when type specified', async () => {
-      const pushCount = await unifiedNotificationTracker.getUnreadCount('push') as number;
-      const mirrorCount = await unifiedNotificationTracker.getUnreadCount('mirror') as number;
-      const smsCount = await unifiedNotificationTracker.getUnreadCount('sms') as number;
-      const channelCount = await unifiedNotificationTracker.getUnreadCount('channel') as number;
-      
+      const pushCount = (await unifiedNotificationTracker.getUnreadCount(
+        'push'
+      )) as number;
+      const mirrorCount = (await unifiedNotificationTracker.getUnreadCount(
+        'mirror'
+      )) as number;
+      const smsCount = (await unifiedNotificationTracker.getUnreadCount(
+        'sms'
+      )) as number;
+      const channelCount = (await unifiedNotificationTracker.getUnreadCount(
+        'channel'
+      )) as number;
+
       expect(pushCount).toBe(2);
       expect(mirrorCount).toBe(1);
       expect(smsCount).toBe(3);
@@ -283,10 +313,11 @@ describe('UnifiedNotificationTracker', () => {
         id: 'test123',
         type: 'push',
         created: Date.now(),
-        metadata: { pushIden: 'test123' }
+        metadata: { pushIden: 'test123' },
       };
 
-      const shouldShow = await unifiedNotificationTracker.shouldShowNotification(notification);
+      const shouldShow =
+        await unifiedNotificationTracker.shouldShowNotification(notification);
       expect(shouldShow).toBe(true);
     });
 
@@ -295,13 +326,18 @@ describe('UnifiedNotificationTracker', () => {
         id: 'test123',
         type: 'push',
         created: Date.now(),
-        metadata: { pushIden: 'test123' }
+        metadata: { pushIden: 'test123' },
       };
 
       // Mark as processed first
-      await unifiedNotificationTracker.markAsProcessed('push', 'test123', Date.now());
+      await unifiedNotificationTracker.markAsProcessed(
+        'push',
+        'test123',
+        Date.now()
+      );
 
-      const shouldShow = await unifiedNotificationTracker.shouldShowNotification(notification);
+      const shouldShow =
+        await unifiedNotificationTracker.shouldShowNotification(notification);
       expect(shouldShow).toBe(false);
     });
 
@@ -311,13 +347,14 @@ describe('UnifiedNotificationTracker', () => {
         id: 'test123',
         type: 'push',
         created: oldTimestamp,
-        metadata: { pushIden: 'test123' }
+        metadata: { pushIden: 'test123' },
       };
 
       // Mark as seen recently
       await unifiedNotificationTracker.markAsSeen(Date.now());
 
-      const shouldShow = await unifiedNotificationTracker.shouldShowNotification(notification);
+      const shouldShow =
+        await unifiedNotificationTracker.shouldShowNotification(notification);
       expect(shouldShow).toBe(false);
     });
   });
@@ -331,7 +368,7 @@ describe('UnifiedNotificationTracker', () => {
     it('should update last seen timestamp', async () => {
       const timestamp = Date.now();
       await unifiedNotificationTracker.markAsSeen(timestamp);
-      
+
       const state = unifiedNotificationTracker.getState();
       expect(state.timestamps.lastSeenTimestamp).toBe(timestamp / 1000);
     });
@@ -340,10 +377,14 @@ describe('UnifiedNotificationTracker', () => {
       const before = Date.now();
       await unifiedNotificationTracker.markAsSeen();
       const after = Date.now();
-      
+
       const state = unifiedNotificationTracker.getState();
-      expect(state.timestamps.lastSeenTimestamp).toBeGreaterThanOrEqual(before / 1000);
-      expect(state.timestamps.lastSeenTimestamp).toBeLessThanOrEqual(after / 1000);
+      expect(state.timestamps.lastSeenTimestamp).toBeGreaterThanOrEqual(
+        before / 1000
+      );
+      expect(state.timestamps.lastSeenTimestamp).toBeLessThanOrEqual(
+        after / 1000
+      );
     });
   });
 
@@ -355,8 +396,12 @@ describe('UnifiedNotificationTracker', () => {
 
     it('should update processed timestamp and add to cache', async () => {
       const timestamp = Date.now();
-      await unifiedNotificationTracker.markAsProcessed('push', 'test123', timestamp);
-      
+      await unifiedNotificationTracker.markAsProcessed(
+        'push',
+        'test123',
+        timestamp
+      );
+
       const state = unifiedNotificationTracker.getState();
       expect(state.timestamps.lastProcessedPushTimestamp).toBe(timestamp);
       expect(state.cache.pushIds).toContain('test123');
@@ -365,10 +410,18 @@ describe('UnifiedNotificationTracker', () => {
     it('should only update timestamp if new timestamp is greater', async () => {
       const oldTimestamp = Date.now();
       const newTimestamp = oldTimestamp + 1000;
-      
-      await unifiedNotificationTracker.markAsProcessed('push', 'test123', oldTimestamp);
-      await unifiedNotificationTracker.markAsProcessed('push', 'test456', newTimestamp);
-      
+
+      await unifiedNotificationTracker.markAsProcessed(
+        'push',
+        'test123',
+        oldTimestamp
+      );
+      await unifiedNotificationTracker.markAsProcessed(
+        'push',
+        'test456',
+        newTimestamp
+      );
+
       const state = unifiedNotificationTracker.getState();
       expect(state.timestamps.lastProcessedPushTimestamp).toBe(newTimestamp);
     });
@@ -388,10 +441,10 @@ describe('UnifiedNotificationTracker', () => {
     it('should recover from invalid state', async () => {
       // Manually corrupt the state
       (unifiedNotificationTracker as any).counts.pushes = -1;
-      
+
       const isValid = await unifiedNotificationTracker.validateState();
       expect(isValid).toBe(true);
-      
+
       const state = unifiedNotificationTracker.getState();
       expect(state.counts.pushes).toBe(0);
     });
@@ -401,15 +454,15 @@ describe('UnifiedNotificationTracker', () => {
     it('should save state to storage', async () => {
       mockGetLocal.mockResolvedValue(null);
       await unifiedNotificationTracker.initialize();
-      
+
       await unifiedNotificationTracker.incrementCount('push', 5);
-      
+
       expect(mockSetLocal).toHaveBeenCalledWith('unified_notification_counts', {
         pushes: 5,
         mirrors: 0,
         sms: 0,
         channels: 0,
-        total: 5
+        total: 5,
       });
     });
 
@@ -419,18 +472,18 @@ describe('UnifiedNotificationTracker', () => {
         mirrors: 1,
         sms: 2,
         channels: 0,
-        total: 6
+        total: 6,
       };
-      
+
       mockGetLocal
         .mockResolvedValueOnce(null) // timestamps
         .mockResolvedValueOnce(null) // cache
         .mockResolvedValueOnce(storedCounts); // counts
-      
+
       await unifiedNotificationTracker.initialize();
-      
-      const counts = await unifiedNotificationTracker.getUnreadCount() as any;
+
+      const counts = (await unifiedNotificationTracker.getUnreadCount()) as any;
       expect(counts).toEqual(storedCounts);
     });
   });
-}); 
+});

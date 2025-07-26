@@ -1,9 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 
-import {
-  EnhancedPush,
-} from '../../types/api-interfaces';
+import { EnhancedPush } from '../../types/api-interfaces';
 
 // Legacy interface for backward compatibility
 interface PushbulletPush {
@@ -53,8 +51,6 @@ interface StoredState {
 export class RecentPushes extends LitElement {
   @state()
   private pushes: EnhancedPush[] = [];
-
-
 
   @state()
   private isLoading = false;
@@ -795,18 +791,28 @@ export class RecentPushes extends LitElement {
           console.log('🔄 [RecentPushes] Refreshing pushes list');
           this.pushes = response.history.pushes;
         } else {
-          console.log('➕ [RecentPushes] Appending pushes to existing list with deduplication');
+          console.log(
+            '➕ [RecentPushes] Appending pushes to existing list with deduplication'
+          );
           // Create a map of existing pushes by iden for efficient lookup
-          const existingPushesMap = new Map(this.pushes.map(push => [push.iden, push]));
-          
+          const existingPushesMap = new Map(
+            this.pushes.map(push => [push.iden, push])
+          );
+
           // Filter out duplicates and add new pushes
-          const newPushes = response.history.pushes.filter((push: EnhancedPush) => !existingPushesMap.has(push.iden));
-          
+          const newPushes = response.history.pushes.filter(
+            (push: EnhancedPush) => !existingPushesMap.has(push.iden)
+          );
+
           if (newPushes.length > 0) {
-            console.log(`➕ [RecentPushes] Adding ${newPushes.length} new pushes (filtered out ${response.history.pushes.length - newPushes.length} duplicates)`);
+            console.log(
+              `➕ [RecentPushes] Adding ${newPushes.length} new pushes (filtered out ${response.history.pushes.length - newPushes.length} duplicates)`
+            );
             this.pushes = [...this.pushes, ...newPushes];
           } else {
-            console.log('ℹ️ [RecentPushes] No new pushes to add (all were duplicates)');
+            console.log(
+              'ℹ️ [RecentPushes] No new pushes to add (all were duplicates)'
+            );
           }
         }
 
@@ -922,10 +928,12 @@ export class RecentPushes extends LitElement {
       console.log('🔄 [RecentPushes] Received sync message:', message);
       this.loadPushes(true);
     }
-    
+
     // Handle push creation events
     if (message.cmd === 'pushCreated') {
-      console.log('🔔 [RecentPushes] Received pushCreated message, refreshing pushes.');
+      console.log(
+        '🔔 [RecentPushes] Received pushCreated message, refreshing pushes.'
+      );
       this.loadPushes(true);
     }
   }
@@ -939,9 +947,7 @@ export class RecentPushes extends LitElement {
       );
     } else {
       // Show pushes to/from own devices (excluding channel pushes)
-      return this.pushes.filter(
-        push => !push.channel_iden
-      );
+      return this.pushes.filter(push => !push.channel_iden);
     }
   }
 
@@ -1193,102 +1199,106 @@ export class RecentPushes extends LitElement {
 
         <div class="content-area">
           <div class="push-list">
-          ${filteredPushes.length === 0 && !this.isLoading
-            ? html`
-                <div class="empty-state">
-                  <div class="empty-state-icon">📭</div>
-                  <p>No ${this.getEmptyStateMessage()}</p>
-                  <p>${this.getEmptyStateSubMessage()}</p>
-                </div>
-              `
-            : ''}
-          ${filteredPushes.map(
-            push => html`
-              <div class="push-item">
-                <div class="push-header">
-                  <h4 class="push-title">
-                    ${push.type === 'file'
-                      ? this.getFileIcon(push.file_type, push.file_name)
-                      : this.getPushIcon(push.type)}
-                    ${push.title ||
-                    (push.type === 'link'
-                      ? push.url
-                      : push.type === 'file'
-                        ? push.file_name || 'File'
-                        : 'Untitled')}
-                  </h4>
-                  <div class="push-actions">
-                    <button
-                      class="action-button dismiss"
-                      @click=${() => this.handleDismiss(push.iden)}
-                      title="Dismiss"
-                    >
-                      ✓
-                    </button>
-                    ${this.isPushOwnedByCurrentDevice(push)
-                      ? html`
-                    <button
-                      class="action-button delete"
-                      @click=${() => this.handleDelete(push.iden)}
-                            title="Delete"
-                    >
-                      🗑
-                    </button>
-                        `
-                      : ''}
+            ${filteredPushes.length === 0 && !this.isLoading
+              ? html`
+                  <div class="empty-state">
+                    <div class="empty-state-icon">📭</div>
+                    <p>No ${this.getEmptyStateMessage()}</p>
+                    <p>${this.getEmptyStateSubMessage()}</p>
                   </div>
-                </div>
+                `
+              : ''}
+            ${filteredPushes.map(
+              push => html`
+                <div class="push-item">
+                  <div class="push-header">
+                    <h4 class="push-title">
+                      ${push.type === 'file'
+                        ? this.getFileIcon(push.file_type, push.file_name)
+                        : this.getPushIcon(push.type)}
+                      ${push.title ||
+                      (push.type === 'link'
+                        ? push.url
+                        : push.type === 'file'
+                          ? push.file_name || 'File'
+                          : 'Untitled')}
+                    </h4>
+                    <div class="push-actions">
+                      <button
+                        class="action-button dismiss"
+                        @click=${() => this.handleDismiss(push.iden)}
+                        title="Dismiss"
+                      >
+                        ✓
+                      </button>
+                      ${this.isPushOwnedByCurrentDevice(push)
+                        ? html`
+                            <button
+                              class="action-button delete"
+                              @click=${() => this.handleDelete(push.iden)}
+                              title="Delete"
+                            >
+                              🗑
+                            </button>
+                          `
+                        : ''}
+                    </div>
+                  </div>
 
-                ${push.body
-                  ? html` <div class="push-body">${push.body}</div> `
-                  : ''}
-                ${push.url
-                  ? html`
-                      <a href=${push.url} class="push-url" target="_blank">
-                        ${push.url}
-                      </a>
-                    `
-                  : ''}
-                ${this.renderFileDisplay(push)}
+                  ${push.body
+                    ? html` <div class="push-body">${push.body}</div> `
+                    : ''}
+                  ${push.url
+                    ? html`
+                        <a href=${push.url} class="push-url" target="_blank">
+                          ${push.url}
+                        </a>
+                      `
+                    : ''}
+                  ${this.renderFileDisplay(push)}
 
-                <div class="push-meta">
-                  <div class="push-info">
-                    <span class="push-type">${push.type}</span>
-                    ${push.channel_iden
-                      ? html`<span class="channel-badge"
-                          >${push.metadata?.source_channel_name || push.channel_iden}</span
+                  <div class="push-meta">
+                    <div class="push-info">
+                      <span class="push-type">${push.type}</span>
+                      ${push.channel_iden
+                        ? html`<span class="channel-badge"
+                            >${push.metadata?.source_channel_name ||
+                            push.channel_iden}</span
+                          >`
+                        : ''}
+                    </div>
+                    <span class="push-time"
+                      >${this.formatTime(push.created)}</span
+                    >
+                  </div>
+
+                  <div class="device-info">
+                    <span class="device-icon"
+                      >${this.getDeviceIcon(
+                        this.getDeviceType(push.source_device_iden)
+                      )}</span
+                    >
+                    <span
+                      >${push.metadata?.display_source ||
+                      `From: ${this.getDeviceName(push.source_device_iden)}`}</span
+                    >
+                    ${push.metadata?.ownership_reason
+                      ? html`<span class="ownership-info"
+                          >• ${push.metadata.ownership_reason}</span
                         >`
                       : ''}
                   </div>
-                  <span class="push-time"
-                    >${this.formatTime(push.created)}</span
-                  >
-                </div>
-
-                <div class="device-info">
-                  <span class="device-icon"
-                    >${this.getDeviceIcon(
-                      this.getDeviceType(push.source_device_iden)
-                    )}</span
-                  >
-                  <span
-                    >${push.metadata?.display_source || `From: ${this.getDeviceName(push.source_device_iden)}`}</span
-                  >
-                  ${push.metadata?.ownership_reason
-                    ? html`<span class="ownership-info">• ${push.metadata.ownership_reason}</span>`
-                    : ''}
-                </div>
-              </div>
-            `
-          )}
-          ${this.isLoading
-            ? html`
-                <div class="loading">
-                  <span class="loading-spinner"></span>
-                  Loading pushes...
                 </div>
               `
-            : ''}
+            )}
+            ${this.isLoading
+              ? html`
+                  <div class="loading">
+                    <span class="loading-spinner"></span>
+                    Loading pushes...
+                  </div>
+                `
+              : ''}
           </div>
           ${this.hasMore && !this.isLoading
             ? html`

@@ -18,9 +18,9 @@ export interface ApiSmsThread {
   }>;
   latest: {
     id: string;
-    type: "sms" | "mms";
+    type: 'sms' | 'mms';
     timestamp: number;
-    direction: "incoming" | "outgoing";
+    direction: 'incoming' | 'outgoing';
     body: string;
     status?: string;
     guid?: string;
@@ -29,9 +29,9 @@ export interface ApiSmsThread {
 
 export interface ApiSmsMessage {
   id: string;
-  type: "sms" | "mms";
+  type: 'sms' | 'mms';
   timestamp: number;
-  direction: "incoming" | "outgoing";
+  direction: 'incoming' | 'outgoing';
   body: string;
   status?: string;
   guid?: string;
@@ -74,7 +74,7 @@ export class SmsApiClient {
       if (!device) {
         throw new Error(`Device ${deviceIden} not found`);
       }
-      
+
       if (!device.has_sms) {
         throw new Error(`Device ${deviceIden} is not SMS-capable`);
       }
@@ -100,7 +100,9 @@ export class SmsApiClient {
         }
 
         if (response.status === 404) {
-          throw new Error(`SMS threads not found for device ${deviceIden} - device may not support SMS or may be offline`);
+          throw new Error(
+            `SMS threads not found for device ${deviceIden} - device may not support SMS or may be offline`
+          );
         }
 
         const errorData = await response.json().catch(() => ({}));
@@ -111,7 +113,10 @@ export class SmsApiClient {
 
       return await response.json();
     } catch (error) {
-      console.error(`Failed to get SMS threads for device ${deviceIden}:`, error);
+      console.error(
+        `Failed to get SMS threads for device ${deviceIden}:`,
+        error
+      );
       throw error;
     }
   }
@@ -124,8 +129,10 @@ export class SmsApiClient {
     threadId: string
   ): Promise<ThreadMessagesResponse> {
     try {
-      console.log(`[SmsApiClient] Getting SMS thread messages for device: ${deviceIden}, thread: ${threadId}`);
-      
+      console.log(
+        `[SmsApiClient] Getting SMS thread messages for device: ${deviceIden}, thread: ${threadId}`
+      );
+
       if (!this.token) {
         console.log(`[SmsApiClient] No token, initializing...`);
         await this.initialize();
@@ -137,14 +144,16 @@ export class SmsApiClient {
         console.error(`[SmsApiClient] Device ${deviceIden} not found`);
         throw new Error(`Device ${deviceIden} not found`);
       }
-      
+
       if (!device.has_sms) {
         console.error(`[SmsApiClient] Device ${deviceIden} is not SMS-capable`);
         throw new Error(`Device ${deviceIden} is not SMS-capable`);
       }
 
-      console.log(`[SmsApiClient] Making API request to: https://api.pushbullet.com/v2/permanents/${deviceIden}_thread_${threadId}`);
-      
+      console.log(
+        `[SmsApiClient] Making API request to: https://api.pushbullet.com/v2/permanents/${deviceIden}_thread_${threadId}`
+      );
+
       const response = await httpClient.fetch(
         `https://api.pushbullet.com/v2/permanents/${deviceIden}_thread_${threadId}`,
         {
@@ -156,13 +165,19 @@ export class SmsApiClient {
         }
       );
 
-      console.log(`[SmsApiClient] Response status: ${response.status} ${response.statusText}`);
-      
+      console.log(
+        `[SmsApiClient] Response status: ${response.status} ${response.statusText}`
+      );
+
       if (!response.ok) {
-        console.error(`[SmsApiClient] API request failed: ${response.status} ${response.statusText}`);
-        
+        console.error(
+          `[SmsApiClient] API request failed: ${response.status} ${response.statusText}`
+        );
+
         if (response.status === 401) {
-          console.error(`[SmsApiClient] Token revoked during SMS thread messages fetch`);
+          console.error(
+            `[SmsApiClient] Token revoked during SMS thread messages fetch`
+          );
           await reportError(PBError.TokenRevoked, {
             message: 'Token revoked during SMS thread messages fetch',
             code: response.status,
@@ -171,8 +186,12 @@ export class SmsApiClient {
         }
 
         if (response.status === 404) {
-          console.error(`[SmsApiClient] SMS thread ${threadId} not found for device ${deviceIden}`);
-          throw new Error(`SMS thread ${threadId} not found for device ${deviceIden}`);
+          console.error(
+            `[SmsApiClient] SMS thread ${threadId} not found for device ${deviceIden}`
+          );
+          throw new Error(
+            `SMS thread ${threadId} not found for device ${deviceIden}`
+          );
         }
 
         const errorData = await response.json().catch(() => ({}));
@@ -186,9 +205,11 @@ export class SmsApiClient {
       console.log(`[SmsApiClient] Successfully retrieved SMS thread data:`, {
         hasThread: !!responseData.thread,
         threadLength: responseData.thread?.length || 0,
-        threadKeys: responseData.thread ? Object.keys(responseData.thread[0] || {}) : []
+        threadKeys: responseData.thread
+          ? Object.keys(responseData.thread[0] || {})
+          : [],
       });
-      
+
       return responseData;
     } catch (error) {
       console.error(
@@ -202,7 +223,9 @@ export class SmsApiClient {
   /**
    * Get device by ID from device manager cache
    */
-  private async getDeviceById(deviceIden: string): Promise<PushbulletDevice | null> {
+  private async getDeviceById(
+    deviceIden: string
+  ): Promise<PushbulletDevice | null> {
     try {
       const devices = await getDevices();
       return devices.find(d => d.iden === deviceIden) || null;
@@ -222,19 +245,22 @@ export class SmsApiClient {
         if (device.nickname) {
           return device.nickname;
         }
-        
+
         if (device.model && device.manufacturer) {
           return `${device.manufacturer} ${device.model}`;
         }
-        
+
         if (device.model) {
           return device.model;
         }
       }
-      
+
       return `Device ${deviceIden.slice(0, 8)}`;
     } catch (error) {
-      console.error(`Failed to get device display name for ${deviceIden}:`, error);
+      console.error(
+        `Failed to get device display name for ${deviceIden}:`,
+        error
+      );
       return 'Unknown Device';
     }
   }
@@ -247,7 +273,10 @@ export class SmsApiClient {
       const device = await this.getDeviceById(deviceIden);
       return device ? device.has_sms === true : false;
     } catch (error) {
-      console.error(`Failed to verify SMS capability for device ${deviceIden}:`, error);
+      console.error(
+        `Failed to verify SMS capability for device ${deviceIden}:`,
+        error
+      );
       return false;
     }
   }
@@ -260,11 +289,14 @@ export class SmsApiClient {
       const device = await this.getDeviceById(deviceIden);
       return device ? device.active === true : false;
     } catch (error) {
-      console.error(`Failed to check online status for device ${deviceIden}:`, error);
+      console.error(
+        `Failed to check online status for device ${deviceIden}:`,
+        error
+      );
       return false;
     }
   }
 }
 
 // Export singleton instance
-export const smsApiClient = new SmsApiClient(); 
+export const smsApiClient = new SmsApiClient();

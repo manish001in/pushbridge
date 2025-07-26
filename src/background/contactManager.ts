@@ -191,7 +191,7 @@ export async function refreshContacts(forceRefresh = false): Promise<void> {
       params.append('cursor', cursor);
     }
 
-    const url = cursor 
+    const url = cursor
       ? `https://api.pushbullet.com/v2/contacts?${params}`
       : 'https://api.pushbullet.com/v2/contacts';
 

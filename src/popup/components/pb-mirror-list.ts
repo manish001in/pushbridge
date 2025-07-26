@@ -192,12 +192,15 @@ export class PbMirrorList extends LitElement {
           mirrors: this.mirrors.map(m => ({
             id: m.id,
             app: m.meta.application_name,
-            title: m.meta.title
-          }))
+            title: m.meta.title,
+          })),
         });
       } else {
         this.error = response.error || 'Failed to load notifications';
-        console.error('🔍 [MirrorList] Failed to load mirrors:', response.error);
+        console.error(
+          '🔍 [MirrorList] Failed to load mirrors:',
+          response.error
+        );
       }
     } catch (error) {
       console.error('🔍 [MirrorList] Failed to load mirrors:', error);
@@ -212,7 +215,7 @@ export class PbMirrorList extends LitElement {
       console.log('👆 [MirrorList] Mirror clicked:', {
         id: mirror.id,
         app: mirror.meta.application_name,
-        title: mirror.meta.title
+        title: mirror.meta.title,
       });
 
       // Focus the corresponding Chrome notification

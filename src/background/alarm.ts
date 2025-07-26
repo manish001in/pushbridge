@@ -13,7 +13,6 @@ import {
   getConnectionStatus,
 } from './socket';
 
-
 const KEEPALIVE_ALARM_NAME = 'keepalive';
 const CHANNEL_REFRESH_ALARM_NAME = 'channel-refresh';
 const KEEPALIVE_INTERVAL_MINUTES = 5;

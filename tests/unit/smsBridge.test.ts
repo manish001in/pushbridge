@@ -109,7 +109,7 @@ describe('SMS Bridge', () => {
           unreadCount: 0,
         },
       };
-      
+
       // Mock the device-specific storage key for new simple SMS system
       mockGetLocal.mockImplementation((key: string) => {
         if (key === `sms_data_device1`) {
@@ -124,14 +124,18 @@ describe('SMS Bridge', () => {
 
       await initializeSmsBridge();
 
-      expect(mockGetLocal).toHaveBeenCalledWith(`smsThreads_${mockDefaultDevice.iden}`);
+      expect(mockGetLocal).toHaveBeenCalledWith(
+        `smsThreads_${mockDefaultDevice.iden}`
+      );
       expect(setInterval).toHaveBeenCalled();
     });
 
     it('should handle empty storage gracefully', async () => {
       await initializeSmsBridge();
 
-      expect(mockGetLocal).toHaveBeenCalledWith(`smsThreads_${mockDefaultDevice.iden}`);
+      expect(mockGetLocal).toHaveBeenCalledWith(
+        `smsThreads_${mockDefaultDevice.iden}`
+      );
       expect(setInterval).toHaveBeenCalled();
     });
   });
@@ -169,7 +173,7 @@ describe('SMS Bridge', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
       };
-      
+
       // Mock the device-specific storage key
       mockGetLocal.mockImplementation((key: string) => {
         if (key === `smsThreads_${mockDefaultDevice.iden}`) {
@@ -312,7 +316,7 @@ describe('SMS Bridge', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
       };
-      
+
       // Mock the device-specific storage key
       mockGetLocal.mockImplementation((key: string) => {
         if (key === `smsThreads_${mockDefaultDevice.iden}`) {
@@ -353,10 +357,14 @@ describe('SMS Bridge', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
         recipients: [
-          { name: 'Test Contact', address: 'test@example.com', number: '+1234567890' }
+          {
+            name: 'Test Contact',
+            address: 'test@example.com',
+            number: '+1234567890',
+          },
         ],
       };
-      
+
       // Mock the device-specific storage key to return the conversation using new simple SMS system
       mockGetLocal.mockImplementation((key: string) => {
         if (key === 'pb_token') return Promise.resolve('test-token');
@@ -410,10 +418,14 @@ describe('SMS Bridge', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
         recipients: [
-          { name: 'Test Contact', address: 'test@example.com', number: '+1234567890' }
+          {
+            name: 'Test Contact',
+            address: 'test@example.com',
+            number: '+1234567890',
+          },
         ],
       };
-      
+
       // Mock the device-specific storage key to return the conversation
       mockGetLocal.mockImplementation((key: string) => {
         if (key === 'pb_token') return Promise.resolve('test-token');
@@ -441,10 +453,14 @@ describe('SMS Bridge', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
         recipients: [
-          { name: 'Test Contact', address: 'test@example.com', number: '+1234567890' }
+          {
+            name: 'Test Contact',
+            address: 'test@example.com',
+            number: '+1234567890',
+          },
         ],
       };
-      
+
       // Mock the device-specific storage key to return the conversation but no token
       mockGetLocal.mockImplementation((key: string) => {
         if (key === 'pb_user_iden') return Promise.resolve('test-user');
@@ -471,10 +487,14 @@ describe('SMS Bridge', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
         recipients: [
-          { name: 'Test Contact', address: 'test@example.com', number: '+1234567890' }
+          {
+            name: 'Test Contact',
+            address: 'test@example.com',
+            number: '+1234567890',
+          },
         ],
       };
-      
+
       // Mock the device-specific storage key to return the conversation using new simple SMS system
       mockGetLocal.mockImplementation((key: string) => {
         if (key === 'pb_token') return Promise.resolve('test-token');
@@ -496,7 +516,9 @@ describe('SMS Bridge', () => {
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
-        json: jest.fn().mockResolvedValue({ error: { message: 'Server error' } }),
+        json: jest
+          .fn()
+          .mockResolvedValue({ error: { message: 'Server error' } }),
       });
 
       await expect(
@@ -515,9 +537,9 @@ describe('SMS Bridge', () => {
         return Promise.resolve(undefined);
       });
 
-      await expect(
-        sendSms('device1', 'nonexistent', 'Hello')
-      ).rejects.toThrow('CONVERSATION_NOT_FOUND:nonexistent');
+      await expect(sendSms('device1', 'nonexistent', 'Hello')).rejects.toThrow(
+        'CONVERSATION_NOT_FOUND:nonexistent'
+      );
     });
 
     it('should throw error when conversation has no recipients', async () => {
@@ -530,7 +552,7 @@ describe('SMS Bridge', () => {
         unreadCount: 0,
         recipients: [],
       };
-      
+
       // Mock the device-specific storage key to return the conversation using new simple SMS system
       mockGetLocal.mockImplementation((key: string) => {
         if (key === 'pb_token') return Promise.resolve('test-token');
@@ -562,12 +584,24 @@ describe('SMS Bridge', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
         recipients: [
-          { name: 'Contact 1', address: 'contact1@example.com', number: '+1234567890' },
-          { name: 'Contact 2', address: 'contact2@example.com', number: '+0987654321' },
-          { name: 'Contact 3', address: 'contact3@example.com', number: '+5555555555' }
+          {
+            name: 'Contact 1',
+            address: 'contact1@example.com',
+            number: '+1234567890',
+          },
+          {
+            name: 'Contact 2',
+            address: 'contact2@example.com',
+            number: '+0987654321',
+          },
+          {
+            name: 'Contact 3',
+            address: 'contact3@example.com',
+            number: '+5555555555',
+          },
         ],
       };
-      
+
       // Mock the device-specific storage key to return the conversation using new simple SMS system
       mockGetLocal.mockImplementation((key: string) => {
         if (key === 'pb_token') return Promise.resolve('test-token');
@@ -626,7 +660,7 @@ describe('SMS Bridge', () => {
         lastMessageTime: Date.now(),
         unreadCount: 3,
       };
-      
+
       // Mock the device-specific storage key
       mockGetLocal.mockImplementation((key: string) => {
         if (key === `smsThreads_${mockDefaultDevice.iden}`) {
@@ -1121,10 +1155,14 @@ describe('Group MMS and Attachments', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
         recipients: [
-          { name: 'Test Contact', address: 'test@example.com', number: '+1234567890' }
+          {
+            name: 'Test Contact',
+            address: 'test@example.com',
+            number: '+1234567890',
+          },
         ],
       };
-      
+
       mockGetLocal.mockImplementation(key => {
         if (key === 'pb_token') return Promise.resolve('test-token');
         if (key === 'pb_user_iden') return Promise.resolve('user123');
@@ -1192,12 +1230,24 @@ describe('Group MMS and Attachments', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
         recipients: [
-          { name: 'Contact 1', address: 'contact1@example.com', number: '+1234567890' },
-          { name: 'Contact 2', address: 'contact2@example.com', number: '+0987654321' },
-          { name: 'Contact 3', address: 'contact3@example.com', number: '+1122334455' }
+          {
+            name: 'Contact 1',
+            address: 'contact1@example.com',
+            number: '+1234567890',
+          },
+          {
+            name: 'Contact 2',
+            address: 'contact2@example.com',
+            number: '+0987654321',
+          },
+          {
+            name: 'Contact 3',
+            address: 'contact3@example.com',
+            number: '+1122334455',
+          },
         ],
       };
-      
+
       mockGetLocal.mockImplementation(key => {
         if (key === 'pb_token') return Promise.resolve('test-token');
         if (key === 'pb_user_iden') return Promise.resolve('user123');
@@ -1261,10 +1311,14 @@ describe('Group MMS and Attachments', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
         recipients: [
-          { name: 'Test Contact', address: 'test@example.com', number: '+1234567890' }
+          {
+            name: 'Test Contact',
+            address: 'test@example.com',
+            number: '+1234567890',
+          },
         ],
       };
-      
+
       mockGetLocal.mockImplementation(key => {
         if (key === 'pb_token') return Promise.resolve('test-token');
         if (key === 'pb_user_iden') return Promise.resolve('user123');
@@ -1322,10 +1376,14 @@ describe('Group MMS and Attachments', () => {
         lastMessageTime: Date.now(),
         unreadCount: 0,
         recipients: [
-          { name: 'Test Contact', address: 'test@example.com', number: '+1234567890' }
+          {
+            name: 'Test Contact',
+            address: 'test@example.com',
+            number: '+1234567890',
+          },
         ],
       };
-      
+
       mockGetLocal.mockImplementation(key => {
         if (key === 'pb_token') return Promise.resolve('test-token');
         if (key === 'pb_user_iden') return Promise.resolve('user123');

@@ -349,7 +349,7 @@ export class PushComposer extends LitElement {
 
     // Strip whitespace from message
     const trimmedMessage = message.trim();
-    
+
     if (!trimmedMessage) return 'note';
 
     // Extract URLs from message using improved regex
@@ -379,7 +379,12 @@ export class PushComposer extends LitElement {
         ? channelsResponse.ownedChannels
         : [];
 
-      console.log('Loaded devices:', devices.length, 'channels:', channels.length);
+      console.log(
+        'Loaded devices:',
+        devices.length,
+        'channels:',
+        channels.length
+      );
 
       // Combine into send targets array
       this.sendTargets = [
@@ -438,7 +443,7 @@ export class PushComposer extends LitElement {
   private clearMessages() {
     this.errorMessage = '';
     this.successMessage = '';
-    
+
     // Clear any existing timeout
     if (this.messageTimeout) {
       clearTimeout(this.messageTimeout);
@@ -448,12 +453,12 @@ export class PushComposer extends LitElement {
 
   private setMessageWithTimeout(message: string, isError: boolean = false) {
     console.log('Setting message:', message, 'isError:', isError);
-    
+
     // Clear any existing timeout
     if (this.messageTimeout) {
       clearTimeout(this.messageTimeout);
     }
-    
+
     // Set the message
     if (isError) {
       this.errorMessage = message;
@@ -462,9 +467,14 @@ export class PushComposer extends LitElement {
       this.successMessage = message;
       this.errorMessage = '';
     }
-    
-    console.log('Message set - errorMessage:', this.errorMessage, 'successMessage:', this.successMessage);
-    
+
+    console.log(
+      'Message set - errorMessage:',
+      this.errorMessage,
+      'successMessage:',
+      this.successMessage
+    );
+
     // Set timeout to clear message after 10 seconds
     this.messageTimeout = window.setTimeout(() => {
       console.log('Clearing message after timeout');
@@ -475,7 +485,10 @@ export class PushComposer extends LitElement {
   private validateForm(): boolean {
     // Ensure there's some content (title, message, or file)
     if (!this.pushTitle.trim() && !this.body.trim() && !this.selectedFile) {
-      this.setMessageWithTimeout('Please provide a title, message, or file', true);
+      this.setMessageWithTimeout(
+        'Please provide a title, message, or file',
+        true
+      );
       return false;
     }
 
@@ -561,7 +574,10 @@ export class PushComposer extends LitElement {
             // Include push metadata for file pushes
             title: this.pushTitle.trim() || undefined,
             body: this.body.trim() || undefined,
-            channel_tag: selectedTarget?.type === 'channel' ? selectedTarget.id : undefined,
+            channel_tag:
+              selectedTarget?.type === 'channel'
+                ? selectedTarget.id
+                : undefined,
           },
         });
 
@@ -569,7 +585,10 @@ export class PushComposer extends LitElement {
           this.setMessageWithTimeout('File sent successfully!');
           this.resetForm();
         } else {
-          this.setMessageWithTimeout(uploadResponse.error || 'Failed to send file', true);
+          this.setMessageWithTimeout(
+            uploadResponse.error || 'Failed to send file',
+            true
+          );
         }
         this.isSending = false;
         return;
@@ -585,11 +604,17 @@ export class PushComposer extends LitElement {
         this.setMessageWithTimeout('Push sent successfully!');
         this.resetForm();
       } else {
-        this.setMessageWithTimeout(response.error || 'Failed to send push', true);
+        this.setMessageWithTimeout(
+          response.error || 'Failed to send push',
+          true
+        );
       }
     } catch (error) {
       console.error('Failed to send push:', error);
-      this.setMessageWithTimeout('Failed to send push. Please try again.', true);
+      this.setMessageWithTimeout(
+        'Failed to send push. Please try again.',
+        true
+      );
     } finally {
       this.isSending = false;
     }
@@ -600,9 +625,11 @@ export class PushComposer extends LitElement {
     this.body = '';
     this.selectedFile = null;
     // Don't clear messages here - let them auto-dismiss after 10 seconds
-    
+
     // Clear the file input element
-    const fileInput = this.shadowRoot?.querySelector('#file-input') as HTMLInputElement;
+    const fileInput = this.shadowRoot?.querySelector(
+      '#file-input'
+    ) as HTMLInputElement;
     if (fileInput) {
       fileInput.value = '';
     }
@@ -616,8 +643,13 @@ export class PushComposer extends LitElement {
   }
 
   render() {
-    console.log('Rendering - errorMessage:', this.errorMessage, 'successMessage:', this.successMessage);
-    
+    console.log(
+      'Rendering - errorMessage:',
+      this.errorMessage,
+      'successMessage:',
+      this.successMessage
+    );
+
     return html`
       <div class="composer-container" @keydown=${this.handleKeyDown}>
         ${this.errorMessage
@@ -651,17 +683,12 @@ export class PushComposer extends LitElement {
         <!-- File Input (always visible) -->
         <div class="form-group">
           <label for="file-input">File (optional):</label>
-          <input
-            id="file-input"
-            type="file"
-            @change=${this.handleFileSelect}
-          />
+          <input id="file-input" type="file" @change=${this.handleFileSelect} />
           ${this.selectedFile
             ? html`
                 <small class="form-text">
                   Selected: ${this.selectedFile.name}
-                  (${(this.selectedFile.size / 1024 / 1024).toFixed(2)}
-                  MB)
+                  (${(this.selectedFile.size / 1024 / 1024).toFixed(2)} MB)
                 </small>
               `
             : ''}

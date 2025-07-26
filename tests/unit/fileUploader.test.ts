@@ -144,7 +144,11 @@ describe('fileUploader', () => {
         }, 0);
       });
 
-      const result = await uploadFile(mockUploadInfo, mockFile, progressCallback);
+      const result = await uploadFile(
+        mockUploadInfo,
+        mockFile,
+        progressCallback
+      );
 
       expect(result.success).toBe(true);
       expect(mockFetch).toHaveBeenCalledWith(mockUploadInfo.uploadUrl, {
@@ -160,14 +164,14 @@ describe('fileUploader', () => {
 
     it('should handle upload failure with 413 status', async () => {
       const mockFile = createMockFile('test content', 'test.txt', 'text/plain');
-      
+
       // Mock FileReader to resolve immediately
       mockFileReader.readAsArrayBuffer.mockImplementation(() => {
         setTimeout(() => {
           mockFileReader.simulateLoad(new ArrayBuffer(12));
         }, 0);
       });
-      
+
       // Mock fetch failure
       (mockFetch as jest.Mock).mockResolvedValue({
         ok: false,
@@ -187,14 +191,14 @@ describe('fileUploader', () => {
 
     it('should handle upload failure with 400 status', async () => {
       const mockFile = createMockFile('test content', 'test.txt', 'text/plain');
-      
+
       // Mock FileReader to resolve immediately
       mockFileReader.readAsArrayBuffer.mockImplementation(() => {
         setTimeout(() => {
           mockFileReader.simulateLoad(new ArrayBuffer(12));
         }, 0);
       });
-      
+
       // Mock fetch failure
       (mockFetch as jest.Mock).mockResolvedValue({
         ok: false,
@@ -214,14 +218,14 @@ describe('fileUploader', () => {
 
     it('should handle network error', async () => {
       const mockFile = createMockFile('test content', 'test.txt', 'text/plain');
-      
+
       // Mock FileReader to resolve immediately
       mockFileReader.readAsArrayBuffer.mockImplementation(() => {
         setTimeout(() => {
           mockFileReader.simulateLoad(new ArrayBuffer(12));
         }, 0);
       });
-      
+
       // Mock fetch network error
       (mockFetch as jest.Mock).mockRejectedValue(new TypeError('fetch failed'));
 
@@ -237,7 +241,7 @@ describe('fileUploader', () => {
 
     it('should handle file hash generation error gracefully', async () => {
       const mockFile = createMockFile('test content', 'test.txt', 'text/plain');
-      
+
       // Mock FileReader error
       mockFileReader.readAsArrayBuffer.mockImplementation(() => {
         setTimeout(() => {
@@ -253,7 +257,7 @@ describe('fileUploader', () => {
 
     it('should store pending upload information', async () => {
       const mockFile = createMockFile('test content', 'test.txt', 'text/plain');
-      
+
       // Mock FileReader to resolve immediately
       mockFileReader.readAsArrayBuffer.mockImplementation(() => {
         setTimeout(() => {
@@ -281,7 +285,7 @@ describe('fileUploader', () => {
 
     it('should remove pending upload on successful completion', async () => {
       const mockFile = createMockFile('test content', 'test.txt', 'text/plain');
-      
+
       // Mock FileReader to resolve immediately
       mockFileReader.readAsArrayBuffer.mockImplementation(() => {
         setTimeout(() => {

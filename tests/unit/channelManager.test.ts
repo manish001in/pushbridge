@@ -134,7 +134,10 @@ describe('Channel Manager', () => {
       ];
 
       const mockResponse = new Response(
-        JSON.stringify({ subscriptions: mockSubscriptions, cursor: 'next-cursor' }),
+        JSON.stringify({
+          subscriptions: mockSubscriptions,
+          cursor: 'next-cursor',
+        }),
         {
           status: 200,
           statusText: 'OK',
@@ -163,7 +166,10 @@ describe('Channel Manager', () => {
       );
 
       expect(result).toEqual(mockSubscriptions);
-      expect(setLocal).toHaveBeenCalledWith('pb_subscriptions_cursor', 'next-cursor');
+      expect(setLocal).toHaveBeenCalledWith(
+        'pb_subscriptions_cursor',
+        'next-cursor'
+      );
       expect(setLocal).toHaveBeenCalledWith('pb_subscriptions_has_more', true);
     });
 

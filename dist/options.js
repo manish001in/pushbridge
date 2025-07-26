@@ -1,4 +1,165 @@
-console.log("Pushbridge options page loaded");class r{constructor(){this.settings={soundEnabled:!0,defaultDevice:"all",notificationsEnabled:!0,autoReconnect:!0},this.devices=[]}async init(){await this.loadSettings(),await this.loadDevices(),this.render(),this.setupEventListeners()}async loadSettings(){try{const e=await chrome.storage.local.get("pb_settings");e.pb_settings&&(this.settings={...this.settings,...e.pb_settings})}catch(e){console.error("Failed to load settings:",e)}}async loadDevices(){try{const e=await chrome.runtime.sendMessage({cmd:"getDevices"});e.ok&&(this.devices=e.devices||[])}catch(e){console.error("Failed to load devices:",e)}}async saveSettings(){try{await chrome.storage.local.set({pb_settings:this.settings}),this.showMessage("Settings saved successfully!","success")}catch(e){console.error("Failed to save settings:",e),this.showMessage("Failed to save settings","error")}}async testWebSocket(){try{const e=await chrome.runtime.sendMessage({cmd:"testWebSocket"});e.ok?this.showMessage(`WebSocket test successful! Last heartbeat: ${e.lastHeartbeat}`,"success"):this.showMessage(`WebSocket test failed: ${e.error}`,"error")}catch{this.showMessage("WebSocket test failed","error")}}async exportDebugLog(){try{const e=await chrome.runtime.sendMessage({cmd:"getDebugLog"});if(e.ok){const s=new Blob([e.log],{type:"text/plain"}),t=URL.createObjectURL(s),i=document.createElement("a");i.href=t,i.download=`pushbridge-debug-${new Date().toISOString().split("T")[0]}.log`,i.click(),URL.revokeObjectURL(t),this.showMessage("Debug log exported successfully!","success")}else this.showMessage("Failed to export debug log","error")}catch{this.showMessage("Failed to export debug log","error")}}showMessage(e,s){const t=document.getElementById("message");t&&(t.textContent=e,t.className=`message ${s}`,t.style.display="block",setTimeout(()=>{t.style.display="none"},3e3))}setupEventListeners(){const e=document.getElementById("sound-toggle");e&&(e.checked=this.settings.soundEnabled,e.addEventListener("change",n=>{this.settings.soundEnabled=n.target.checked,this.saveSettings()}));const s=document.getElementById("notifications-toggle");s&&(s.checked=this.settings.notificationsEnabled,s.addEventListener("change",n=>{this.settings.notificationsEnabled=n.target.checked,this.saveSettings()}));const t=document.getElementById("auto-reconnect-toggle");t&&(t.checked=this.settings.autoReconnect,t.addEventListener("change",n=>{this.settings.autoReconnect=n.target.checked,this.saveSettings()}));const i=document.getElementById("default-device");i&&(i.value=this.settings.defaultDevice,i.addEventListener("change",n=>{this.settings.defaultDevice=n.target.value,this.saveSettings()}));const o=document.getElementById("test-websocket");o&&o.addEventListener("click",()=>this.testWebSocket());const a=document.getElementById("export-log");a&&a.addEventListener("click",()=>this.exportDebugLog());const c=document.getElementById("reset-settings");c&&c.addEventListener("click",()=>this.resetSettings());const l=document.getElementById("reset-all-data");l&&l.addEventListener("click",()=>this.resetAllData())}async resetSettings(){confirm("Are you sure you want to reset all settings to defaults?")&&(this.settings={soundEnabled:!0,defaultDevice:"all",notificationsEnabled:!0,autoReconnect:!0},await this.saveSettings(),this.render(),this.setupEventListeners())}async resetAllData(){if(confirm("Are you sure you want to reset ALL data? This will clear all cached data, cursors, and settings. You will need to re-authenticate."))try{await chrome.runtime.sendMessage({cmd:"clearAllData"}),this.showMessage("All data cleared successfully. Please refresh the page.","success"),this.settings={soundEnabled:!0,defaultDevice:"all",notificationsEnabled:!0,autoReconnect:!0},await this.saveSettings(),this.render(),this.setupEventListeners()}catch(e){console.error("Failed to reset all data:",e),this.showMessage("Failed to reset all data. Please try again.","error")}}render(){const e=document.querySelector(".container");e&&(e.innerHTML=`
+console.log('Pushbridge options page loaded');
+class r {
+  constructor() {
+    ((this.settings = {
+      soundEnabled: !0,
+      defaultDevice: 'all',
+      notificationsEnabled: !0,
+      autoReconnect: !0,
+    }),
+      (this.devices = []));
+  }
+  async init() {
+    (await this.loadSettings(),
+      await this.loadDevices(),
+      this.render(),
+      this.setupEventListeners());
+  }
+  async loadSettings() {
+    try {
+      const e = await chrome.storage.local.get('pb_settings');
+      e.pb_settings && (this.settings = { ...this.settings, ...e.pb_settings });
+    } catch (e) {
+      console.error('Failed to load settings:', e);
+    }
+  }
+  async loadDevices() {
+    try {
+      const e = await chrome.runtime.sendMessage({ cmd: 'getDevices' });
+      e.ok && (this.devices = e.devices || []);
+    } catch (e) {
+      console.error('Failed to load devices:', e);
+    }
+  }
+  async saveSettings() {
+    try {
+      (await chrome.storage.local.set({ pb_settings: this.settings }),
+        this.showMessage('Settings saved successfully!', 'success'));
+    } catch (e) {
+      (console.error('Failed to save settings:', e),
+        this.showMessage('Failed to save settings', 'error'));
+    }
+  }
+  async testWebSocket() {
+    try {
+      const e = await chrome.runtime.sendMessage({ cmd: 'testWebSocket' });
+      e.ok
+        ? this.showMessage(
+            `WebSocket test successful! Last heartbeat: ${e.lastHeartbeat}`,
+            'success'
+          )
+        : this.showMessage(`WebSocket test failed: ${e.error}`, 'error');
+    } catch {
+      this.showMessage('WebSocket test failed', 'error');
+    }
+  }
+  async exportDebugLog() {
+    try {
+      const e = await chrome.runtime.sendMessage({ cmd: 'getDebugLog' });
+      if (e.ok) {
+        const s = new Blob([e.log], { type: 'text/plain' }),
+          t = URL.createObjectURL(s),
+          i = document.createElement('a');
+        ((i.href = t),
+          (i.download = `pushbridge-debug-${new Date().toISOString().split('T')[0]}.log`),
+          i.click(),
+          URL.revokeObjectURL(t),
+          this.showMessage('Debug log exported successfully!', 'success'));
+      } else this.showMessage('Failed to export debug log', 'error');
+    } catch {
+      this.showMessage('Failed to export debug log', 'error');
+    }
+  }
+  showMessage(e, s) {
+    const t = document.getElementById('message');
+    t &&
+      ((t.textContent = e),
+      (t.className = `message ${s}`),
+      (t.style.display = 'block'),
+      setTimeout(() => {
+        t.style.display = 'none';
+      }, 3e3));
+  }
+  setupEventListeners() {
+    const e = document.getElementById('sound-toggle');
+    e &&
+      ((e.checked = this.settings.soundEnabled),
+      e.addEventListener('change', n => {
+        ((this.settings.soundEnabled = n.target.checked), this.saveSettings());
+      }));
+    const s = document.getElementById('notifications-toggle');
+    s &&
+      ((s.checked = this.settings.notificationsEnabled),
+      s.addEventListener('change', n => {
+        ((this.settings.notificationsEnabled = n.target.checked),
+          this.saveSettings());
+      }));
+    const t = document.getElementById('auto-reconnect-toggle');
+    t &&
+      ((t.checked = this.settings.autoReconnect),
+      t.addEventListener('change', n => {
+        ((this.settings.autoReconnect = n.target.checked), this.saveSettings());
+      }));
+    const i = document.getElementById('default-device');
+    i &&
+      ((i.value = this.settings.defaultDevice),
+      i.addEventListener('change', n => {
+        ((this.settings.defaultDevice = n.target.value), this.saveSettings());
+      }));
+    const o = document.getElementById('test-websocket');
+    o && o.addEventListener('click', () => this.testWebSocket());
+    const a = document.getElementById('export-log');
+    a && a.addEventListener('click', () => this.exportDebugLog());
+    const c = document.getElementById('reset-settings');
+    c && c.addEventListener('click', () => this.resetSettings());
+    const l = document.getElementById('reset-all-data');
+    l && l.addEventListener('click', () => this.resetAllData());
+  }
+  async resetSettings() {
+    confirm('Are you sure you want to reset all settings to defaults?') &&
+      ((this.settings = {
+        soundEnabled: !0,
+        defaultDevice: 'all',
+        notificationsEnabled: !0,
+        autoReconnect: !0,
+      }),
+      await this.saveSettings(),
+      this.render(),
+      this.setupEventListeners());
+  }
+  async resetAllData() {
+    if (
+      confirm(
+        'Are you sure you want to reset ALL data? This will clear all cached data, cursors, and settings. You will need to re-authenticate.'
+      )
+    )
+      try {
+        (await chrome.runtime.sendMessage({ cmd: 'clearAllData' }),
+          this.showMessage(
+            'All data cleared successfully. Please refresh the page.',
+            'success'
+          ),
+          (this.settings = {
+            soundEnabled: !0,
+            defaultDevice: 'all',
+            notificationsEnabled: !0,
+            autoReconnect: !0,
+          }),
+          await this.saveSettings(),
+          this.render(),
+          this.setupEventListeners());
+      } catch (e) {
+        (console.error('Failed to reset all data:', e),
+          this.showMessage(
+            'Failed to reset all data. Please try again.',
+            'error'
+          ));
+      }
+  }
+  render() {
+    const e = document.querySelector('.container');
+    e &&
+      (e.innerHTML = `
       <div class="options-header">
         <h1>Pushbridge Settings</h1>
         <p class="subtitle">Configure your Pushbridge extension preferences</p>
@@ -41,7 +202,7 @@ console.log("Pushbridge options page loaded");class r{constructor(){this.setting
           <div class="setting-control">
             <select id="default-device" class="select">
               <option value="all">All devices</option>
-              ${this.devices.map(s=>`<option value="${s.iden}">${s.nickname} (${s.type})</option>`).join("")}
+              ${this.devices.map(s => `<option value="${s.iden}">${s.nickname} (${s.type})</option>`).join('')}
             </select>
           </div>
         </div>
@@ -113,4 +274,9 @@ console.log("Pushbridge options page loaded");class r{constructor(){this.setting
         <p>Pushbridge v1.0.0 · <a href="https://github.com/manish001in/pushbridge" target="_blank">GitHub</a> · <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a></p>
         <p class="disclaimer">This is an unofficial extension and is not affiliated with Pushbullet Inc.</p>
       </div>
-    `)}}document.addEventListener("DOMContentLoaded",()=>{console.log("Options DOM ready"),new r().init()});
+    `);
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  (console.log('Options DOM ready'), new r().init());
+});

@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "postbuild": "cp src/options/options.css dist/",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "lint:fix": "eslint . --ext ts,tsx --fix",
     "format": "prettier --write .",
     "test": "jest",

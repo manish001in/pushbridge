@@ -119,7 +119,7 @@ export class ContextManager {
 
     this.isRefreshing = true;
     this.refreshPromise = this.performRefresh(trigger);
-    
+
     try {
       await this.refreshPromise;
     } finally {
@@ -157,7 +157,7 @@ export class ContextManager {
 
       // Populate owned channels map
       if (channels.channels && Array.isArray(channels.channels)) {
-        channels.channels.forEach((channel) => {
+        channels.channels.forEach(channel => {
           // Skip channels with missing iden
           if (channel && channel.iden) {
             ownedChannelsMap.set(channel.iden, channel);
@@ -168,20 +168,26 @@ export class ContextManager {
       }
 
       // Populate subscriptions map - store by channel ID for easy lookup
-      if (subscriptions.subscriptions && Array.isArray(subscriptions.subscriptions)) {
-        subscriptions.subscriptions.forEach((subscription) => {
+      if (
+        subscriptions.subscriptions &&
+        Array.isArray(subscriptions.subscriptions)
+      ) {
+        subscriptions.subscriptions.forEach(subscription => {
           // Skip subscriptions with missing channel data
           if (subscription.channel && subscription.channel.iden) {
             subscriptionsMap.set(subscription.channel.iden, subscription);
           } else {
-            console.warn('Skipping subscription with missing channel data:', subscription);
+            console.warn(
+              'Skipping subscription with missing channel data:',
+              subscription
+            );
           }
         });
       }
 
       // Populate devices map
       if (devices.devices && Array.isArray(devices.devices)) {
-        devices.devices.forEach((device) => {
+        devices.devices.forEach(device => {
           // Skip devices with missing iden
           if (device && device.iden) {
             devicesMap.set(device.iden, device);
@@ -213,7 +219,7 @@ export class ContextManager {
       });
     } catch (error) {
       console.error('Failed to refresh context:', error);
-      
+
       // Mark context as invalid
       if (this.context) {
         this.context.is_valid = false;
@@ -232,7 +238,9 @@ export class ContextManager {
   /**
    * Fetch user's channel subscriptions
    */
-  private async fetchSubscriptions(token: string): Promise<SubscriptionsApiResponse> {
+  private async fetchSubscriptions(
+    token: string
+  ): Promise<SubscriptionsApiResponse> {
     const response = await httpClient.fetch(
       'https://api.pushbullet.com/v2/subscriptions',
       {
@@ -258,18 +266,20 @@ export class ContextManager {
     }
 
     const data = await response.json();
-    
+
     // Validate response structure
     if (!data || typeof data !== 'object') {
       throw new Error('Invalid response format from subscriptions API');
     }
-    
+
     // Ensure subscriptions array exists
     if (!data.subscriptions || !Array.isArray(data.subscriptions)) {
-      console.warn('Subscriptions API returned unexpected format, using empty array');
+      console.warn(
+        'Subscriptions API returned unexpected format, using empty array'
+      );
       data.subscriptions = [];
     }
-    
+
     return data;
   }
 
@@ -302,18 +312,20 @@ export class ContextManager {
     }
 
     const data = await response.json();
-    
+
     // Validate response structure
     if (!data || typeof data !== 'object') {
       throw new Error('Invalid response format from channels API');
     }
-    
+
     // Ensure channels array exists
     if (!data.channels || !Array.isArray(data.channels)) {
-      console.warn('Channels API returned unexpected format, using empty array');
+      console.warn(
+        'Channels API returned unexpected format, using empty array'
+      );
       data.channels = [];
     }
-    
+
     return data;
   }
 
@@ -346,18 +358,18 @@ export class ContextManager {
     }
 
     const data = await response.json();
-    
+
     // Validate response structure
     if (!data || typeof data !== 'object') {
       throw new Error('Invalid response format from devices API');
     }
-    
+
     // Ensure devices array exists
     if (!data.devices || !Array.isArray(data.devices)) {
       console.warn('Devices API returned unexpected format, using empty array');
       data.devices = [];
     }
-    
+
     return data;
   }
 
@@ -373,7 +385,7 @@ export class ContextManager {
         subscriptions: Array.from(this.context.subscriptions.entries()),
         devices: Array.from(this.context.devices.entries()),
       };
-      
+
       await setLocal(CONTEXT_STORAGE_KEY, contextForStorage);
     }
   }
@@ -402,17 +414,21 @@ export class ContextManager {
   /**
    * Save refresh trigger for debugging
    */
-  private async saveRefreshTrigger(trigger: ContextRefreshTrigger): Promise<void> {
+  private async saveRefreshTrigger(
+    trigger: ContextRefreshTrigger
+  ): Promise<void> {
     try {
-      const storedTriggers = await getLocal<ContextRefreshTrigger[]>(CONTEXT_REFRESH_TRIGGERS_KEY);
+      const storedTriggers = await getLocal<ContextRefreshTrigger[]>(
+        CONTEXT_REFRESH_TRIGGERS_KEY
+      );
       const triggers = Array.isArray(storedTriggers) ? storedTriggers : [];
       triggers.push(trigger);
-      
+
       // Keep only last 10 triggers
       if (triggers.length > 10) {
         triggers.splice(0, triggers.length - 10);
       }
-      
+
       await setLocal(CONTEXT_REFRESH_TRIGGERS_KEY, triggers);
     } catch (error) {
       console.error('Failed to save refresh trigger:', error);
@@ -423,7 +439,10 @@ export class ContextManager {
    * Get refresh triggers for debugging
    */
   async getRefreshTriggers(): Promise<ContextRefreshTrigger[]> {
-    return await getLocal<ContextRefreshTrigger[]>(CONTEXT_REFRESH_TRIGGERS_KEY) || [];
+    return (
+      (await getLocal<ContextRefreshTrigger[]>(CONTEXT_REFRESH_TRIGGERS_KEY)) ||
+      []
+    );
   }
 
   /**
@@ -450,4 +469,4 @@ export class ContextManager {
 }
 
 // Export singleton instance
-export const contextManager = ContextManager.getInstance(); 
+export const contextManager = ContextManager.getInstance();

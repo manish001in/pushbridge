@@ -69,7 +69,9 @@ const CACHE_DURATION = CACHE_EXPIRY_HOURS * 60 * 60 * 1000; // 6 hours in millis
  * Calls GET /v2/subscriptions and caches the result
  * @param forceRefresh - Whether to force refresh (ignore stored cursor)
  */
-export async function fetchSubscriptions(forceRefresh = false): Promise<ChannelSubscription[]> {
+export async function fetchSubscriptions(
+  forceRefresh = false
+): Promise<ChannelSubscription[]> {
   try {
     const token = await getLocal<string>('pb_token');
     if (!token) {
@@ -88,7 +90,7 @@ export async function fetchSubscriptions(forceRefresh = false): Promise<ChannelS
       params.append('cursor', cursor);
     }
 
-    const url = cursor 
+    const url = cursor
       ? `https://api.pushbullet.com/v2/subscriptions?${params}`
       : 'https://api.pushbullet.com/v2/subscriptions';
 
@@ -153,7 +155,9 @@ export async function fetchSubscriptions(forceRefresh = false): Promise<ChannelS
  * Calls GET /v2/channels and caches the result
  * @param forceRefresh - Whether to force refresh (ignore stored cursor)
  */
-async function fetchOwnedChannels(forceRefresh = false): Promise<OwnedChannel[]> {
+async function fetchOwnedChannels(
+  forceRefresh = false
+): Promise<OwnedChannel[]> {
   try {
     const token = await getLocal<string>('pb_token');
     if (!token) {
@@ -173,7 +177,7 @@ async function fetchOwnedChannels(forceRefresh = false): Promise<OwnedChannel[]>
       params.append('cursor', cursor);
     }
 
-    const url = cursor 
+    const url = cursor
       ? `https://api.pushbullet.com/v2/channels?${params}`
       : 'https://api.pushbullet.com/v2/channels?active_only=true';
 
@@ -467,7 +471,7 @@ export async function getSubscriptionPosts(limit: number = 50): Promise<any[]> {
 
     const [pushes, subscriptions] = await Promise.all([
       getPushHistory(limit * 2), // Fetch more to account for filtering
-      getSubscriptions()
+      getSubscriptions(),
     ]);
 
     // Filter out subscriptions with missing channel data and create set of channel idens
@@ -476,10 +480,13 @@ export async function getSubscriptionPosts(limit: number = 50): Promise<any[]> {
         .filter(sub => sub.channel && sub.channel.iden) // Only include subscriptions with valid channel data
         .map(sub => sub.channel.iden)
     );
-    
+
     // Filter pushes by channel_iden to only show pushes from subscribed channels
     return pushes.pushes
-      .filter(push => push.channel_iden && subscribedChannelIdens.has(push.channel_iden))
+      .filter(
+        push =>
+          push.channel_iden && subscribedChannelIdens.has(push.channel_iden)
+      )
       .sort((a, b) => b.created - a.created) // Latest first
       .slice(0, limit);
   } catch (error) {

@@ -64,7 +64,7 @@ describe('Device Manager', () => {
   test('getDevices should fetch devices from API', async () => {
     // Mock the cache check first (no cache)
     (getLocal as jest.Mock).mockResolvedValueOnce(undefined); // pb_device_cache (no cache)
-    
+
     // Mock the API call
     (getLocal as jest.Mock)
       .mockResolvedValueOnce('test-token') // token for fetchDevicesFromAPI
@@ -102,7 +102,7 @@ describe('Device Manager', () => {
   test('getDevices should use cursor when available', async () => {
     // Mock the cache check first (no cache)
     (getLocal as jest.Mock).mockResolvedValueOnce(undefined); // pb_device_cache (no cache)
-    
+
     // Mock the API call
     (getLocal as jest.Mock)
       .mockResolvedValueOnce('test-token') // token for fetchDevicesFromAPI

@@ -50,7 +50,12 @@ import { initializeQueue, enqueue, getQueueStatus, clearQueue } from './queue';
 import { initializeQuotaMonitor } from './quotaMonitor';
 import { rateLimitManager } from './rateLimitManager';
 // SMS imports moved to simple system
-import { syncAllSmsData, getCachedSmsData, getThreadById, reloadSmsThread } from './simpleSmsSync';
+import {
+  syncAllSmsData,
+  getCachedSmsData,
+  getThreadById,
+  reloadSmsThread,
+} from './simpleSmsSync';
 import { sendSms } from './smsBridge';
 import {
   initializeWebSocket,
@@ -90,10 +95,10 @@ async function clearAllCursors(): Promise<void> {
 
     // Clear SMS thread cursors (they use dynamic keys)
     const allStorage = await chrome.storage.local.get(null);
-    const smsCursorKeys = Object.keys(allStorage).filter(key => 
+    const smsCursorKeys = Object.keys(allStorage).filter(key =>
       key.startsWith('pb_sms_thread_cursor_')
     );
-    
+
     for (const key of smsCursorKeys) {
       await chrome.storage.local.remove(key);
     }
@@ -110,23 +115,32 @@ async function clearAllCursors(): Promise<void> {
 async function initializeSmsSync(): Promise<void> {
   try {
     console.log('[Background] Initializing SMS sync...');
-    
+
     const defaultDevice = await getDefaultSmsDevice();
     if (defaultDevice) {
-      console.log(`[Background] Default SMS device: ${defaultDevice.nickname} (${defaultDevice.iden})`);
-      
+      console.log(
+        `[Background] Default SMS device: ${defaultDevice.nickname} (${defaultDevice.iden})`
+      );
+
       // Initial sync
       // SMS sync now handled by simple system via triggerSmsSync()
-      console.log(`[Background] SMS-capable device found: ${defaultDevice.nickname}`);
-      
+      console.log(
+        `[Background] SMS-capable device found: ${defaultDevice.nickname}`
+      );
+
       // Periodic SMS sync every 6 hours using simple system
-      setInterval(async () => {
-        await triggerSmsSync('periodic');
-      }, 6 * 60 * 60 * 1000); // 6 hours
-      
+      setInterval(
+        async () => {
+          await triggerSmsSync('periodic');
+        },
+        6 * 60 * 60 * 1000
+      ); // 6 hours
+
       console.log('[Background] SMS sync initialized with 6-hour interval');
     } else {
-      console.log('[Background] No SMS-capable device found, skipping SMS sync');
+      console.log(
+        '[Background] No SMS-capable device found, skipping SMS sync'
+      );
     }
   } catch (error) {
     console.error('[Background] Failed to initialize SMS sync:', error);
@@ -165,16 +179,24 @@ chrome.runtime.onInstalled.addListener(async () => {
     }, 10000); // Every 10 seconds
 
     // Add periodic state validation for unified notification tracker
-    setInterval(async () => {
-      try {
-        const isValid = await unifiedNotificationTracker.validateState();
-        if (!isValid) {
-          console.warn('[Background] Unified notification tracker state validation failed');
+    setInterval(
+      async () => {
+        try {
+          const isValid = await unifiedNotificationTracker.validateState();
+          if (!isValid) {
+            console.warn(
+              '[Background] Unified notification tracker state validation failed'
+            );
+          }
+        } catch (error) {
+          console.error(
+            '[Background] Failed to validate unified notification tracker state:',
+            error
+          );
         }
-      } catch (error) {
-        console.error('[Background] Failed to validate unified notification tracker state:', error);
-      }
-    }, 5 * 60 * 1000); // Every 5 minutes
+      },
+      5 * 60 * 1000
+    ); // Every 5 minutes
 
     // Initialize keep-alive alarm
     await initializeKeepAlive();
@@ -430,11 +452,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'GET_SMS_THREAD':
     case 'GET_SMS_THREAD_FROM_API':
     case 'LOAD_FULL_SMS_THREAD':
-      handleGetSmsThreadSimple(message.conversationId, message.deviceIden, sendResponse);
+      handleGetSmsThreadSimple(
+        message.conversationId,
+        message.deviceIden,
+        sendResponse
+      );
       break;
     case 'GET_SMS_THREAD_PAGED':
       // Paging removed in simple system - returns full thread
-      handleGetSmsThreadSimple(message.conversationId, message.deviceIden, sendResponse);
+      handleGetSmsThreadSimple(
+        message.conversationId,
+        message.deviceIden,
+        sendResponse
+      );
       break;
     case 'SEND_SMS':
       handleSendSms(
@@ -502,7 +532,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case 'DEBUG_SMS':
     case 'DEBUG_STORAGE':
       // Debug functions removed in simplified system
-      sendResponse({ success: false, error: 'Debug functions removed in simple system' });
+      sendResponse({
+        success: false,
+        error: 'Debug functions removed in simple system',
+      });
       break;
     default:
       sendResponse({ status: 'unknown_command' });
@@ -643,7 +676,7 @@ async function handleCreatePush(
     }
 
     const push = await createPush(payload);
-    
+
     // Broadcast to any listening popups that a new push was created
     try {
       chrome.runtime.sendMessage({
@@ -654,7 +687,7 @@ async function handleCreatePush(
     } catch {
       // Ignore if no popup is listening
     }
-    
+
     sendResponse({ ok: true, push });
   } catch (error) {
     console.error('Failed to create push:', error);
@@ -714,16 +747,28 @@ async function handleGetPushHistory(
  * Handle enhanced push history requests from popup
  */
 async function handleGetEnhancedPushHistory(
-  trigger: { type: 'popup_open' | 'unknown_source' | 'periodic' | 'manual'; timestamp: number; reason?: string },
+  trigger: {
+    type: 'popup_open' | 'unknown_source' | 'periodic' | 'manual';
+    timestamp: number;
+    reason?: string;
+  },
   limit: number,
   modifiedAfter: number,
   cursor: string,
   sendResponse: (response: any) => void
 ) {
   try {
-    console.log('🔄 [Background] Getting enhanced push history with trigger:', trigger.type);
-    const history = await getEnhancedPushHistory(trigger, limit, modifiedAfter, cursor);
-    
+    console.log(
+      '🔄 [Background] Getting enhanced push history with trigger:',
+      trigger.type
+    );
+    const history = await getEnhancedPushHistory(
+      trigger,
+      limit,
+      modifiedAfter,
+      cursor
+    );
+
     console.log('📋 [handleGetEnhancedPushHistory] Response:', {
       ok: true,
       history: history.pushes.length,
@@ -731,75 +776,101 @@ async function handleGetEnhancedPushHistory(
       cursor,
       trigger: trigger.type,
     });
-    
+
     // Update last modified timestamp for incremental sync
     if (history.pushes.length > 0) {
       const highestModified = Math.max(...history.pushes.map(p => p.modified));
       await setLocal('pb_last_modified', highestModified);
-      
+
       // Debug: Log push details to understand structure
-      console.log('🔍 [Background] Enhanced push details:', history.pushes.map(p => ({
-        iden: p.iden,
-        type: p.type,
-        title: p.title,
-        receiver_iden: p.receiver_iden,
-        target_device_iden: p.target_device_iden,
-        dismissed: p.dismissed,
-        created: p.created,
-        modified: p.modified,
-        channel_iden: p.channel_iden
-      })));
-      
+      console.log(
+        '🔍 [Background] Enhanced push details:',
+        history.pushes.map(p => ({
+          iden: p.iden,
+          type: p.type,
+          title: p.title,
+          receiver_iden: p.receiver_iden,
+          target_device_iden: p.target_device_iden,
+          dismissed: p.dismissed,
+          created: p.created,
+          modified: p.modified,
+          channel_iden: p.channel_iden,
+        }))
+      );
+
       // Only process new pushes for notifications if this is from a WebSocket tickle
       // Don't process pushes when popup opens to avoid double-counting
       if (trigger.type === 'unknown_source') {
-        console.log('🔔 [Background] Processing pushes for notifications (WebSocket tickle)');
-        
+        console.log(
+          '🔔 [Background] Processing pushes for notifications (WebSocket tickle)'
+        );
+
         let newPushCount = 0;
-        
+
         for (const push of history.pushes) {
           // Check if this is a new push that should trigger notification
-          const isNewPush = !push.dismissed && (
-            push.receiver_iden || 
-            push.target_device_iden || 
-            push.type === 'mirror' ||
-            push.type === 'file' ||
-            push.channel_iden // Channel pushes
-          );
-          
+          const isNewPush =
+            !push.dismissed &&
+            (push.receiver_iden ||
+              push.target_device_iden ||
+              push.type === 'mirror' ||
+              push.type === 'file' ||
+              push.channel_iden); // Channel pushes
+
           if (isNewPush) {
             // Use unified tracker to determine if we should show this notification
-            const shouldShow = await unifiedNotificationTracker.shouldShowNotification({
-              id: push.iden,
-              type: 'push',
-              created: push.created,
-              metadata: { pushIden: push.iden }
-            });
-            
+            const shouldShow =
+              await unifiedNotificationTracker.shouldShowNotification({
+                id: push.iden,
+                type: 'push',
+                created: push.created,
+                metadata: { pushIden: push.iden },
+              });
+
             if (shouldShow) {
-              console.log(`🔔 [Background] Processing new push: ${push.iden} (type: ${push.type})`);
-              
+              console.log(
+                `🔔 [Background] Processing new push: ${push.iden} (type: ${push.type})`
+              );
+
               // Show Chrome notification (only if it passes device check)
               const notificationShown = await showPushNotification(push);
-              
+
               // Only update badge if notification was actually shown or it's a valid push for this device
-              if (notificationShown || push.type === 'file' || push.channel_iden) {
-                console.log('🔔 [Background] Updating badge for new push notification');
+              if (
+                notificationShown ||
+                push.type === 'file' ||
+                push.channel_iden
+              ) {
+                console.log(
+                  '🔔 [Background] Updating badge for new push notification'
+                );
                 await notificationBadge.addPushNotifications(1);
-                await unifiedNotificationTracker.markAsProcessed('push', push.iden, new Date(push.created).getTime());
+                await unifiedNotificationTracker.markAsProcessed(
+                  'push',
+                  push.iden,
+                  new Date(push.created).getTime()
+                );
                 newPushCount++;
               }
             } else {
-              console.log(`⏭️ [Background] Skipping already processed push: ${push.iden}`);
+              console.log(
+                `⏭️ [Background] Skipping already processed push: ${push.iden}`
+              );
             }
           } else {
-            console.log(`⏭️ [Background] Skipping push: ${push.iden} (dismissed: ${push.dismissed})`);
+            console.log(
+              `⏭️ [Background] Skipping push: ${push.iden} (dismissed: ${push.dismissed})`
+            );
           }
         }
-        
-        console.log(`📊 [Background] New push processing summary: ${newPushCount} new notifications`);
+
+        console.log(
+          `📊 [Background] New push processing summary: ${newPushCount} new notifications`
+        );
       } else {
-        console.log(`⏭️ [Background] Skipping notification processing for trigger: ${trigger.type} (popup open)`);
+        console.log(
+          `⏭️ [Background] Skipping notification processing for trigger: ${trigger.type} (popup open)`
+        );
       }
     } else {
       console.log('🔄 [Background] No new pushes found in enhanced history');
@@ -821,11 +892,11 @@ async function handleDismissPush(
 ) {
   try {
     await dismissPush(pushIden);
-    
+
     // Update notification badge when push is dismissed
     console.log('🔔 [Background] Push dismissed, updating badge');
     await notificationBadge.addPushNotifications(-1);
-    
+
     sendResponse({ ok: true });
   } catch (error) {
     console.error('Failed to dismiss push:', error);
@@ -842,11 +913,11 @@ async function handleDeletePush(
 ) {
   try {
     await deletePush(pushIden);
-    
+
     // Update notification badge when push is deleted
     console.log('🔔 [Background] Push deleted, updating badge');
     await notificationBadge.addPushNotifications(-1);
-    
+
     sendResponse({ ok: true });
   } catch (error) {
     console.error('Failed to delete push:', error);
@@ -861,29 +932,34 @@ async function handleSyncHistory(sendResponse: (response: any) => void) {
   try {
     console.log('🔄 [Background] Syncing push history');
     const lastModified = await getLocal<number>('pb_last_modified');
-    
+
     // Get stored cursor for incremental sync
     const stored = await chrome.storage.local.get('pb_recent_pushes_state');
     const storedCursor = stored.pb_recent_pushes_state?.cursor;
-    
+
     // Use cursor for incremental sync (load more pattern)
     const history = await getPushHistory(100, lastModified, storedCursor);
 
     if (history.pushes.length > 0) {
-      console.log(`🔄 [Background] Found ${history.pushes.length} pushes from API`);
-      
+      console.log(
+        `🔄 [Background] Found ${history.pushes.length} pushes from API`
+      );
+
       // Debug: Log push details to understand structure
-      console.log('🔍 [Background] Push details:', history.pushes.map(p => ({
-        iden: p.iden,
-        type: p.type,
-        title: p.title,
-        receiver_iden: p.receiver_iden,
-        target_device_iden: p.target_device_iden,
-        dismissed: p.dismissed,
-        created: p.created,
-        modified: p.modified
-      })));
-      
+      console.log(
+        '🔍 [Background] Push details:',
+        history.pushes.map(p => ({
+          iden: p.iden,
+          type: p.type,
+          title: p.title,
+          receiver_iden: p.receiver_iden,
+          target_device_iden: p.target_device_iden,
+          dismissed: p.dismissed,
+          created: p.created,
+          modified: p.modified,
+        }))
+      );
+
       // Update last modified timestamp
       const highestModified = Math.max(...history.pushes.map(p => p.modified));
       await setLocal('pb_last_modified', highestModified);
@@ -896,56 +972,75 @@ async function handleSyncHistory(sendResponse: (response: any) => void) {
             ...currentState,
             cursor: history.cursor,
             hasMore: !!history.cursor,
-          }
+          },
         });
       }
 
       // Show notifications for new pushes using unified tracker
       let processedCount = 0;
       let skippedCount = 0;
-      
+
       for (const push of history.pushes) {
         // Improved filtering logic
-        const shouldProcess = !push.dismissed && (
-          push.receiver_iden || 
-          push.target_device_iden || 
-          push.type === 'mirror' ||
-          push.type === 'file' ||
-          push.channel_iden // Channel pushes
-        );
-        
+        const shouldProcess =
+          !push.dismissed &&
+          (push.receiver_iden ||
+            push.target_device_iden ||
+            push.type === 'mirror' ||
+            push.type === 'file' ||
+            push.channel_iden); // Channel pushes
+
         if (shouldProcess) {
           // Use unified tracker to determine if we should show this notification
-          const shouldShow = await unifiedNotificationTracker.shouldShowNotification({
-            id: push.iden,
-            type: 'push',
-            created: push.created,
-            metadata: { pushIden: push.iden }
-          });
-          
+          const shouldShow =
+            await unifiedNotificationTracker.shouldShowNotification({
+              id: push.iden,
+              type: 'push',
+              created: push.created,
+              metadata: { pushIden: push.iden },
+            });
+
           if (shouldShow) {
-            console.log(`🔔 [Background] Processing push: ${push.iden} (type: ${push.type})`);
+            console.log(
+              `🔔 [Background] Processing push: ${push.iden} (type: ${push.type})`
+            );
             const notificationShown = await showPushNotification(push);
-            
+
             // Update badge if notification was shown or it's a valid push for this device
-            if (notificationShown || push.type === 'file' || push.channel_iden) {
-              console.log('🔔 [Background] Updating badge for new push notification');
+            if (
+              notificationShown ||
+              push.type === 'file' ||
+              push.channel_iden
+            ) {
+              console.log(
+                '🔔 [Background] Updating badge for new push notification'
+              );
               await notificationBadge.addPushNotifications(1);
-              await unifiedNotificationTracker.markAsProcessed('push', push.iden, new Date(push.created).getTime());
+              await unifiedNotificationTracker.markAsProcessed(
+                'push',
+                push.iden,
+                new Date(push.created).getTime()
+              );
             }
-            
+
             processedCount++;
           } else {
-            console.log(`⏭️ [Background] Skipping already processed push: ${push.iden}`);
+            console.log(
+              `⏭️ [Background] Skipping already processed push: ${push.iden}`
+            );
             skippedCount++;
           }
         } else {
-          console.log(`⏭️ [Background] Skipping push: ${push.iden} (dismissed: ${push.dismissed}, receiver_iden: ${push.receiver_iden}, target_device_iden: ${push.target_device_iden})`);
+          console.log(
+            `⏭️ [Background] Skipping push: ${push.iden} (dismissed: ${push.dismissed}, receiver_iden: ${push.receiver_iden}, target_device_iden: ${push.target_device_iden})`
+          );
           skippedCount++;
         }
       }
-      
-      console.log(`📊 [Background] Push processing summary: ${processedCount} processed, ${skippedCount} skipped`);
+
+      console.log(
+        `📊 [Background] Push processing summary: ${processedCount} processed, ${skippedCount} skipped`
+      );
     } else {
       console.log('🔄 [Background] No new pushes found');
     }
@@ -976,14 +1071,16 @@ async function showPushNotification(push: any): Promise<boolean> {
     console.log('🔔 [Background] Showing push notification:', {
       type: push.type,
       title: push.title,
-      channel_tag: push.channel_tag
+      channel_tag: push.channel_tag,
     });
 
     const chromeDeviceIden = await getLocal<string>('pb_device_iden');
 
     // Only show notifications for pushes received by our Chrome device
     if (push.receiver_iden !== chromeDeviceIden) {
-      console.log('🔔 [Background] Push not for this device, skipping notification');
+      console.log(
+        '🔔 [Background] Push not for this device, skipping notification'
+      );
       return false;
     }
 
@@ -1186,7 +1283,7 @@ async function addTransferRecord(transfer: TransferRecord): Promise<void> {
  * Handle file upload request from popup
  */
 async function handleUploadFile(
-  payload: { 
+  payload: {
     fileData: {
       name: string;
       type: string;
@@ -1290,7 +1387,7 @@ async function handleUploadFile(
  * Handle file upload for SMS/MMS (without creating a push notification)
  */
 async function handleUploadFileForSms(
-  payload: { 
+  payload: {
     fileData: {
       name: string;
       type: string;
@@ -1506,10 +1603,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
  * Handle getting SMS conversations - Simple version
  * Always returns cached data - real-time updates come via WebSocket sms_changed
  */
-async function handleGetSmsConversationsSimple(sendResponse: (response: any) => void) {
+async function handleGetSmsConversationsSimple(
+  sendResponse: (response: any) => void
+) {
   try {
-    console.log('📱 [Background] Getting SMS conversations (simple) - returning cached data');
-    
+    console.log(
+      '📱 [Background] Getting SMS conversations (simple) - returning cached data'
+    );
+
     // Get default SMS device
     const defaultDevice = await getDefaultSmsDevice();
     if (!defaultDevice) {
@@ -1522,17 +1623,18 @@ async function handleGetSmsConversationsSimple(sendResponse: (response: any) => 
     // - Periodic syncs (6h) keep data fresh
     // - Popup-open sync ensures recent data when user is active
     const smsData = await getCachedSmsData(defaultDevice.iden);
-    
-    sendResponse({ 
-      success: true, 
+
+    sendResponse({
+      success: true,
       conversations: smsData.threads,
-      lastSync: smsData.lastSync
+      lastSync: smsData.lastSync,
     });
   } catch (error) {
     console.error('[Background] Failed to get SMS conversations:', error);
-    sendResponse({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to get conversations' 
+    sendResponse({
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to get conversations',
     });
   }
 }
@@ -1541,13 +1643,15 @@ async function handleGetSmsConversationsSimple(sendResponse: (response: any) => 
  * Handle getting SMS thread - Simple version
  */
 async function handleGetSmsThreadSimple(
-  conversationId: string, 
-  deviceIden: string, 
+  conversationId: string,
+  deviceIden: string,
   sendResponse: (response: any) => void
 ) {
   try {
-    console.log(`📨 [Background] Getting SMS thread: ${conversationId} (simple)`);
-    
+    console.log(
+      `📨 [Background] Getting SMS thread: ${conversationId} (simple)`
+    );
+
     // Use provided device or get default
     let targetDevice = deviceIden;
     if (!targetDevice) {
@@ -1562,7 +1666,7 @@ async function handleGetSmsThreadSimple(
     // Get thread from cache (no need to sync - we sync regularly and on popup open)
     console.log('📨 [Background] Loading thread from cache (no sync needed)');
     const thread = await getThreadById(targetDevice, conversationId);
-    
+
     if (thread) {
       sendResponse({ success: true, thread });
     } else {
@@ -1570,9 +1674,9 @@ async function handleGetSmsThreadSimple(
     }
   } catch (error) {
     console.error('[Background] Failed to get SMS thread:', error);
-    sendResponse({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to get thread' 
+    sendResponse({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get thread',
     });
   }
 }
@@ -1583,7 +1687,7 @@ async function handleGetSmsThreadSimple(
 export async function triggerSmsSync(reason: string = 'manual'): Promise<void> {
   try {
     console.log(`🔄 [Background] Triggering SMS sync (${reason})`);
-    
+
     const defaultDevice = await getDefaultSmsDevice();
     if (!defaultDevice) {
       console.warn('⚠️ [Background] No SMS device for sync');
@@ -1627,15 +1731,15 @@ async function handleGetDefaultSmsDevice(
       console.log('[Background] Default SMS device found:', {
         iden: device.iden,
         nickname: device.nickname,
-        has_sms: device.has_sms
+        has_sms: device.has_sms,
       });
-      sendResponse({ 
-        success: true, 
+      sendResponse({
+        success: true,
         device: {
           iden: device.iden,
           nickname: device.nickname,
-          has_sms: device.has_sms
-        }
+          has_sms: device.has_sms,
+        },
       });
     } else {
       console.warn('[Background] No SMS-capable device found');
@@ -1699,10 +1803,16 @@ async function handleSyncSmsHistory(
 /**
  * Handle reload specific SMS thread request
  */
-async function handleReloadSmsThread(deviceIden: string, threadId: string, sendResponse: (response: any) => void) {
+async function handleReloadSmsThread(
+  deviceIden: string,
+  threadId: string,
+  sendResponse: (response: any) => void
+) {
   try {
-    console.log(`📱 [Background] Reloading SMS thread: ${threadId} for device: ${deviceIden}`);
-    
+    console.log(
+      `📱 [Background] Reloading SMS thread: ${threadId} for device: ${deviceIden}`
+    );
+
     if (!deviceIden) {
       const defaultDevice = await getDefaultSmsDevice();
       if (!defaultDevice) {
@@ -1719,17 +1829,22 @@ async function handleReloadSmsThread(deviceIden: string, threadId: string, sendR
 
     // Reload the specific thread
     const updatedThread = await reloadSmsThread(deviceIden, threadId);
-    
+
     if (updatedThread) {
       sendResponse({ success: true, thread: updatedThread });
     } else {
-      sendResponse({ success: false, error: 'Failed to reload thread - device may be offline or thread not found' });
+      sendResponse({
+        success: false,
+        error:
+          'Failed to reload thread - device may be offline or thread not found',
+      });
     }
   } catch (error) {
     console.error('[Background] Failed to reload SMS thread:', error);
-    sendResponse({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to reload SMS thread' 
+    sendResponse({
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to reload SMS thread',
     });
   }
 }
@@ -1737,20 +1852,18 @@ async function handleReloadSmsThread(deviceIden: string, threadId: string, sendR
 /**
  * Handle getting SMS device info
  */
-async function handleGetSmsDeviceInfo(
-  sendResponse: (response: any) => void
-) {
+async function handleGetSmsDeviceInfo(sendResponse: (response: any) => void) {
   try {
     const defaultDevice = await getDefaultSmsDevice();
     if (defaultDevice) {
-      sendResponse({ 
-        success: true, 
+      sendResponse({
+        success: true,
         device: {
           iden: defaultDevice.iden,
           nickname: defaultDevice.nickname,
           model: defaultDevice.model,
-          type: defaultDevice.type
-        }
+          type: defaultDevice.type,
+        },
       });
     } else {
       sendResponse({ success: false, error: 'No SMS device found' });
@@ -1776,7 +1889,7 @@ async function handleSendSms(
       conversationId,
       messageLength: message.length,
       deviceIden,
-      hasAttachments: !!attachments
+      hasAttachments: !!attachments,
     });
 
     // Get default SMS device if not provided
@@ -1803,7 +1916,7 @@ async function handleSendSms(
     sendResponse({ success: true });
   } catch (error) {
     console.error('📱 [Background] Failed to send SMS:', error);
-    
+
     // Handle specific error types
     if (error instanceof Error) {
       if (error.message.includes('Token is invalid or revoked')) {
@@ -1909,7 +2022,9 @@ async function handleUnsubscribeFromChannel(
     // Get subscription info before deleting to identify the channel
     const { getSubscriptions } = await import('./channelManager');
     const subscriptions = await getSubscriptions(false);
-    const subscription = subscriptions.find(sub => sub.iden === subscriptionIden);
+    const subscription = subscriptions.find(
+      sub => sub.iden === subscriptionIden
+    );
     const channelIden = subscription?.channel?.iden;
 
     const response = await httpClient.fetch(
@@ -1928,10 +2043,10 @@ async function handleUnsubscribeFromChannel(
         // Already unsubscribed elsewhere, remove from cache immediately
         const { clearSubscriptionsCache } = await import('./channelManager');
         await clearSubscriptionsCache();
-        
+
         // Also clean up from storage
         await cleanupChannelFromStorage(channelIden, subscription);
-        
+
         sendResponse({ success: true, message: 'Already unsubscribed' });
         return;
       }
@@ -2021,7 +2136,7 @@ async function cleanupChannelPushes(channelIden: string): Promise<void> {
 
     const state = stored.pb_recent_pushes_state;
     const originalPushes = state.pushes || [];
-    
+
     // Filter out pushes associated with this channel
     const filteredPushes = originalPushes.filter((push: any) => {
       return push.channel_iden !== channelIden;
@@ -2037,7 +2152,9 @@ async function cleanupChannelPushes(channelIden: string): Promise<void> {
       pb_recent_pushes_state: updatedState,
     });
 
-    console.log(`Cleaned up ${originalPushes.length - filteredPushes.length} pushes for channel ${channelIden}`);
+    console.log(
+      `Cleaned up ${originalPushes.length - filteredPushes.length} pushes for channel ${channelIden}`
+    );
   } catch (error) {
     console.error('Failed to cleanup channel pushes:', error);
   }
@@ -2047,7 +2164,7 @@ async function cleanupChannelPushes(channelIden: string): Promise<void> {
  * Clean up channel data from local storage when unsubscribing
  */
 async function cleanupChannelFromStorage(
-  channelIden: string | undefined, 
+  channelIden: string | undefined,
   subscription: any
 ): Promise<void> {
   try {
@@ -2057,11 +2174,11 @@ async function cleanupChannelFromStorage(
 
     // Clean up from pb_channel_subs (this is already handled by clearSubscriptionsCache)
     // But we'll also clean up any specific channel data if needed
-    
+
     // Clean up from user_context
     const { ContextManager } = await import('./contextManager');
     const contextManager = ContextManager.getInstance();
-    
+
     // Remove the channel from the context manager's subscription map
     if (channelIden) {
       await contextManager.removeChannelFromContext(channelIden);
@@ -2069,36 +2186,40 @@ async function cleanupChannelFromStorage(
 
     // Also clean up any channel-specific data from other storage keys
     const storageKeys = ['pb_channel_subs', 'pb_owned_channels'];
-    
+
     for (const key of storageKeys) {
       try {
         const stored = await chrome.storage.local.get(key);
         if (stored[key]) {
           // For pb_channel_subs, filter out the unsubscribed channel
           if (key === 'pb_channel_subs' && stored[key].subscriptions) {
-            const filteredSubscriptions = stored[key].subscriptions.filter((sub: any) => {
-              return sub.channel && sub.channel.iden !== channelIden;
-            });
-            
+            const filteredSubscriptions = stored[key].subscriptions.filter(
+              (sub: any) => {
+                return sub.channel && sub.channel.iden !== channelIden;
+              }
+            );
+
             await chrome.storage.local.set({
               [key]: {
                 ...stored[key],
-                subscriptions: filteredSubscriptions
-              }
+                subscriptions: filteredSubscriptions,
+              },
             });
           }
-          
+
           // For pb_owned_channels, filter out if it was an owned channel
           if (key === 'pb_owned_channels' && stored[key].channels) {
-            const filteredChannels = stored[key].channels.filter((channel: any) => {
-              return channel.iden !== channelIden;
-            });
-            
+            const filteredChannels = stored[key].channels.filter(
+              (channel: any) => {
+                return channel.iden !== channelIden;
+              }
+            );
+
             await chrome.storage.local.set({
               [key]: {
                 ...stored[key],
-                channels: filteredChannels
-              }
+                channels: filteredChannels,
+              },
             });
           }
         }
@@ -2167,7 +2288,9 @@ async function handleGetSubscriptionPosts(
 /**
  * Handle clearing SMS notifications from the badge
  */
-async function handleClearSmsNotifications(sendResponse: (response: any) => void) {
+async function handleClearSmsNotifications(
+  sendResponse: (response: any) => void
+) {
   try {
     console.log('💬 [Background] Clearing SMS notifications from badge');
     await notificationBadge.clearSmsNotifications();
@@ -2186,7 +2309,7 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
   try {
     // Clear all cursors
     await clearAllCursors();
-    
+
     // Clear all caches
     await Promise.all([
       clearDeviceCache(),
@@ -2250,34 +2373,43 @@ async function handlePopupOpen(sendResponse: (response: any) => void) {
   try {
     const currentTime = Date.now();
     console.log('🪟 [Background] Popup opened, clearing all notifications');
-    
+
     // Check if we need to trigger SMS sync (only if >1 hour since last popup open)
     const lastPopupOpened = await getLocal<number>(POPUP_LAST_OPENED_KEY);
-    const shouldTriggerSmsSync = !lastPopupOpened || (currentTime - lastPopupOpened > ONE_HOUR_MS);
-    
-    console.log(`🪟 [PopupTime] Last popup opened: ${lastPopupOpened ? new Date(lastPopupOpened).toISOString() : 'never'}, current: ${new Date(currentTime).toISOString()}, should sync SMS: ${shouldTriggerSmsSync}`);
-    
+    const shouldTriggerSmsSync =
+      !lastPopupOpened || currentTime - lastPopupOpened > ONE_HOUR_MS;
+
+    console.log(
+      `🪟 [PopupTime] Last popup opened: ${lastPopupOpened ? new Date(lastPopupOpened).toISOString() : 'never'}, current: ${new Date(currentTime).toISOString()}, should sync SMS: ${shouldTriggerSmsSync}`
+    );
+
     // Always update the last popup opened time
     await setLocal(POPUP_LAST_OPENED_KEY, currentTime);
-    
+
     // Mark all notifications as seen using unified tracker
     await unifiedNotificationTracker.markAsSeen();
-    
+
     // Clear push notifications from badge
     await notificationBadge.clearPushNotifications();
-    
+
     // Only trigger SMS sync if more than 1 hour has passed since last popup open
     if (shouldTriggerSmsSync) {
-      console.log('🪟 [PopupTime] Triggering SMS sync (>1 hour since last popup open)');
+      console.log(
+        '🪟 [PopupTime] Triggering SMS sync (>1 hour since last popup open)'
+      );
       triggerSmsSync('popup_open');
     } else {
-      console.log('🪟 [PopupTime] Skipping SMS sync (<1 hour since last popup open)');
+      console.log(
+        '🪟 [PopupTime] Skipping SMS sync (<1 hour since last popup open)'
+      );
     }
-    
+
     // Refresh badge to update SMS count
     await notificationBadge.refreshBadge();
-    
-    console.log('🪟 [Background] All notifications marked as seen, badge refreshed');
+
+    console.log(
+      '🪟 [Background] All notifications marked as seen, badge refreshed'
+    );
     sendResponse({ ok: true });
   } catch (error) {
     console.error('Failed to handle popup open:', error);
@@ -2297,7 +2429,9 @@ async function getLastHeartbeat(): Promise<string> {
 /**
  * Handle getting unified tracker state for debugging
  */
-async function handleGetUnifiedTrackerState(sendResponse: (response: any) => void) {
+async function handleGetUnifiedTrackerState(
+  sendResponse: (response: any) => void
+) {
   try {
     const state = unifiedNotificationTracker.getState();
     sendResponse({ ok: true, state });
@@ -2338,9 +2472,15 @@ async function collectDebugLog(): Promise<string> {
   try {
     const state = unifiedNotificationTracker.getState();
     logEntries.push(`=== Unified Tracker State ===`);
-    logEntries.push(`Last Seen: ${new Date(state.timestamps.lastSeenTimestamp).toISOString()}`);
-    logEntries.push(`Last Updated: ${new Date(state.timestamps.lastUpdated).toISOString()}`);
-    logEntries.push(`Cache Entries: ${Object.values(state.cache).reduce((sum, arr) => sum + arr.length, 0)}`);
+    logEntries.push(
+      `Last Seen: ${new Date(state.timestamps.lastSeenTimestamp).toISOString()}`
+    );
+    logEntries.push(
+      `Last Updated: ${new Date(state.timestamps.lastUpdated).toISOString()}`
+    );
+    logEntries.push(
+      `Cache Entries: ${Object.values(state.cache).reduce((sum, arr) => sum + arr.length, 0)}`
+    );
     logEntries.push(``);
   } catch (error) {
     logEntries.push(`Failed to get tracker state: ${error}`);

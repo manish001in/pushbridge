@@ -137,10 +137,10 @@ export interface SmsMsg {
   text: string;
   image_url?: string;
   conversation_iden: string;
-  deviceIden?: string;        // NEW: Device context
-  type?: "sms" | "mms";       // NEW: Message type
-  status?: string;            // NEW: Message status
-  recipient_index?: number;   // NEW: For MMS with multiple recipients
+  deviceIden?: string; // NEW: Device context
+  type?: 'sms' | 'mms'; // NEW: Message type
+  status?: string; // NEW: Message status
+  recipient_index?: number; // NEW: For MMS with multiple recipients
 }
 
 export interface SmsThread {
@@ -149,8 +149,9 @@ export interface SmsThread {
   messages: SmsMsg[]; // chronological
   lastMessageTime: number;
   unreadCount: number;
-  deviceIden?: string;        // NEW: Device context
-  recipients?: Array<{        // NEW: Multiple recipients support
+  deviceIden?: string; // NEW: Device context
+  recipients?: Array<{
+    // NEW: Multiple recipients support
     name: string;
     address: string;
     number: string;

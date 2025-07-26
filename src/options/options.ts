@@ -198,12 +198,19 @@ class OptionsPage {
   }
 
   private async resetAllData() {
-    if (confirm('Are you sure you want to reset ALL data? This will clear all cached data, cursors, and settings. You will need to re-authenticate.')) {
+    if (
+      confirm(
+        'Are you sure you want to reset ALL data? This will clear all cached data, cursors, and settings. You will need to re-authenticate.'
+      )
+    ) {
       try {
         // Clear all data including cursors
         await chrome.runtime.sendMessage({ cmd: 'clearAllData' });
-        this.showMessage('All data cleared successfully. Please refresh the page.', 'success');
-        
+        this.showMessage(
+          'All data cleared successfully. Please refresh the page.',
+          'success'
+        );
+
         // Reset settings to defaults
         this.settings = {
           soundEnabled: true,
@@ -216,7 +223,10 @@ class OptionsPage {
         this.setupEventListeners();
       } catch (error) {
         console.error('Failed to reset all data:', error);
-        this.showMessage('Failed to reset all data. Please try again.', 'error');
+        this.showMessage(
+          'Failed to reset all data. Please try again.',
+          'error'
+        );
       }
     }
   }

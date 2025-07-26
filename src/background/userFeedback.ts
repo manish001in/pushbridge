@@ -22,7 +22,7 @@ class UserFeedback {
       await chrome.action.setBadgeBackgroundColor({ color: '#FF6B6B' });
 
       // Show toast notification
-              this.notificationId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      this.notificationId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       await chrome.notifications.create(this.notificationId, {
         type: 'basic',
         iconUrl: 'icons/48.png',
@@ -51,7 +51,7 @@ class UserFeedback {
       await chrome.action.setBadgeText({ text: '' });
 
       // Show recovery notification
-              const recoveryId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const recoveryId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       await chrome.notifications.create(recoveryId, {
         type: 'basic',
         iconUrl: 'icons/48.png',

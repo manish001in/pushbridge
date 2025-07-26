@@ -633,8 +633,12 @@ export class PbChannels extends LitElement {
             <div class="channel-card">
               ${this.renderChannelIcon(channel)}
               <div class="channel-info">
-                <div class="channel-name">${channel?.name || 'Unknown Channel'}</div>
-                <div class="channel-description">${channel?.description || 'No description available'}</div>
+                <div class="channel-name">
+                  ${channel?.name || 'Unknown Channel'}
+                </div>
+                <div class="channel-description">
+                  ${channel?.description || 'No description available'}
+                </div>
                 <div class="channel-tag">@${channel?.tag || 'unknown'}</div>
               </div>
               ${isSubscribed
@@ -679,11 +683,16 @@ export class PbChannels extends LitElement {
             <div class="subscription-item">
               ${this.renderChannelIcon(subscription.channel)}
               <div class="channel-info">
-                <div class="channel-name">${subscription.channel?.name || 'Unknown Channel'}</div>
-                <div class="channel-description">
-                  ${subscription.channel?.description || 'No description available'}
+                <div class="channel-name">
+                  ${subscription.channel?.name || 'Unknown Channel'}
                 </div>
-                <div class="channel-tag">@${subscription.channel?.tag || 'unknown'}</div>
+                <div class="channel-description">
+                  ${subscription.channel?.description ||
+                  'No description available'}
+                </div>
+                <div class="channel-tag">
+                  @${subscription.channel?.tag || 'unknown'}
+                </div>
               </div>
               <button
                 class="unsubscribe-button"

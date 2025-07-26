@@ -20,51 +20,63 @@ describe('PushEnricher', () => {
     mockContext = {
       current_device_iden: 'current-device',
       owned_channels: new Map([
-        ['owned-channel-1', {
-          iden: 'owned-channel-1',
-          tag: 'owned-channel',
-          name: 'Owned Channel',
-          description: 'Channel owned by user',
-          active: true,
-          created: 1234567890,
-          modified: 1234567890,
-        }],
+        [
+          'owned-channel-1',
+          {
+            iden: 'owned-channel-1',
+            tag: 'owned-channel',
+            name: 'Owned Channel',
+            description: 'Channel owned by user',
+            active: true,
+            created: 1234567890,
+            modified: 1234567890,
+          },
+        ],
       ]),
       subscriptions: new Map([
-        ['sub-channel-1', {
-          iden: 'sub-channel-1',
-          created: 1234567890,
-          modified: 1234567890,
-          active: true,
-          channel: {
+        [
+          'sub-channel-1',
+          {
             iden: 'sub-channel-1',
-            tag: 'subscribed-channel',
-            name: 'Subscribed Channel',
-            description: 'Channel user is subscribed to',
+            created: 1234567890,
+            modified: 1234567890,
+            active: true,
+            channel: {
+              iden: 'sub-channel-1',
+              tag: 'subscribed-channel',
+              name: 'Subscribed Channel',
+              description: 'Channel user is subscribed to',
+            },
           },
-        }],
+        ],
       ]),
       devices: new Map([
-        ['current-device', {
-          iden: 'current-device',
-          nickname: 'My Chrome',
-          type: 'chrome',
-          active: true,
-          created: 1234567890,
-          modified: 1234567890,
-          icon: 'chrome',
-          pushable: true,
-        }],
-        ['other-device', {
-          iden: 'other-device',
-          nickname: 'My iPhone',
-          type: 'ios',
-          active: true,
-          created: 1234567890,
-          modified: 1234567890,
-          icon: 'ios',
-          pushable: true,
-        }],
+        [
+          'current-device',
+          {
+            iden: 'current-device',
+            nickname: 'My Chrome',
+            type: 'chrome',
+            active: true,
+            created: 1234567890,
+            modified: 1234567890,
+            icon: 'chrome',
+            pushable: true,
+          },
+        ],
+        [
+          'other-device',
+          {
+            iden: 'other-device',
+            nickname: 'My iPhone',
+            type: 'ios',
+            active: true,
+            created: 1234567890,
+            modified: 1234567890,
+            icon: 'ios',
+            pushable: true,
+          },
+        ],
       ]),
       last_refreshed: Date.now(),
       is_valid: true,
@@ -301,11 +313,12 @@ describe('PushEnricher', () => {
 
       await PushEnricher.checkAndHandleUnknownSource(push);
 
-      expect(mockContextManager.contextManager.isKnownSource).toHaveBeenCalledWith(
-        'current-device',
-        undefined
-      );
-      expect(mockContextManager.contextManager.handleUnknownSource).not.toHaveBeenCalled();
+      expect(
+        mockContextManager.contextManager.isKnownSource
+      ).toHaveBeenCalledWith('current-device', undefined);
+      expect(
+        mockContextManager.contextManager.handleUnknownSource
+      ).not.toHaveBeenCalled();
     });
 
     it('should handle unknown source with refresh', async () => {
@@ -324,14 +337,12 @@ describe('PushEnricher', () => {
 
       await PushEnricher.checkAndHandleUnknownSource(push);
 
-      expect(mockContextManager.contextManager.isKnownSource).toHaveBeenCalledWith(
-        'unknown-device',
-        'unknown-channel'
-      );
-      expect(mockContextManager.contextManager.handleUnknownSource).toHaveBeenCalledWith(
-        'unknown-device',
-        'unknown-channel'
-      );
+      expect(
+        mockContextManager.contextManager.isKnownSource
+      ).toHaveBeenCalledWith('unknown-device', 'unknown-channel');
+      expect(
+        mockContextManager.contextManager.handleUnknownSource
+      ).toHaveBeenCalledWith('unknown-device', 'unknown-channel');
     });
   });
 
@@ -342,7 +353,9 @@ describe('PushEnricher', () => {
         timestamp: Date.now(),
       };
 
-      mockContextManager.contextManager.getContext.mockResolvedValue(mockContext);
+      mockContextManager.contextManager.getContext.mockResolvedValue(
+        mockContext
+      );
       mockContextManager.contextManager.isKnownSource.mockResolvedValue(true);
 
       const pushes: PushApiResponse[] = [
@@ -357,9 +370,14 @@ describe('PushEnricher', () => {
         },
       ];
 
-      const enriched = await PushEnricher.enrichPushesWithContextRefresh(pushes, trigger);
+      const enriched = await PushEnricher.enrichPushesWithContextRefresh(
+        pushes,
+        trigger
+      );
 
-      expect(mockContextManager.contextManager.getContext).toHaveBeenCalledWith(trigger);
+      expect(mockContextManager.contextManager.getContext).toHaveBeenCalledWith(
+        trigger
+      );
       expect(enriched).toHaveLength(1);
       expect(enriched[0].metadata.is_owned_by_user).toBe(true);
     });
@@ -370,7 +388,9 @@ describe('PushEnricher', () => {
         timestamp: Date.now(),
       };
 
-      mockContextManager.contextManager.getContext.mockResolvedValue(mockContext);
+      mockContextManager.contextManager.getContext.mockResolvedValue(
+        mockContext
+      );
       mockContextManager.contextManager.isKnownSource
         .mockResolvedValueOnce(false) // First push unknown
         .mockResolvedValueOnce(true); // After refresh, known
@@ -387,12 +407,14 @@ describe('PushEnricher', () => {
         },
       ];
 
-      const enriched = await PushEnricher.enrichPushesWithContextRefresh(pushes, trigger);
-
-      expect(mockContextManager.contextManager.handleUnknownSource).toHaveBeenCalledWith(
-        'unknown-device',
-        undefined
+      const enriched = await PushEnricher.enrichPushesWithContextRefresh(
+        pushes,
+        trigger
       );
+
+      expect(
+        mockContextManager.contextManager.handleUnknownSource
+      ).toHaveBeenCalledWith('unknown-device', undefined);
       expect(enriched).toHaveLength(1);
     });
   });
@@ -529,4 +551,4 @@ describe('PushEnricher', () => {
       expect(enriched.metadata.can_delete).toBe(false);
     });
   });
-}); 
+});
