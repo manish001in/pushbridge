@@ -5,7 +5,7 @@ All notable changes to Pushbridge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0b] - 2025-07-23
+## [1.0.0] - 2025-07-23
 
 ### Added
 
@@ -103,21 +103,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version History
 
-- **1.0.0b**: First beta release with full feature set
+- **1.0.0**: First release with full feature set
 
 ## Release Notes
 
 ### Breaking Changes
 
-- None in 1.0.0b (first beta release)
+- None in 1.0.0 (initial release)
 
 ### Migration Guide
 
-- N/A for 1.0.0b (initial release)
+- N/A for 1.0.0 (initial release)
 
 ### Known Issues
 
-- None documented for 1.0.0b
+- None documented for 1.0.0
 
 ---
 

@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
@@ -16,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -36,3 +37,86 @@ jobs:
           test -f dist/background.js
           test -f dist/popup.js
           echo "Build verification passed"
+
+  build-and-release:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for semantic versioning
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build extension for production
+        run: npm run build --production
+
+      - name: Copy manifest and other assets
+        run: |
+          cp public/manifest.json dist/
+          cp public/popup.html dist/
+          cp public/options.html dist/
+          cp -r public/icons dist/
+
+      - name: Get current version
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create release tag
+        id: create_tag
+        run: |
+          TAG="v${{ steps.get_version.outputs.version }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag $TAG
+          git push origin $TAG
+
+      - name: Package extension
+        run: |
+          cd dist
+          zip -r ../pushbridge-${{ steps.get_version.outputs.version }}.zip .
+          cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.create_tag.outputs.tag }}
+          name: PushBridge ${{ steps.get_version.outputs.version }}
+          body: |
+            ## PushBridge ${{ steps.get_version.outputs.version }}
+            
+            ### Changes
+            - See commit history for detailed changes
+            
+            ### Installation
+            1. Download the `pushbridge-${{ steps.get_version.outputs.version }}.zip` file
+            2. Extract the contents
+            3. Load the extension in Chrome Developer Mode
+            
+            ### Compatibility
+            - Chrome Extension Manifest V3
+            - Node.js 24+ for development
+          files: |
+            pushbridge-${{ steps.get_version.outputs.version }}.zip
+          draft: false
+          prerelease: false
