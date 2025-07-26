@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "Pushbridge",
+  "version": "1.0.0",
+  "description": "A Manifest V3 Chrome extension that replicates core Pushbullet functionality via the official Pushbullet REST & WebSocket APIs",
+  "minimum_chrome_version": "110",
+  "permissions": [
+    "storage",
+    "notifications",
+    "alarms",
+    "contextMenus",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://api.pushbullet.com/*",
+    "https://*.amazonaws.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Pushbridge",
+    "default_icon": {
+      "16": "icons/16.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
