@@ -13,6 +13,8 @@ import {
   OwnedChannelApiResponse,
   DeviceApiResponse,
   ContextRefreshTrigger,
+  PushbulletContact,
+  ContactsApiResponse,
 } from '../types/api-interfaces';
 
 import { reportError, PBError } from './errorManager';
@@ -144,16 +146,18 @@ export class ContextManager {
       }
 
       // Fetch all context data in parallel
-      const [subscriptions, channels, devices] = await Promise.all([
+      const [subscriptions, channels, devices, contacts] = await Promise.all([
         this.fetchSubscriptions(token),
         this.fetchChannels(token),
         this.fetchDevices(token),
+        this.fetchContacts(token),
       ]);
 
       // Build context maps
       const ownedChannelsMap = new Map<string, OwnedChannelApiResponse>();
       const subscriptionsMap = new Map<string, SubscriptionApiResponse>();
       const devicesMap = new Map<string, DeviceApiResponse>();
+      const contactsMap = new Map<string, PushbulletContact>();
 
       // Populate owned channels map
       if (channels.channels && Array.isArray(channels.channels)) {
@@ -197,12 +201,25 @@ export class ContextManager {
         });
       }
 
+      // Populate contacts map
+      if (contacts && Array.isArray(contacts)) {
+        contacts.forEach(contact => {
+          // Skip contacts with missing iden
+          if (contact && contact.iden) {
+            contactsMap.set(contact.iden, contact);
+          } else {
+            console.warn('Skipping contact with missing iden:', contact);
+          }
+        });
+      }
+
       // Create new context
       this.context = {
         current_device_iden: currentDeviceIden,
         owned_channels: ownedChannelsMap,
         subscriptions: subscriptionsMap,
         devices: devicesMap,
+        contacts: contactsMap,
         last_refreshed: Date.now(),
         is_valid: true,
       };
@@ -215,6 +232,7 @@ export class ContextManager {
         ownedChannels: ownedChannelsMap.size,
         subscriptions: subscriptionsMap.size,
         devices: devicesMap.size,
+        contacts: contactsMap.size,
         trigger: trigger.type,
       });
     } catch (error) {
@@ -371,6 +389,61 @@ export class ContextManager {
     }
 
     return data;
+  }
+
+  /**
+   * Fetch user's contacts
+   */
+  private async fetchContacts(token: string): Promise<PushbulletContact[]> {
+    const response = await httpClient.fetch(
+      'https://api.pushbullet.com/v2/chats',
+      {
+        method: 'GET',
+        headers: {
+          'Access-Token': token,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        await reportError(PBError.TokenRevoked, {
+          message: 'Token revoked while fetching contacts',
+          code: response.status,
+        });
+        throw new Error('Token is invalid or revoked');
+      }
+      throw new Error(
+        `Failed to fetch contacts: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data: ContactsApiResponse = await response.json();
+
+    // Transform chats data into contacts
+    const contacts: PushbulletContact[] = [];
+    
+    if (data.chats && Array.isArray(data.chats)) {
+      for (const chat of data.chats) {
+        // Only process active chats with valid contact info
+        if (chat.active && chat.with && chat.with.type === 'user') {
+          const contact: PushbulletContact = {
+            iden: chat.with.iden,
+            name: chat.with.name,
+            email: chat.with.email,
+            email_normalized: chat.with.email_normalized,
+            image_url: chat.with.image_url,
+            active: chat.active,
+            created: chat.created,
+            modified: chat.modified,
+          };
+          contacts.push(contact);
+        }
+      }
+    }
+
+    return contacts;
   }
 
   /**

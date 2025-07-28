@@ -4,6 +4,7 @@
  */
 
 import { getDevices, getDefaultSmsDevice } from './deviceManager';
+import { getContacts } from './contactManager';
 import { reportError, PBError } from './errorManager';
 import { handleMirror, handleRemoteDismiss } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
@@ -149,6 +150,9 @@ function onWebSocketMessage(event: MessageEvent): void {
         } else if (message.subtype === 'device') {
           console.log('Device tickle received, syncing history');
           handleDeviceTickle();
+        } else if (message.subtype === 'contact') {
+          console.log('Contact tickle received, syncing contacts');
+          handleContactTickle();
         }
         break;
 
@@ -320,6 +324,23 @@ async function handleDeviceTickle(): Promise<void> {
     console.log('🔄 [WebSocket] Devices refreshed successfully');
   } catch (error) {
     console.error('Failed to handle device tickle:', error);
+  }
+}
+
+/**
+ * Handle contact tickle by refreshing contact list
+ */
+async function handleContactTickle(): Promise<void> {
+  try {
+    console.log(
+      '🔄 [WebSocket] Contact tickle received, refreshing contacts directly'
+    );
+
+    // Refresh contacts by calling getContacts with force refresh
+    await getContacts(true);
+    console.log('🔄 [WebSocket] Contacts refreshed successfully');
+  } catch (error) {
+    console.error('Failed to handle contact tickle:', error);
   }
 }
 

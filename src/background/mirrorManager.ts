@@ -5,7 +5,7 @@
 
 import { MirrorPush, DismissalPush, MirrorMeta } from '../types/pushbullet';
 
-import { getContactName } from './contactManager';
+// Contact lookup removed - SMS functionality uses phone numbers directly
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { notificationBadge } from './notificationBadge';
@@ -462,8 +462,8 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
       conversation_iden: conversationId,
     };
 
-    // Get contact name for the conversation
-    const contactName = await getContactName(conversationId);
+    // Use conversation ID (phone number) as contact name for SMS
+    const contactName = conversationId; // Phone number or conversation identifier
 
     // Add message to thread cache
     await addMessageToThread(conversationId, message, contactName);

@@ -111,6 +111,38 @@ describe('ContextManager', () => {
                 },
               ],
             }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              accounts: [],
+              blocks: [],
+              channels: [],
+              chats: [
+                {
+                  iden: 'chat1',
+                  active: true,
+                  created: 1234567890,
+                  modified: 1234567890,
+                  with: {
+                    type: 'user',
+                    iden: 'contact1',
+                    name: 'Test Contact',
+                    email: 'test@example.com',
+                    email_normalized: 'test@example.com',
+                  },
+                },
+              ],
+              clients: [],
+              contacts: [],
+              devices: [],
+              grants: [],
+              pushes: [],
+              profiles: [],
+              subscriptions: [],
+              texts: [],
+            }),
         });
 
       mockStorage.getLocal
@@ -124,6 +156,7 @@ describe('ContextManager', () => {
       expect(context.subscriptions.size).toBe(1);
       expect(context.owned_channels.size).toBe(1);
       expect(context.devices.size).toBe(1);
+      expect(context.contacts.size).toBe(1);
       expect(context.is_valid).toBe(true);
     });
 
@@ -159,7 +192,7 @@ describe('ContextManager', () => {
       const context = await contextManager.getContext(otherTrigger);
 
       // Should not make new API calls
-      expect(mockHttpClient.httpClient.fetch).toHaveBeenCalledTimes(3); // Only the initial calls
+      expect(mockHttpClient.httpClient.fetch).toHaveBeenCalledTimes(4); // Only the initial calls (subscriptions, channels, devices, contacts)
       expect(context).toBeDefined();
     });
 
@@ -319,7 +352,7 @@ describe('ContextManager', () => {
       );
 
       // Should have made additional API calls
-      expect(mockHttpClient.httpClient.fetch).toHaveBeenCalledTimes(6); // 3 initial + 3 for refresh
+      expect(mockHttpClient.httpClient.fetch).toHaveBeenCalledTimes(8); // 4 initial + 4 for refresh (subscriptions, channels, devices, contacts)
     });
   });
 

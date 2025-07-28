@@ -19,7 +19,7 @@ export class PushComposer extends LitElement {
   private sendTargets: Array<{
     id: string;
     name: string;
-    type: 'device' | 'channel';
+    type: 'device' | 'channel' | 'contact';
     icon?: string;
   }> = [];
 
@@ -365,25 +365,29 @@ export class PushComposer extends LitElement {
     return 'note';
   }
 
-  // Load combined send targets (devices + owned channels)
+  // Load combined send targets (devices + owned channels + contacts)
   private async loadSendTargets() {
     try {
-      // Get both devices and owned channels in parallel
-      const [devicesResponse, channelsResponse] = await Promise.all([
+      // Get devices, owned channels, and contacts in parallel
+      const [devicesResponse, channelsResponse, contactsResponse] = await Promise.all([
         chrome.runtime.sendMessage({ cmd: 'getDevices' }),
         chrome.runtime.sendMessage({ cmd: 'GET_OWNED_CHANNELS' }),
+        chrome.runtime.sendMessage({ cmd: 'getContacts' }),
       ]);
 
       const devices = devicesResponse.ok ? devicesResponse.devices : [];
       const channels = channelsResponse.success
         ? channelsResponse.ownedChannels
         : [];
+      const contacts = contactsResponse.ok ? contactsResponse.contacts : [];
 
       console.log(
         'Loaded devices:',
         devices.length,
         'channels:',
-        channels.length
+        channels.length,
+        'contacts:',
+        contacts.length
       );
 
       // Combine into send targets array
@@ -393,6 +397,12 @@ export class PushComposer extends LitElement {
           name: dev.nickname,
           type: 'device' as const,
           icon: this.getDeviceIcon(dev.type),
+        })),
+        ...contacts.map((contact: any) => ({
+          id: contact.email,
+          name: contact.name,
+          type: 'contact' as const,
+          icon: '👤',
         })),
         ...channels.map((ch: any) => ({
           id: ch.tag,
@@ -549,6 +559,8 @@ export class PushComposer extends LitElement {
       // Handle targeting
       if (selectedTarget?.type === 'channel') {
         payload.channel_tag = selectedTarget.id;
+      } else if (selectedTarget?.type === 'contact') {
+        payload.email = selectedTarget.id; // For contacts, id is the email
       } else if (this.sendTo !== 'all') {
         payload.targetDeviceIden = selectedTarget?.id;
       }
@@ -571,6 +583,8 @@ export class PushComposer extends LitElement {
             fileData,
             targetDeviceIden:
               selectedTarget?.type === 'device' ? selectedTarget.id : undefined,
+            email:
+              selectedTarget?.type === 'contact' ? selectedTarget.id : undefined,
             // Include push metadata for file pushes
             title: this.pushTitle.trim() || undefined,
             body: this.body.trim() || undefined,

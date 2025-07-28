@@ -2,6 +2,13 @@
  * Unit tests for Contact Manager module
  */
 
+// Mock the httpClient module
+jest.mock('../../src/background/httpClient', () => ({
+  httpClient: {
+    fetch: jest.fn(),
+  },
+}));
+
 // Mock the storage module
 jest.mock('../../src/background/storage', () => ({
   getLocal: jest.fn(),
@@ -21,475 +28,380 @@ jest.mock('../../src/background/errorManager', () => ({
 
 // Import after mocking
 import {
-  initializeContactManager,
-  getContactName,
-  refreshContacts,
-  addContact,
-  clearContacts,
-  getAllContacts,
-  isContactsCacheStale,
-  resetForTesting,
+  getContacts,
+  clearContactCache,
+  getContactByEmail,
+  getContactByIden,
 } from '../../src/background/contactManager';
 import { reportError } from '../../src/background/errorManager';
 import { getLocal, setLocal } from '../../src/background/storage';
-import { ContactInfo } from '../../src/types/pushbullet';
+import { httpClient } from '../../src/background/httpClient';
+import { PushbulletContact, ContactsApiResponse } from '../../src/types/api-interfaces';
 
 // Mock storage functions
 const mockGetLocal = getLocal as jest.MockedFunction<typeof getLocal>;
 const mockSetLocal = setLocal as jest.MockedFunction<typeof setLocal>;
 const mockReportError = reportError as jest.MockedFunction<typeof reportError>;
-
-// Mock fetch
-global.fetch = jest.fn();
+const mockHttpClientFetch = httpClient.fetch as jest.MockedFunction<typeof httpClient.fetch>;
 
 describe('Contact Manager', () => {
+  const mockToken = 'test-token';
+  const mockContactsApiResponse: ContactsApiResponse = {
+    accounts: [],
+    blocks: [],
+    channels: [],
+    chats: [
+      {
+        iden: 'chat1',
+        active: true,
+        created: 1640995200,
+        modified: 1640995200,
+        with: {
+          type: 'user',
+          iden: 'contact1',
+          name: 'John Doe',
+          email: 'john@example.com',
+          email_normalized: 'john@example.com',
+          image_url: 'https://example.com/john.jpg',
+        },
+      },
+      {
+        iden: 'chat2',
+        active: true,
+        created: 1640995300,
+        modified: 1640995300,
+        with: {
+          type: 'user',
+          iden: 'contact2',
+          name: 'Jane Smith',
+          email: 'jane@example.com',
+          email_normalized: 'jane@example.com',
+        },
+      },
+    ],
+    clients: [],
+    contacts: [],
+    devices: [],
+    grants: [],
+    pushes: [],
+    profiles: [],
+    subscriptions: [],
+    texts: [],
+  };
+
+  const expectedContacts: PushbulletContact[] = [
+    {
+      iden: 'contact1',
+      name: 'John Doe',
+      email: 'john@example.com',
+      email_normalized: 'john@example.com',
+      image_url: 'https://example.com/john.jpg',
+      active: true,
+      created: 1640995200,
+      modified: 1640995200,
+    },
+    {
+      iden: 'contact2',
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+      email_normalized: 'jane@example.com',
+      active: true,
+      created: 1640995300,
+      modified: 1640995300,
+    },
+  ];
+
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockClear();
     mockGetLocal.mockResolvedValue(undefined);
     mockSetLocal.mockResolvedValue();
     mockReportError.mockResolvedValue(false);
-
-    // Reset module state
-    resetForTesting();
   });
 
-  describe('initializeContactManager', () => {
-    it('should initialize contact manager and load contacts from storage', async () => {
-      const mockContacts = {
-        '+1234567890': {
-          name: 'John Doe',
-          number: '+1234567890',
-          lastUpdated: Date.now(),
-        },
+  describe('getContacts', () => {
+    it('should return cached contacts if available and not expired', async () => {
+      const cachedData = {
+        contacts: expectedContacts,
+        lastFetched: Date.now() - 60000, // 1 minute ago
+        hasMore: false,
       };
-      mockGetLocal.mockResolvedValue(mockContacts);
+      mockGetLocal.mockResolvedValue(cachedData);
 
-      await initializeContactManager();
+      const result = await getContacts();
 
-      expect(mockGetLocal).toHaveBeenCalledWith('contacts');
+      expect(result).toEqual(expectedContacts);
+      expect(mockGetLocal).toHaveBeenCalledWith('pb_contact_cache');
+      expect(mockHttpClientFetch).not.toHaveBeenCalled();
     });
 
-    it('should handle empty storage gracefully', async () => {
-      await initializeContactManager();
-
-      expect(mockGetLocal).toHaveBeenCalledWith('contacts');
-    });
-  });
-
-  describe('getContactName', () => {
-    beforeEach(async () => {
-      await initializeContactManager();
-    });
-
-    it('should return cached contact name if available and not stale', async () => {
-      const contact: ContactInfo = {
-        name: 'John Doe',
-        number: '+1234567890',
-        lastUpdated: Date.now(),
+    it('should fetch contacts from API if cache expired', async () => {
+      const expiredCachedData = {
+        contacts: expectedContacts,
+        lastFetched: Date.now() - 10 * 60 * 1000, // 10 minutes ago (expired)
+        hasMore: false,
       };
-
-      // Mock storage to return the contact
-      mockGetLocal.mockResolvedValue({ '+1234567890': contact });
-
-      // Reinitialize to load the contact
-      await initializeContactManager();
-
-      const result = await getContactName('+1234567890');
-      expect(result).toBe('John Doe');
-    });
-
-    it('should return phone number if no contact found', async () => {
-      const result = await getContactName('+1234567890');
-      expect(result).toBe('+1234567890');
-    });
-
-    it('should return phone number if contact cache is stale', async () => {
-      const contact: ContactInfo = {
-        name: 'John Doe',
-        number: '+1234567890',
-        lastUpdated: Date.now() - 8 * 24 * 60 * 60 * 1000, // 8 days old
-      };
-      mockGetLocal.mockResolvedValue({ '+1234567890': contact });
-
-      const result = await getContactName('+1234567890');
-      expect(result).toBe('+1234567890');
-    });
-
-    it('should fetch contact from API and cache it', async () => {
       mockGetLocal.mockImplementation((key: string) => {
-        if (key === 'pb_token') return Promise.resolve('test-token');
+        if (key === 'pb_contact_cache') return Promise.resolve(expiredCachedData);
+        if (key === 'pb_token') return Promise.resolve(mockToken);
         return Promise.resolve(undefined);
       });
 
-      const mockApiResponse = {
-        contacts: [
-          {
-            name: 'John Doe',
-            phone_numbers: ['+1234567890'],
-          },
-        ],
-      };
+      mockHttpClientFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockContactsApiResponse),
+      } as Response);
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce(
-        new Response(JSON.stringify(mockApiResponse), {
-          status: 200,
-          headers: {},
-        })
-      );
+      const result = await getContacts();
 
-      const result = await getContactName('+1234567890');
-
-      expect(result).toBe('John Doe');
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.pushbullet.com/v2/contacts',
+      expect(result).toEqual(expectedContacts);
+      expect(mockHttpClientFetch).toHaveBeenCalledWith(
+        'https://api.pushbullet.com/v2/chats',
         expect.objectContaining({
           method: 'GET',
           headers: {
-            'Access-Token': 'test-token',
+            'Access-Token': mockToken,
             'Content-Type': 'application/json',
           },
         })
       );
     });
 
-    it('should handle API errors gracefully', async () => {
+    it('should force refresh when forceRefresh is true', async () => {
+      const cachedData = {
+        contacts: expectedContacts,
+        lastFetched: Date.now() - 60000, // 1 minute ago (fresh)
+        hasMore: false,
+      };
       mockGetLocal.mockImplementation((key: string) => {
-        if (key === 'pb_token') return Promise.resolve('test-token');
+        if (key === 'pb_contact_cache') return Promise.resolve(cachedData);
+        if (key === 'pb_token') return Promise.resolve(mockToken);
         return Promise.resolve(undefined);
       });
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce(
-        new Response('Internal Server Error', {
-          status: 500,
-          headers: {},
-        })
-      );
+      mockHttpClientFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockContactsApiResponse),
+      } as Response);
 
-      const result = await getContactName('+1234567890');
-      expect(result).toBe('+1234567890');
+      const result = await getContacts(true);
+
+      expect(result).toEqual(expectedContacts);
+      expect(mockHttpClientFetch).toHaveBeenCalled();
     });
 
-    it('should handle network errors gracefully', async () => {
+    it('should handle API errors and return cached data if available', async () => {
+      const cachedData = {
+        contacts: expectedContacts,
+        lastFetched: Date.now() - 10 * 60 * 1000, // expired
+        hasMore: false,
+      };
       mockGetLocal.mockImplementation((key: string) => {
-        if (key === 'pb_token') return Promise.resolve('test-token');
+        if (key === 'pb_contact_cache') return Promise.resolve(cachedData);
+        if (key === 'pb_token') return Promise.resolve(mockToken);
         return Promise.resolve(undefined);
       });
 
-      (global.fetch as jest.Mock).mockRejectedValueOnce(
-        new Error('Network error')
-      );
+      mockHttpClientFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      } as Response);
 
-      const result = await getContactName('+1234567890');
-      expect(result).toBe('+1234567890');
+      const result = await getContacts();
+
+      expect(result).toEqual(expectedContacts);
     });
 
     it('should handle token revocation', async () => {
       mockGetLocal.mockImplementation((key: string) => {
-        if (key === 'pb_token') return Promise.resolve('test-token');
+        if (key === 'pb_token') return Promise.resolve(mockToken);
         return Promise.resolve(undefined);
       });
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce(
-        new Response('Unauthorized', {
-          status: 401,
-          headers: {},
-        })
-      );
+      mockHttpClientFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+      } as Response);
 
-      const result = await getContactName('+1234567890');
-      expect(result).toBe('+1234567890');
-    });
-  });
-
-  describe('refreshContacts', () => {
-    beforeEach(async () => {
-      await initializeContactManager();
-    });
-
-    it('should refresh contacts from API and update cache', async () => {
-      mockGetLocal.mockImplementation((key: string) => {
-        if (key === 'pb_token') return Promise.resolve('test-token');
-        return Promise.resolve(undefined);
-      });
-
-      const mockApiResponse = {
-        contacts: [
-          {
-            name: 'John Doe',
-            phone_numbers: ['+1234567890'],
-          },
-          {
-            name: 'Jane Smith',
-            phone_numbers: ['+0987654321'],
-          },
-        ],
-      };
-
-      (global.fetch as jest.Mock).mockResolvedValueOnce(
-        new Response(JSON.stringify(mockApiResponse), {
-          status: 200,
-          headers: {},
-        })
-      );
-
-      await refreshContacts();
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.pushbullet.com/v2/contacts',
-        expect.objectContaining({
-          method: 'GET',
-          headers: {
-            'Access-Token': 'test-token',
-            'Content-Type': 'application/json',
-          },
-        })
-      );
-
-      const contacts = await getAllContacts();
-      expect(contacts).toHaveLength(2);
-      expect(contacts.find(c => c.number === '+1234567890')?.name).toBe(
-        'John Doe'
-      );
-      expect(contacts.find(c => c.number === '+0987654321')?.name).toBe(
-        'Jane Smith'
-      );
-    });
-
-    it('should handle API errors', async () => {
-      mockGetLocal.mockResolvedValue('test-token');
-
-      (global.fetch as jest.Mock).mockResolvedValueOnce(
-        new Response('Internal Server Error', {
-          status: 500,
-          statusText: 'Internal Server Error',
-          headers: {},
-        })
-      );
-
-      // Should not throw - error is caught and logged
-      await expect(refreshContacts()).resolves.not.toThrow();
-
-      // Verify error was reported
+      await expect(getContacts()).rejects.toThrow('Token is invalid or revoked');
       expect(mockReportError).toHaveBeenCalled();
     });
 
-    it('should handle token revocation', async () => {
-      mockGetLocal.mockResolvedValue('test-token');
+    it('should handle no token error', async () => {
+      mockGetLocal.mockResolvedValue(undefined);
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce(
-        new Response('Unauthorized', {
-          status: 401,
-          statusText: 'Unauthorized',
-          headers: {},
-        })
-      );
+      await expect(getContacts()).rejects.toThrow('No token available');
+    });
 
-      // Should not throw - error is caught and logged
-      await expect(refreshContacts()).resolves.not.toThrow();
+    it('should filter out inactive chats and invalid contacts', async () => {
+      const responseWithInactiveChats: ContactsApiResponse = {
+        ...mockContactsApiResponse,
+        chats: [
+          ...mockContactsApiResponse.chats,
+          {
+            iden: 'chat3',
+            active: false, // inactive chat
+            created: 1640995400,
+            modified: 1640995400,
+            with: {
+              type: 'user',
+              iden: 'contact3',
+              name: 'Inactive User',
+              email: 'inactive@example.com',
+              email_normalized: 'inactive@example.com',
+            },
+          },
+          {
+            iden: 'chat4',
+            active: true,
+            created: 1640995500,
+            modified: 1640995500,
+            with: {
+              type: 'channel', // not a user
+              iden: 'channel1',
+              name: 'Test Channel',
+              email: 'channel@example.com',
+              email_normalized: 'channel@example.com',
+            },
+          } as any,
+        ],
+      };
 
-      // Verify token revoked error was reported
-      expect(mockReportError).toHaveBeenCalledWith(
-        expect.stringContaining('TOKEN_REVOKED'),
+      mockGetLocal.mockImplementation((key: string) => {
+        if (key === 'pb_token') return Promise.resolve(mockToken);
+        return Promise.resolve(undefined);
+      });
+
+      mockHttpClientFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(responseWithInactiveChats),
+      } as Response);
+
+      const result = await getContacts();
+
+      // Should only return the 2 active user contacts
+      expect(result).toHaveLength(2);
+      expect(result).toEqual(expectedContacts);
+    });
+  });
+
+  describe('clearContactCache', () => {
+    it('should clear contact cache and related storage', async () => {
+      await clearContactCache();
+
+      expect(mockSetLocal).toHaveBeenCalledWith('pb_contact_cache', null);
+      expect(mockSetLocal).toHaveBeenCalledWith('pb_contacts_cursor', null);
+      expect(mockSetLocal).toHaveBeenCalledWith('pb_contacts_has_more', null);
+    });
+
+    it('should handle storage errors', async () => {
+      mockSetLocal.mockRejectedValue(new Error('Storage error'));
+
+      await expect(clearContactCache()).rejects.toThrow('Storage error');
+    });
+  });
+
+  describe('getContactByEmail', () => {
+    beforeEach(() => {
+      const cachedData = {
+        contacts: expectedContacts,
+        lastFetched: Date.now() - 60000,
+        hasMore: false,
+      };
+      mockGetLocal.mockResolvedValue(cachedData);
+    });
+
+    it('should find contact by exact email match', async () => {
+      const result = await getContactByEmail('john@example.com');
+
+      expect(result).toEqual(expectedContacts[0]);
+    });
+
+    it('should find contact by normalized email match', async () => {
+      const result = await getContactByEmail('JOHN@EXAMPLE.COM');
+
+      expect(result).toEqual(expectedContacts[0]);
+    });
+
+    it('should return null if contact not found', async () => {
+      const result = await getContactByEmail('notfound@example.com');
+
+      expect(result).toBeNull();
+    });
+
+    it('should handle email with extra whitespace', async () => {
+      const result = await getContactByEmail('  john@example.com  ');
+
+      expect(result).toEqual(expectedContacts[0]);
+    });
+  });
+
+  describe('getContactByIden', () => {
+    beforeEach(() => {
+      const cachedData = {
+        contacts: expectedContacts,
+        lastFetched: Date.now() - 60000,
+        hasMore: false,
+      };
+      mockGetLocal.mockResolvedValue(cachedData);
+    });
+
+    it('should find contact by iden', async () => {
+      const result = await getContactByIden('contact1');
+
+      expect(result).toEqual(expectedContacts[0]);
+    });
+
+    it('should return null if contact not found', async () => {
+      const result = await getContactByIden('nonexistent');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('cursor handling', () => {
+    it('should handle cursor-based pagination', async () => {
+      mockGetLocal.mockImplementation((key: string) => {
+        if (key === 'pb_token') return Promise.resolve(mockToken);
+        if (key === 'pb_contacts_cursor') return Promise.resolve('test-cursor');
+        return Promise.resolve(undefined);
+      });
+
+      mockHttpClientFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          ...mockContactsApiResponse,
+          cursor: 'next-cursor',
+        }),
+      } as Response);
+
+      await getContacts();
+
+      expect(mockHttpClientFetch).toHaveBeenCalledWith(
+        'https://api.pushbullet.com/v2/chats?cursor=test-cursor',
         expect.any(Object)
       );
+      
+      expect(mockSetLocal).toHaveBeenCalledWith('pb_contacts_cursor', 'next-cursor');
+      expect(mockSetLocal).toHaveBeenCalledWith('pb_contacts_has_more', true);
     });
 
-    it('should handle missing token', async () => {
-      // Should not throw - error is caught and logged
-      await expect(refreshContacts()).resolves.not.toThrow();
-
-      // Verify error was reported
-      expect(mockReportError).toHaveBeenCalled();
-    });
-
-    it('should handle contacts without phone numbers', async () => {
+    it('should clear cursor when no more data', async () => {
       mockGetLocal.mockImplementation((key: string) => {
-        if (key === 'pb_token') return Promise.resolve('test-token');
+        if (key === 'pb_token') return Promise.resolve(mockToken);
         return Promise.resolve(undefined);
       });
 
-      const mockApiResponse = {
-        contacts: [
-          {
-            name: 'John Doe',
-            phone_numbers: ['+1234567890'],
-          },
-          {
-            name: 'Jane Smith',
-            phone_numbers: [], // No phone numbers
-          },
-          {
-            name: 'Bob Johnson', // No phone_numbers field
-          },
-        ],
-      };
+      mockHttpClientFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockContactsApiResponse), // no cursor
+      } as Response);
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce(
-        new Response(JSON.stringify(mockApiResponse), {
-          status: 200,
-          headers: {},
-        })
-      );
+      await getContacts();
 
-      await refreshContacts();
-
-      const contacts = await getAllContacts();
-      expect(contacts).toHaveLength(1); // Only contact with phone number
-      expect(contacts[0].name).toBe('John Doe');
-    });
-  });
-
-  describe('addContact', () => {
-    beforeEach(async () => {
-      await initializeContactManager();
-    });
-
-    it('should add contact to cache', async () => {
-      await addContact('+1234567890', 'John Doe');
-
-      const contacts = await getAllContacts();
-      expect(contacts).toHaveLength(1);
-      expect(contacts[0].name).toBe('John Doe');
-      expect(contacts[0].number).toBe('+1234567890');
-    });
-
-    it('should update existing contact', async () => {
-      await addContact('+1234567890', 'John Doe');
-      await addContact('+1234567890', 'John Smith'); // Update name
-
-      const contacts = await getAllContacts();
-      expect(contacts).toHaveLength(1);
-      expect(contacts[0].name).toBe('John Smith');
-    });
-  });
-
-  describe('getAllContacts', () => {
-    beforeEach(async () => {
-      await initializeContactManager();
-    });
-
-    it('should return all contacts', async () => {
-      const contact1: ContactInfo = {
-        name: 'John Doe',
-        number: '+1234567890',
-        lastUpdated: Date.now(),
-      };
-      const contact2: ContactInfo = {
-        name: 'Jane Smith',
-        number: '+0987654321',
-        lastUpdated: Date.now(),
-      };
-
-      mockGetLocal.mockResolvedValue({
-        '+1234567890': contact1,
-        '+0987654321': contact2,
-      });
-
-      // Reinitialize to load the contacts
-      await initializeContactManager();
-
-      const contacts = await getAllContacts();
-      expect(contacts).toHaveLength(2);
-      expect(contacts.find(c => c.number === '+1234567890')?.name).toBe(
-        'John Doe'
-      );
-      expect(contacts.find(c => c.number === '+0987654321')?.name).toBe(
-        'Jane Smith'
-      );
-    });
-
-    it('should return empty array when no contacts', async () => {
-      const contacts = await getAllContacts();
-      expect(contacts).toHaveLength(0);
-    });
-  });
-
-  describe('clearContacts', () => {
-    beforeEach(async () => {
-      await initializeContactManager();
-    });
-
-    it('should clear all contacts from cache and storage', async () => {
-      const contact: ContactInfo = {
-        name: 'John Doe',
-        number: '+1234567890',
-        lastUpdated: Date.now(),
-      };
-      mockGetLocal.mockResolvedValue({ '+1234567890': contact });
-
-      await clearContacts();
-
-      const contacts = await getAllContacts();
-      expect(contacts).toHaveLength(0);
-      expect(mockSetLocal).toHaveBeenCalledWith('contacts', null);
-    });
-  });
-
-  describe('isContactsCacheStale', () => {
-    beforeEach(async () => {
-      await initializeContactManager();
-    });
-
-    it('should return true when no contacts exist', async () => {
-      const result = await isContactsCacheStale();
-      expect(result).toBe(true);
-    });
-
-    it('should return true when contacts are older than 7 days', async () => {
-      const contact: ContactInfo = {
-        name: 'John Doe',
-        number: '+1234567890',
-        lastUpdated: Date.now() - 8 * 24 * 60 * 60 * 1000, // 8 days old
-      };
-      mockGetLocal.mockResolvedValue({ '+1234567890': contact });
-
-      const result = await isContactsCacheStale();
-      expect(result).toBe(true);
-    });
-
-    it('should return false when contacts are recent', async () => {
-      const contact: ContactInfo = {
-        name: 'John Doe',
-        number: '+1234567890',
-        lastUpdated: Date.now() - 6 * 24 * 60 * 60 * 1000, // 6 days old
-      };
-      mockGetLocal.mockResolvedValue({ '+1234567890': contact });
-
-      // Reinitialize to load the contact
-      await initializeContactManager();
-
-      const result = await isContactsCacheStale();
-      expect(result).toBe(false);
-    });
-  });
-
-  describe('phone number normalization', () => {
-    it('should normalize phone numbers for comparison', async () => {
-      await initializeContactManager();
-      mockGetLocal.mockImplementation((key: string) => {
-        if (key === 'pb_token') return Promise.resolve('test-token');
-        return Promise.resolve(undefined);
-      });
-
-      const mockApiResponse = {
-        contacts: [
-          {
-            name: 'John Doe',
-            phone_numbers: ['+1 (234) 567-8900'], // Formatted number
-          },
-        ],
-      };
-
-      (global.fetch as jest.Mock).mockResolvedValueOnce(
-        new Response(JSON.stringify(mockApiResponse), {
-          status: 200,
-          headers: {},
-        })
-      );
-
-      const result = await getContactName('+12345678900'); // Unformatted number
-      expect(result).toBe('John Doe');
+      expect(mockSetLocal).toHaveBeenCalledWith('pb_contacts_cursor', null);
+      expect(mockSetLocal).toHaveBeenCalledWith('pb_contacts_has_more', false);
     });
   });
 });

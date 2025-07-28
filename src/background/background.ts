@@ -13,7 +13,7 @@ import {
   clearSubscriptionsCache,
   clearOwnedChannelsCache,
 } from './channelManager';
-import { initializeContactManager, clearContacts } from './contactManager';
+import { getContacts, clearContactCache, getContactByIden } from './contactManager';
 import { contextManager } from './contextManager';
 import {
   ensureChromeDevice,
@@ -22,6 +22,7 @@ import {
   getSmsCapableDevices,
   getDefaultSmsDevice,
   setDefaultSmsDevice,
+  getDevices,
 } from './deviceManager';
 import { reportError, PBError } from './errorManager';
 import {
@@ -210,9 +211,9 @@ chrome.runtime.onInstalled.addListener(async () => {
     // Initialize queue system
     initializeQueue();
 
-    // Initialize SMS functionality
+    // Initialize SMS functionality  
     // SMS bridge initialization removed - using simple system
-    await initializeContactManager();
+    // Contact manager initialization is handled automatically via API calls
 
     // Initialize channel functionality
     await initializeChannelManager();
@@ -246,7 +247,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     await cleanupOldPendingUploads();
 
     // Create context menu items
-    createContextMenus();
+    await createContextMenus();
   } catch (error) {
     console.error('Failed to initialize background services:', error);
   }
@@ -390,6 +391,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
     case 'clearDeviceCache':
       handleClearDeviceCache(sendResponse);
+      break;
+    case 'getContacts':
+      handleGetContacts(message.forceRefresh, sendResponse);
+      break;
+    case 'clearContactCache':
+      handleClearContactCache(sendResponse);
       break;
     case 'createPush':
       handleCreatePush(message.payload, sendResponse);
@@ -651,6 +658,35 @@ async function handleClearDeviceCache(sendResponse: (response: any) => void) {
   } catch (error) {
     console.error('Failed to clear device cache:', error);
     sendResponse({ ok: false, error: 'Failed to clear cache' });
+  }
+}
+
+/**
+ * Handle contact list requests from popup
+ */
+async function handleGetContacts(
+  forceRefresh: boolean,
+  sendResponse: (response: any) => void
+) {
+  try {
+    const contacts = await getContacts(forceRefresh);
+    sendResponse({ ok: true, contacts });
+  } catch (error) {
+    console.error('Failed to get contacts:', error);
+    sendResponse({ ok: false, error: 'Failed to fetch contacts' });
+  }
+}
+
+/**
+ * Handle contact cache clearing requests
+ */
+async function handleClearContactCache(sendResponse: (response: any) => void) {
+  try {
+    await clearContactCache();
+    sendResponse({ ok: true });
+  } catch (error) {
+    console.error('Failed to clear contact cache:', error);
+    sendResponse({ ok: false, error: 'Failed to clear contact cache' });
   }
 }
 
@@ -1294,6 +1330,7 @@ async function handleUploadFile(
       buffer: number[];
     };
     targetDeviceIden?: string;
+    email?: string;
     title?: string;
     body?: string;
     channel_tag?: string;
@@ -1301,7 +1338,7 @@ async function handleUploadFile(
   sendResponse: (response: any) => void
 ) {
   try {
-    const { fileData, targetDeviceIden, title, body, channel_tag } = payload;
+    const { fileData, targetDeviceIden, email, title, body, channel_tag } = payload;
 
     // Reconstruct the File object from the ArrayBuffer data
     const file = new File([new Uint8Array(fileData.buffer)], fileData.name, {
@@ -1336,7 +1373,8 @@ async function handleUploadFile(
         targetDeviceIden,
         title,
         body,
-        channel_tag
+        channel_tag,
+        email
       );
 
       // Add transfer record
@@ -1490,35 +1528,89 @@ async function handleDownloadFile(
 }
 
 /**
- * Create context menu items
+ * Create context menu items with device and contact submenus
  */
-function createContextMenus() {
+async function createContextMenus() {
   // Remove existing context menus
-  chrome.contextMenus.removeAll(() => {
-    // Create new context menu items
-    chrome.contextMenus.create({
-      id: 'push-page',
-      title: 'Push this page',
-      contexts: ['page'],
-    });
+  chrome.contextMenus.removeAll(async () => {
+    try {
+      // Get devices and contacts for submenus
+      const devices = await getDevices();
+      const contacts = await getContacts();
 
-    chrome.contextMenus.create({
-      id: 'push-link',
-      title: 'Push this link',
-      contexts: ['link'],
-    });
+      // Create main menu items with submenus
+      const menuItems = [
+        { id: 'push-page', title: 'Push this page', contexts: ['page'] },
+        { id: 'push-link', title: 'Push this link', contexts: ['link'] },
+        { id: 'push-image', title: 'Push this image', contexts: ['image'] },
+        { id: 'push-selection', title: 'Push selected text', contexts: ['selection'] }
+      ];
 
-    chrome.contextMenus.create({
-      id: 'push-image',
-      title: 'Push this image',
-      contexts: ['image'],
-    });
+      for (const menuItem of menuItems) {
+        // Create parent menu item
+        chrome.contextMenus.create({
+          id: menuItem.id,
+          title: menuItem.title,
+          contexts: menuItem.contexts as chrome.contextMenus.ContextType[],
+        });
 
-    chrome.contextMenus.create({
-      id: 'push-selection',
-      title: 'Push selected text',
-      contexts: ['selection'],
-    });
+        // Create Devices submenu
+        if (devices.length > 0) {
+          chrome.contextMenus.create({
+            id: `${menuItem.id}-devices`,
+            title: 'Devices',
+            parentId: menuItem.id,
+            contexts: menuItem.contexts as chrome.contextMenus.ContextType[],
+          });
+
+          // Add individual devices
+          for (const device of devices) {
+            chrome.contextMenus.create({
+              id: `${menuItem.id}-device-${device.iden}`,
+              title: `📱 ${device.nickname}`,
+              parentId: `${menuItem.id}-devices`,
+              contexts: menuItem.contexts as chrome.contextMenus.ContextType[],
+            });
+          }
+        }
+
+        // Create Contacts submenu
+        if (contacts.length > 0) {
+          chrome.contextMenus.create({
+            id: `${menuItem.id}-contacts`,
+            title: 'Contacts',
+            parentId: menuItem.id,
+            contexts: menuItem.contexts as chrome.contextMenus.ContextType[],
+          });
+
+          // Add individual contacts
+          for (const contact of contacts) {
+            chrome.contextMenus.create({
+              id: `${menuItem.id}-contact-${contact.iden}`,
+              title: `👤 ${contact.name}`,
+              parentId: `${menuItem.id}-contacts`,
+              contexts: menuItem.contexts as chrome.contextMenus.ContextType[],
+            });
+          }
+        }
+
+        // Add "All Devices" option
+        chrome.contextMenus.create({
+          id: `${menuItem.id}-all`,
+          title: '📤 All Devices',
+          parentId: menuItem.id,
+          contexts: menuItem.contexts as chrome.contextMenus.ContextType[],
+        });
+      }
+    } catch (error) {
+      console.error('Failed to create context menus:', error);
+      // Fall back to simple menu structure
+      chrome.contextMenus.create({
+        id: 'push-page-all',
+        title: 'Push this page',
+        contexts: ['page'],
+      });
+    }
   });
 }
 
@@ -1527,46 +1619,77 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab) return;
 
   try {
+    const menuId = info.menuItemId as string;
     let payload: PushPayload;
 
-    switch (info.menuItemId) {
-      case 'push-page':
-        payload = {
-          type: 'link',
-          url: tab.url!,
-          title: tab.title,
-          body: `Page shared from ${new URL(tab.url!).hostname}`,
-        };
-        break;
+    // Parse menu ID to determine action type and target  
+    const [actionType, targetType] = menuId.split('-');
+    
+    // Determine base payload based on action type
+    switch (actionType) {
+      case 'push':
+      // Handle the second part of compound IDs like 'push-page'
+        const actualAction = `${actionType}-${targetType}`;
+        switch (actualAction) {
+          case 'push-page':
+            payload = {
+              type: 'link',
+              url: tab.url!,
+              title: tab.title,
+              body: `Page shared from ${new URL(tab.url!).hostname}`,
+            };
+            break;
 
-      case 'push-link':
-        payload = {
-          type: 'link',
-          url: info.linkUrl!,
-          title: (info as any).linkText || info.linkUrl,
-          body: `Link shared from ${new URL(tab.url!).hostname}`,
-        };
-        break;
+          case 'push-link':
+            payload = {
+              type: 'link',
+              url: info.linkUrl!,
+              title: (info as any).linkText || info.linkUrl,
+              body: `Link shared from ${new URL(tab.url!).hostname}`,
+            };
+            break;
 
-      case 'push-image':
-        payload = {
-          type: 'link',
-          url: info.srcUrl!,
-          title: (info as any).altText || 'Image',
-          body: `Image shared from ${new URL(tab.url!).hostname}`,
-        };
-        break;
+          case 'push-image':
+            payload = {
+              type: 'link',
+              url: info.srcUrl!,
+              title: (info as any).altText || 'Image',
+              body: `Image shared from ${new URL(tab.url!).hostname}`,
+            };
+            break;
 
-      case 'push-selection':
-        payload = {
-          type: 'note',
-          body: info.selectionText!,
-          title: `Text from ${new URL(tab.url!).hostname}`,
-        };
+          case 'push-selection':
+            payload = {
+              type: 'note',
+              body: info.selectionText!,
+              title: `Text from ${new URL(tab.url!).hostname}`,
+            };
+            break;
+
+          default:
+            return;
+        }
         break;
 
       default:
         return;
+    }
+
+    // Handle targeting based on menu ID structure
+    if (menuId.includes('-device-')) {
+      // Extract device iden from menu ID
+      const deviceIden = menuId.substring(menuId.lastIndexOf('-') + 1);
+      payload.targetDeviceIden = deviceIden;
+    } else if (menuId.includes('-contact-')) {
+      // Extract contact iden and get contact email
+      const contactIden = menuId.substring(menuId.lastIndexOf('-') + 1);
+      const contact = await getContactByIden(contactIden);
+      if (contact) {
+        payload.email = contact.email;
+      }
+    } else if (menuId.endsWith('-all')) {
+      // Send to all devices (default behavior)
+      // No targeting needed
     }
 
     // Create the push
@@ -2315,7 +2438,7 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
       clearDeviceCache(),
       clearSubscriptionsCache(),
       clearOwnedChannelsCache(),
-      clearContacts(),
+      clearContactCache(),
     ]);
 
     // Clear other storage

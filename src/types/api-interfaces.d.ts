@@ -45,6 +45,54 @@ export interface OwnedChannelApiResponse {
 }
 
 // ============================================================================
+// CONTACTS API
+// ============================================================================
+
+export interface ContactsApiResponse {
+  accounts: any[];
+  blocks: any[];
+  channels: any[];
+  chats: ChatApiResponse[];
+  clients: any[];
+  contacts: any[];
+  devices: any[];
+  grants: any[];
+  pushes: any[];
+  profiles: any[];
+  subscriptions: any[];
+  texts: any[];
+  cursor?: string;
+}
+
+export interface ChatApiResponse {
+  iden: string;
+  active: boolean;
+  created: number;
+  modified: number;
+  with: ContactInfo;
+}
+
+export interface ContactInfo {
+  type: 'user';
+  iden: string;
+  name: string;
+  email: string;
+  email_normalized: string;
+  image_url?: string;
+}
+
+export interface PushbulletContact {
+  iden: string; // contact iden from with.iden
+  name: string;
+  email: string;
+  email_normalized: string;
+  image_url?: string;
+  active: boolean;
+  created: number;
+  modified: number;
+}
+
+// ============================================================================
 // DEVICES API
 // ============================================================================
 
@@ -88,6 +136,7 @@ export interface PushApiResponse {
   modified: number;
   dismissed: boolean;
   receiver_iden?: string;
+  sender_name?: string; // Name of the sender (for pushes from contacts)
   // File-specific fields
   file_name?: string;
   file_type?: string;
@@ -140,6 +189,7 @@ export interface UserContext {
   owned_channels: Map<string, OwnedChannelApiResponse>; // iden -> channel
   subscriptions: Map<string, SubscriptionApiResponse>; // channel_iden -> subscription
   devices: Map<string, DeviceApiResponse>; // iden -> device
+  contacts: Map<string, PushbulletContact>; // iden -> contact
   last_refreshed: number;
   is_valid: boolean;
 }

@@ -26,6 +26,7 @@ export interface PushPayload {
   body?: string;
   url?: string;
   targetDeviceIden?: string; // undefined = All devices
+  email?: string; // For contact targeting
   channel_tag?: string; // For broadcast pushes
 }
 
@@ -105,6 +106,8 @@ export async function createPush(
       pushData.channel_tag = payload.channel_tag;
     } else if (payload.targetDeviceIden) {
       pushData.target_device_iden = payload.targetDeviceIden;
+    } else if (payload.email) {
+      pushData.email = payload.email;
     }
 
     const response = await httpClient.fetch(
@@ -250,7 +253,8 @@ export async function createFilePush(
   targetDeviceIden?: string,
   title?: string,
   body?: string,
-  channel_tag?: string
+  channel_tag?: string,
+  email?: string
 ): Promise<FilePush> {
   try {
     const token = await getLocal<string>('pb_token');
@@ -274,6 +278,10 @@ export async function createFilePush(
 
     if (targetDeviceIden) {
       pushData.target_device_iden = targetDeviceIden;
+    }
+
+    if (email) {
+      pushData.email = email;
     }
 
     if (title) {

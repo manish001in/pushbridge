@@ -1181,7 +1181,7 @@ export class RecentPushes extends LitElement {
               : ''}"
             @click=${() => this.handleSubtabChange('devices')}
           >
-            Own Devices
+            Own Devices & Contacts
           </button>
           <button
             class="subtab-button ${this.activeSubtab === 'channels'
@@ -1222,6 +1222,9 @@ export class RecentPushes extends LitElement {
                         : push.type === 'file'
                           ? push.file_name || 'File'
                           : 'Untitled')}
+                      ${push.sender_name 
+                        ? html`<span style="font-weight: normal; color: #666; font-size: 12px;"> • from ${push.sender_name}</span>`
+                        : ''}
                     </h4>
                     <div class="push-actions">
                       <button

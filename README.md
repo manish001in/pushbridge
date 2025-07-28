@@ -14,6 +14,7 @@ A Manifest V3 compatible Chrome extension that replicates core Pushbullet functi
 - **📢 Channel Subscriptions**: Subscribe to and broadcast to Pushbullet channels
 - **🔄 Real-time Sync**: Instant synchronization via WebSocket connection
 - **⚙️ Customizable Settings**: Configure notifications, sounds, and defaults
+- **🔍 Contacts Management**: Send pushes to contacts
 
 ## 📋 Requirements
 
@@ -84,16 +85,17 @@ A Manifest V3 compatible Chrome extension that replicates core Pushbullet functi
 2. **Links**: Share web pages with titles and descriptions
 3. **Files**: Drag and drop files to send them to your devices
 4. **Broadcasts**: Send messages to your channel subscribers (if you own channels)
+5. **Contacts**: Send pushes to contacts
 
 ### Receiving Notifications
 
 - Android notifications automatically appear as Chrome notifications
 - Click notifications to dismiss them on your phone
-- View recent pushes in the "Recent Pushes" tab
+- View recent pushes in the "Messages" tab
 
 ### SMS Messaging
 
-1. Switch to the "Messages" tab
+1. Switch to the "SMS/MMS" tab
 2. Select a conversation from the list
 3. Type and send messages using your phone's number
 4. Receive incoming SMS messages in real-time
@@ -110,9 +112,9 @@ A Manifest V3 compatible Chrome extension that replicates core Pushbullet functi
 
 Right-click on any webpage to:
 
-- Push the current page to your devices
-- Push selected text as a note
-- Push images to your devices
+- Push the current page to your devices or contacts
+- Push selected text as a note to your devices or contacts
+- Push images to your devices or contacts
 
 ## ⚙️ Settings
 

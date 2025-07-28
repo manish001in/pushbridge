@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.0] - 2025-07-28
+
+### Added
+- Functionality to send pushes to contacts
+- Ability to send pushes to contacts or devices or to all devices through context menu
+- Select default SMS device for SMS functionality in options page
+- Added information to README.md
+
+### Changed
+- Updated token bucket to 240
+
 ## [1.0.1] - 2025-07-26
 
 ### Changed
