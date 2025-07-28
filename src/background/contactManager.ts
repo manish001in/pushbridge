@@ -3,10 +3,12 @@
  * Handles contact fetching and management with Pushbullet chats API
  */
 
+import { ContactsApiResponse, PushbulletContact } from '../types/api-interfaces';
+
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { getLocal, setLocal } from './storage';
-import { ContactsApiResponse, PushbulletContact } from '../types/api-interfaces';
+
 
 export interface ContactCache {
   contacts: PushbulletContact[];

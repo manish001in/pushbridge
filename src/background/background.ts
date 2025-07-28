@@ -1622,57 +1622,57 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const menuId = info.menuItemId as string;
     let payload: PushPayload;
 
-    // Parse menu ID to determine action type and target  
-    const [actionType, targetType] = menuId.split('-');
-    
-    // Determine base payload based on action type
-    switch (actionType) {
-      case 'push':
-      // Handle the second part of compound IDs like 'push-page'
-        const actualAction = `${actionType}-${targetType}`;
-        switch (actualAction) {
-          case 'push-page':
-            payload = {
-              type: 'link',
-              url: tab.url!,
-              title: tab.title,
-              body: `Page shared from ${new URL(tab.url!).hostname}`,
-            };
-            break;
+    // Determine base payload based on menu ID
+    switch (menuId) {
+      case 'push-page':
+        payload = {
+          type: 'link',
+          url: tab.url!,
+          title: tab.title,
+          body: `Page shared from ${new URL(tab.url!).hostname}`,
+        };
+        break;
 
-          case 'push-link':
-            payload = {
-              type: 'link',
-              url: info.linkUrl!,
-              title: (info as any).linkText || info.linkUrl,
-              body: `Link shared from ${new URL(tab.url!).hostname}`,
-            };
-            break;
+      case 'push-link':
+        payload = {
+          type: 'link',
+          url: info.linkUrl!,
+          title: (info as any).linkText || info.linkUrl,
+          body: `Link shared from ${new URL(tab.url!).hostname}`,
+        };
+        break;
 
-          case 'push-image':
-            payload = {
-              type: 'link',
-              url: info.srcUrl!,
-              title: (info as any).altText || 'Image',
-              body: `Image shared from ${new URL(tab.url!).hostname}`,
-            };
-            break;
+      case 'push-image':
+        payload = {
+          type: 'link',
+          url: info.srcUrl!,
+          title: (info as any).altText || 'Image',
+          body: `Image shared from ${new URL(tab.url!).hostname}`,
+        };
+        break;
 
-          case 'push-selection':
-            payload = {
-              type: 'note',
-              body: info.selectionText!,
-              title: `Text from ${new URL(tab.url!).hostname}`,
-            };
-            break;
-
-          default:
-            return;
-        }
+      case 'push-selection':
+        payload = {
+          type: 'note',
+          body: info.selectionText!,
+          title: `Text from ${new URL(tab.url!).hostname}`,
+        };
         break;
 
       default:
-        return;
+        // Handle device/contact specific pushes
+        if (menuId.startsWith('push-device-') || menuId.startsWith('push-contact-')) {
+          // For device/contact specific pushes, we need to determine the base action
+          // This would be set up in the context menu creation
+          payload = {
+            type: 'note',
+            title: 'Shared via Pushbridge',
+            body: 'Content shared via context menu',
+          };
+        } else {
+          return;
+        }
+        break;
     }
 
     // Handle targeting based on menu ID structure

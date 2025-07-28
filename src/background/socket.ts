@@ -3,8 +3,8 @@
  * Handles real-time connection to Pushbullet stream API
  */
 
-import { getDevices, getDefaultSmsDevice } from './deviceManager';
 import { getContacts } from './contactManager';
+import { getDevices, getDefaultSmsDevice } from './deviceManager';
 import { reportError, PBError } from './errorManager';
 import { handleMirror, handleRemoteDismiss } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';

@@ -34,8 +34,8 @@ import {
   getContactByIden,
 } from '../../src/background/contactManager';
 import { reportError } from '../../src/background/errorManager';
-import { getLocal, setLocal } from '../../src/background/storage';
 import { httpClient } from '../../src/background/httpClient';
+import { getLocal, setLocal } from '../../src/background/storage';
 import { PushbulletContact, ContactsApiResponse } from '../../src/types/api-interfaces';
 
 // Mock storage functions

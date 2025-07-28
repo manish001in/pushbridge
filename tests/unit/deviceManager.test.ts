@@ -6,7 +6,6 @@ import {
   getSmsCapableDevices,
   getDefaultSmsDevice,
   setDefaultSmsDevice,
-  handleDefaultSmsDeviceChange,
 } from '../../src/background/deviceManager';
 
 // Mock the storage module
