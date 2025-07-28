@@ -125,6 +125,7 @@ Access settings by right-clicking the extension icon and selecting "Options":
 - **Connection**: Test WebSocket connection and auto-reconnect settings
 - **Diagnostics**: Export debug logs for troubleshooting
 - **SMS Device**: Choose default SMS device for SMS functionality
+- **Auto Open Push Links as Tabs**: Automatically open link pushes in new browser tabs when received
 
 ## 🛠️ Development
 

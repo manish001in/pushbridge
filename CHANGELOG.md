@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.0] - 2025-07-28
+
+### Added
+- Functionality to auto open push links as tabs. Go to options page to enable/disable.
+- New permission to open tabs
+
+### Changed
+- Updated README.md
+
+
+
 ## [1.1.0] - 2025-07-28
 
 ### Added

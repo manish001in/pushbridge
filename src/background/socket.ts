@@ -8,6 +8,7 @@ import { getDevices, getDefaultSmsDevice } from './deviceManager';
 import { reportError, PBError } from './errorManager';
 import { handleMirror, handleRemoteDismiss } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
+import { formatToThreeDecimals } from './numberUtils';
 import { getPushHistory } from './pushManager';
 import { syncAllSmsData } from './simpleSmsSync';
 import { getLocal } from './storage';
@@ -265,6 +266,7 @@ async function handlePushTickle(): Promise<void> {
             push.target_device_iden ||
             push.type === 'mirror' ||
             push.type === 'file' ||
+            push.type === 'link' ||
             push.channel_iden)
         ) {
           console.log(
@@ -284,11 +286,18 @@ async function handlePushTickle(): Promise<void> {
             console.log(
               `🆕 [WebSocket] New push detected: ${push.iden} (timestamp: ${push.created})`
             );
+            
+            // Handle specific push types
+            if (push.type === 'link') {
+              console.log('🔗 [WebSocket] Processing link push from history');
+              await handleLinkPush(push);
+            }
+            
             await notificationBadge.addPushNotifications(1);
             await unifiedNotificationTracker.markAsProcessed(
               'push',
               push.iden,
-              new Date(push.created).getTime()
+              new Date(formatToThreeDecimals(push.created)*1000).getTime()
             );
             newPushesCount++;
           } else {
@@ -371,6 +380,11 @@ async function handlePushMessage(message: WebSocketMessage): Promise<void> {
         await handleSmsChanged(push);
         break;
 
+      case 'link':
+        console.log('Link push received, opening in new tab');
+        await handleLinkPush(push);
+        break;
+
       default:
         console.log('Unhandled push type:', push.type);
     }
@@ -402,6 +416,53 @@ async function handleSmsChanged(_push: any): Promise<void> {
     await syncAllSmsData(defaultDevice.iden);
   } catch (error) {
     console.error('📱 [WebSocket] Failed to handle SMS changed:', error);
+  }
+}
+
+/**
+ * Handle link push by opening URL in new tab
+ */
+async function handleLinkPush(push: any): Promise<void> {
+  try {
+    console.log('🔗 [WebSocket] Link push received:', push);
+    
+    // Check if auto-open setting is enabled
+    const settings = await getLocal<any>('pb_settings');
+    if (!settings?.autoOpenPushLinksAsTab) {
+      console.log('🔗 [WebSocket] Auto-open links disabled, skipping tab creation');
+      return;
+    }
+    
+    // Extract URL from the push
+    const url = push.url;
+    if (!url) {
+      console.warn('⚠️ [WebSocket] Link push missing URL');
+      return;
+    }
+
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch (error) {
+      console.warn('⚠️ [WebSocket] Invalid URL format:', url, error);
+      return;
+    }
+
+    console.log(`🔗 [WebSocket] Opening URL in new tab: ${url}`);
+    
+    // Open URL in new tab
+    await chrome.tabs.create({
+      url: url,
+      active: false // Don't switch to the new tab immediately
+    });
+
+    console.log('✅ [WebSocket] Successfully opened link in new tab');
+  } catch (error) {
+    console.error('🔗 [WebSocket] Failed to handle link push:', error);
+    await reportError(PBError.Unknown, {
+      message: 'Failed to open link in new tab',
+      code: error instanceof Error ? undefined : 500,
+    });
   }
 }
 

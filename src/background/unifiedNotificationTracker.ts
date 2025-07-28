@@ -4,6 +4,7 @@
  * Prevents duplicate notifications and ensures accurate badge counts
  */
 
+import { formatToThreeDecimals } from './numberUtils';
 import { getLocal, setLocal } from './storage';
 
 export type NotificationType = 'push' | 'mirror' | 'sms' | 'channel';
@@ -165,7 +166,7 @@ class UnifiedNotificationTracker {
     const created =
       typeof notification.created === 'string'
         ? new Date(notification.created).getTime()
-        : notification.created;
+        : formatToThreeDecimals(notification.created) * 1000;
 
     const lastSeenTimestampMs = this.timestamps.lastSeenTimestamp * 1000; // Convert seconds to milliseconds
     const bufferTimeMs = BUFFER_TIME;

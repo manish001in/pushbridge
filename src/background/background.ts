@@ -39,6 +39,7 @@ import {
   getActiveMirrors,
 } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
+import { formatToThreeDecimals } from './numberUtils';
 import {
   createPush,
   getPushHistory,
@@ -886,7 +887,7 @@ async function handleGetEnhancedPushHistory(
                 await unifiedNotificationTracker.markAsProcessed(
                   'push',
                   push.iden,
-                  new Date(push.created).getTime()
+                  new Date(formatToThreeDecimals(push.created) * 1000).getTime()
                 );
                 newPushCount++;
               }
@@ -1057,7 +1058,7 @@ async function handleSyncHistory(sendResponse: (response: any) => void) {
               await unifiedNotificationTracker.markAsProcessed(
                 'push',
                 push.iden,
-                new Date(push.created).getTime()
+                new Date(formatToThreeDecimals(push.created) * 1000).getTime()
               );
             }
 
@@ -2503,7 +2504,7 @@ async function handlePopupOpen(sendResponse: (response: any) => void) {
       !lastPopupOpened || currentTime - lastPopupOpened > ONE_HOUR_MS;
 
     console.log(
-      `🪟 [PopupTime] Last popup opened: ${lastPopupOpened ? new Date(lastPopupOpened).toISOString() : 'never'}, current: ${new Date(currentTime).toISOString()}, should sync SMS: ${shouldTriggerSmsSync}`
+      `🪟 [PopupTime] Last popup opened: ${lastPopupOpened ? new Date(formatToThreeDecimals(lastPopupOpened)).toISOString() : 'never'}, current: ${new Date(formatToThreeDecimals(currentTime)).toISOString()}, should sync SMS: ${shouldTriggerSmsSync}`
     );
 
     // Always update the last popup opened time
@@ -2596,10 +2597,10 @@ async function collectDebugLog(): Promise<string> {
     const state = unifiedNotificationTracker.getState();
     logEntries.push(`=== Unified Tracker State ===`);
     logEntries.push(
-      `Last Seen: ${new Date(state.timestamps.lastSeenTimestamp).toISOString()}`
+      `Last Seen: ${new Date(formatToThreeDecimals(state.timestamps.lastSeenTimestamp)).toISOString()}`
     );
     logEntries.push(
-      `Last Updated: ${new Date(state.timestamps.lastUpdated).toISOString()}`
+      `Last Updated: ${new Date(formatToThreeDecimals(state.timestamps.lastUpdated)).toISOString()}`
     );
     logEntries.push(
       `Cache Entries: ${Object.values(state.cache).reduce((sum, arr) => sum + arr.length, 0)}`

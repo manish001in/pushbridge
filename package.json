@@ -1,6 +1,6 @@
 {
   "name": "pushbridge",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Unofficial manifest V3 Chrome extension that replicates core Pushbullet functionality via the official Pushbullet REST & WebSocket APIs",
   "type": "module",
   "scripts": {

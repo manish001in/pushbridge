@@ -7,6 +7,7 @@ interface Settings {
   notificationsEnabled: boolean;
   autoReconnect: boolean;
   defaultSmsDevice: string;
+  autoOpenPushLinksAsTab: boolean;
 }
 
 class OptionsPage {
@@ -16,6 +17,7 @@ class OptionsPage {
     notificationsEnabled: true,
     autoReconnect: true,
     defaultSmsDevice: '',
+    autoOpenPushLinksAsTab: false,
   };
 
   private devices: Array<{ iden: string; nickname: string; type: string }> = [];
@@ -32,9 +34,18 @@ class OptionsPage {
 
   private async loadSettings() {
     try {
-      const stored = await chrome.storage.local.get('pb_settings');
+      const stored = await chrome.storage.local.get(['pb_settings']);
       if (stored.pb_settings) {
         this.settings = { ...this.settings, ...stored.pb_settings };
+      } else {
+        await chrome.storage.local.set({ pb_settings: this.settings });
+      }
+      
+      // Load auto open push links setting from separate storage
+      if (stored.pb_settings.autoOpenPushLinksAsTab !== undefined) {
+        this.settings.autoOpenPushLinksAsTab = stored.pb_settings.autoOpenPushLinksAsTab;
+      } else {
+        await chrome.storage.local.set({ pb_settings: { ...this.settings, autoOpenPushLinksAsTab: this.settings.autoOpenPushLinksAsTab } });
       }
       
       // Load default SMS device from separate storage
@@ -87,7 +98,9 @@ class OptionsPage {
 
   private async saveSettings() {
     try {
-      await chrome.storage.local.set({ pb_settings: this.settings });
+      await chrome.storage.local.set({ 
+        pb_settings: this.settings,
+      });
       this.showMessage('Settings saved successfully!', 'success');
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -232,6 +245,18 @@ class OptionsPage {
       });
     }
 
+    // Auto open links toggle
+    const autoOpenLinksToggle = document.getElementById(
+      'auto-open-links-toggle'
+    ) as HTMLInputElement;
+    if (autoOpenLinksToggle) {
+      autoOpenLinksToggle.checked = this.settings.autoOpenPushLinksAsTab;
+      autoOpenLinksToggle.addEventListener('change', e => {
+        this.settings.autoOpenPushLinksAsTab = (e.target as HTMLInputElement).checked;
+        this.saveSettings();
+      });
+    }
+
     // Default device selection
     const defaultDeviceSelect = document.getElementById(
       'default-device'
@@ -304,6 +329,7 @@ class OptionsPage {
         notificationsEnabled: true,
         autoReconnect: true,
         defaultSmsDevice: '',
+        autoOpenPushLinksAsTab: false,
       };
       this.pendingSmsDeviceChange = null;
       await this.saveSettings();
@@ -334,6 +360,7 @@ class OptionsPage {
           notificationsEnabled: true,
           autoReconnect: true,
           defaultSmsDevice: '',
+          autoOpenPushLinksAsTab: false,
         };
         this.pendingSmsDeviceChange = null;
         await this.saveSettings();
@@ -425,6 +452,16 @@ class OptionsPage {
             <button id="update-sms-device" class="button secondary" disabled>
               Update SMS Device
             </button>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="auto-open-links-toggle">Auto Open Push Links as Tabs</label>
+            <p>Automatically open link pushes in new browser tabs when received</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="auto-open-links-toggle" class="toggle">
           </div>
         </div>
       </div>

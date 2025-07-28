@@ -91,6 +91,20 @@ export interface FilePush {
   receiver_iden?: string;
 }
 
+export interface LinkPush {
+  iden: string;
+  type: 'link';
+  title?: string;
+  body?: string;
+  url: string;
+  source_device_iden: string;
+  target_device_iden?: string;
+  created: number;
+  modified: number;
+  dismissed: boolean;
+  receiver_iden?: string;
+}
+
 export interface TransferRecord {
   id: string;
   type: 'sent' | 'received';
@@ -116,7 +130,7 @@ export interface PendingUpload {
 
 export interface WebSocketPushMessage {
   type: 'push';
-  push: MirrorPush | DismissalPush | FilePush;
+  push: MirrorPush | DismissalPush | FilePush | LinkPush;
 }
 
 export interface WebSocketTickleMessage {
