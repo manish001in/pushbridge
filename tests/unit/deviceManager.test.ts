@@ -3,6 +3,10 @@ import {
   getDevices,
   activateDevice,
   checkChromeDevice,
+  getSmsCapableDevices,
+  getDefaultSmsDevice,
+  setDefaultSmsDevice,
+  handleDefaultSmsDeviceChange,
 } from '../../src/background/deviceManager';
 
 // Mock the storage module
@@ -196,5 +200,79 @@ describe('Device Manager', () => {
     const result = await checkChromeDevice();
 
     expect(result).toBe(false);
+  });
+
+  describe('SMS Device Management', () => {
+    test('getSmsCapableDevices should filter SMS-capable devices', async () => {
+      // Mock getDevices to return devices with SMS capability
+      const mockDevices = [
+        { iden: 'device1', nickname: 'Phone', type: 'android', active: true, has_sms: true },
+        { iden: 'device2', nickname: 'Chrome', type: 'chrome', active: true, has_sms: false },
+        { iden: 'device3', nickname: 'Tablet', type: 'android', active: true, has_sms: true },
+        { iden: 'device4', nickname: 'Inactive Phone', type: 'android', active: false, has_sms: true },
+      ];
+
+      // Mock the cache to return the mock devices
+      (getLocal as jest.Mock).mockResolvedValue({
+        devices: mockDevices,
+        lastFetched: Date.now(),
+        hasMore: false,
+      });
+
+      const result = await getSmsCapableDevices();
+
+      // Should only return active devices with has_sms: true
+      expect(result).toEqual([
+        { iden: 'device1', nickname: 'Phone', type: 'android', active: true, has_sms: true },
+        { iden: 'device3', nickname: 'Tablet', type: 'android', active: true, has_sms: true },
+      ]);
+    });
+
+    test('getDefaultSmsDevice should return stored device if valid', async () => {
+      (getLocal as jest.Mock)
+        .mockResolvedValueOnce('device1') // stored defaultSmsDevice
+        .mockResolvedValueOnce({
+          devices: [
+            { iden: 'device1', nickname: 'Phone', type: 'android', active: true, has_sms: true },
+            { iden: 'device2', nickname: 'Chrome', type: 'chrome', active: true, has_sms: false },
+          ],
+          lastFetched: Date.now(),
+          hasMore: false,
+        });
+
+      const result = await getDefaultSmsDevice();
+
+      expect(result).toEqual({ iden: 'device1', nickname: 'Phone', type: 'android', active: true, has_sms: true });
+    });
+
+    test('setDefaultSmsDevice should validate device and call handleDefaultSmsDeviceChange', async () => {
+      // Mock the cache to return devices
+      (getLocal as jest.Mock).mockResolvedValue({
+        devices: [
+          { iden: 'device1', nickname: 'Phone', type: 'android', active: true, has_sms: true },
+        ],
+        lastFetched: Date.now(),
+        hasMore: false,
+      });
+
+      const result = await setDefaultSmsDevice('device1');
+
+      expect(result).toBe(true);
+    });
+
+    test('setDefaultSmsDevice should return false for invalid device', async () => {
+      // Mock the cache to return devices
+      (getLocal as jest.Mock).mockResolvedValue({
+        devices: [
+          { iden: 'device1', nickname: 'Phone', type: 'android', active: true, has_sms: false },
+        ],
+        lastFetched: Date.now(),
+        hasMore: false,
+      });
+
+      const result = await setDefaultSmsDevice('device1');
+
+      expect(result).toBe(false);
+    });
   });
 });

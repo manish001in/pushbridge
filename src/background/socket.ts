@@ -3,9 +3,14 @@
  * Handles real-time connection to Pushbullet stream API
  */
 
+import { getDevices, getDefaultSmsDevice } from './deviceManager';
 import { reportError, PBError } from './errorManager';
 import { handleMirror, handleRemoteDismiss } from './mirrorManager';
+import { notificationBadge } from './notificationBadge';
+import { getPushHistory } from './pushManager';
+import { syncAllSmsData } from './simpleSmsSync';
 import { getLocal } from './storage';
+import { unifiedNotificationTracker } from './unifiedNotificationTracker';
 
 interface WebSocketMessage {
   type: string;
@@ -237,13 +242,6 @@ async function handlePushTickle(): Promise<void> {
       '🔄 [WebSocket] Push tickle received, syncing history with unified tracker'
     );
 
-    // Import the push manager to get push history directly
-    const { getPushHistory } = await import('./pushManager');
-    const { unifiedNotificationTracker } = await import(
-      './unifiedNotificationTracker'
-    );
-    const { notificationBadge } = await import('./notificationBadge');
-
     // Get recent pushes and process them
     const history = await getPushHistory(50, 0, '');
 
@@ -317,9 +315,6 @@ async function handleDeviceTickle(): Promise<void> {
       '🔄 [WebSocket] Device tickle received, refreshing devices directly'
     );
 
-    // Import the device manager functions directly
-    const { getDevices } = await import('./deviceManager');
-
     // Refresh devices by calling getDevices with force refresh
     await getDevices(true);
     console.log('🔄 [WebSocket] Devices refreshed successfully');
@@ -374,9 +369,16 @@ async function handleSmsChanged(_push: any): Promise<void> {
   try {
     console.log('📱 [WebSocket] SMS changed detected, triggering simple sync');
     console.log('📱 [WebSocket] SMS changed push:', _push);
+    
+    // Get default SMS device and sync
+    const defaultDevice = await getDefaultSmsDevice();
+    if (!defaultDevice) {
+      console.warn('⚠️ [WebSocket] No SMS device for sync');
+      return;
+    }
+
     // Use the simple SMS sync system
-    const { triggerSmsSync } = await import('./background');
-    await triggerSmsSync('sms_changed');
+    await syncAllSmsData(defaultDevice.iden);
   } catch (error) {
     console.error('📱 [WebSocket] Failed to handle SMS changed:', error);
   }

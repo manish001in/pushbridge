@@ -6,6 +6,7 @@ interface Settings {
   defaultDevice: string;
   notificationsEnabled: boolean;
   autoReconnect: boolean;
+  defaultSmsDevice: string;
 }
 
 class OptionsPage {
@@ -14,13 +15,17 @@ class OptionsPage {
     defaultDevice: 'all',
     notificationsEnabled: true,
     autoReconnect: true,
+    defaultSmsDevice: '',
   };
 
   private devices: Array<{ iden: string; nickname: string; type: string }> = [];
+  private smsDevices: Array<{ iden: string; nickname: string; type: string; manufacturer?: string; model?: string }> = [];
+  private pendingSmsDeviceChange: string | null = null;
 
   async init() {
     await this.loadSettings();
     await this.loadDevices();
+    await this.loadSmsDevices();
     this.render();
     this.setupEventListeners();
   }
@@ -30,6 +35,12 @@ class OptionsPage {
       const stored = await chrome.storage.local.get('pb_settings');
       if (stored.pb_settings) {
         this.settings = { ...this.settings, ...stored.pb_settings };
+      }
+      
+      // Load default SMS device from separate storage
+      const defaultSmsDevice = await chrome.storage.local.get('defaultSmsDevice');
+      if (defaultSmsDevice.defaultSmsDevice) {
+        this.settings.defaultSmsDevice = defaultSmsDevice.defaultSmsDevice;
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -47,6 +58,33 @@ class OptionsPage {
     }
   }
 
+  private async loadSmsDevices() {
+    try {
+      const response = await chrome.runtime.sendMessage({ cmd: 'GET_SMS_CAPABLE_DEVICES' });
+      if (response.success) {
+        this.smsDevices = response.devices || [];
+      }
+    } catch (error) {
+      console.error('Failed to load SMS devices:', error);
+    }
+  }
+
+  private getDeviceDisplayName(device: { nickname: string; manufacturer?: string; model?: string }): string {
+    if (device.nickname) {
+      return device.nickname;
+    }
+    
+    if (device.manufacturer && device.model) {
+      return `${device.manufacturer} ${device.model}`;
+    }
+    
+    if (device.model) {
+      return device.model;
+    }
+    
+    return 'Unknown Device';
+  }
+
   private async saveSettings() {
     try {
       await chrome.storage.local.set({ pb_settings: this.settings });
@@ -54,6 +92,54 @@ class OptionsPage {
     } catch (error) {
       console.error('Failed to save settings:', error);
       this.showMessage('Failed to save settings', 'error');
+    }
+  }
+
+  private async updateSmsDevice() {
+    if (!this.pendingSmsDeviceChange) {
+      return;
+    }
+
+    try {
+      // Show loading state
+      const updateBtn = document.getElementById('update-sms-device') as HTMLButtonElement;
+      if (updateBtn) {
+        updateBtn.disabled = true;
+        updateBtn.textContent = 'Updating...';
+      }
+
+      // Call the background handler to update SMS device
+      const response = await chrome.runtime.sendMessage({
+        cmd: 'SET_DEFAULT_SMS_DEVICE',
+        deviceIden: this.pendingSmsDeviceChange
+      });
+
+      if (response.success) {
+        // Update the settings
+        this.settings.defaultSmsDevice = this.pendingSmsDeviceChange;
+        this.pendingSmsDeviceChange = null;
+        
+        // Save the setting
+        await chrome.storage.local.set({ defaultSmsDevice: this.settings.defaultSmsDevice });
+        
+        this.showMessage('SMS device updated successfully!', 'success');
+        
+        // Re-render to update UI state
+        this.render();
+        this.setupEventListeners();
+      } else {
+        this.showMessage(`Failed to update SMS device: ${response.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Failed to update SMS device:', error);
+      this.showMessage('Failed to update SMS device', 'error');
+    } finally {
+      // Reset button state
+      const updateBtn = document.getElementById('update-sms-device') as HTMLButtonElement;
+      if (updateBtn) {
+        updateBtn.disabled = false;
+        updateBtn.textContent = 'Update';
+      }
     }
   }
 
@@ -158,6 +244,19 @@ class OptionsPage {
       });
     }
 
+    // SMS device selection
+    const smsDeviceSelect = document.getElementById(
+      'default-sms-device'
+    ) as HTMLSelectElement;
+    if (smsDeviceSelect) {
+      smsDeviceSelect.value = this.settings.defaultSmsDevice;
+      smsDeviceSelect.addEventListener('change', e => {
+        const newValue = (e.target as HTMLSelectElement).value;
+        this.pendingSmsDeviceChange = newValue !== this.settings.defaultSmsDevice ? newValue : null;
+        this.updateSmsDeviceButtonState();
+      });
+    }
+
     // Test WebSocket button
     const testWebSocketBtn = document.getElementById('test-websocket');
     if (testWebSocketBtn) {
@@ -181,6 +280,20 @@ class OptionsPage {
     if (resetAllBtn) {
       resetAllBtn.addEventListener('click', () => this.resetAllData());
     }
+
+    // SMS device update button
+    const updateSmsDeviceBtn = document.getElementById('update-sms-device');
+    if (updateSmsDeviceBtn) {
+      updateSmsDeviceBtn.addEventListener('click', () => this.updateSmsDevice());
+    }
+  }
+
+  private updateSmsDeviceButtonState() {
+    const updateBtn = document.getElementById('update-sms-device') as HTMLButtonElement;
+    if (updateBtn) {
+      updateBtn.disabled = !this.pendingSmsDeviceChange;
+      updateBtn.textContent = this.pendingSmsDeviceChange ? 'Update SMS Device' : 'Update SMS Device';
+    }
   }
 
   private async resetSettings() {
@@ -190,8 +303,11 @@ class OptionsPage {
         defaultDevice: 'all',
         notificationsEnabled: true,
         autoReconnect: true,
+        defaultSmsDevice: '',
       };
+      this.pendingSmsDeviceChange = null;
       await this.saveSettings();
+      await chrome.storage.local.set({ defaultSmsDevice: '' });
       this.render();
       this.setupEventListeners();
     }
@@ -217,8 +333,11 @@ class OptionsPage {
           defaultDevice: 'all',
           notificationsEnabled: true,
           autoReconnect: true,
+          defaultSmsDevice: '',
         };
+        this.pendingSmsDeviceChange = null;
         await this.saveSettings();
+        await chrome.storage.local.set({ defaultSmsDevice: '' });
         this.render();
         this.setupEventListeners();
       } catch (error) {
@@ -285,6 +404,27 @@ class OptionsPage {
                 )
                 .join('')}
             </select>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="default-sms-device">Default SMS device</label>
+            <p>Choose which device to use for SMS functionality</p>
+          </div>
+          <div class="setting-control sms-device-control">
+            <select id="default-sms-device" class="select">
+              <option value="">No SMS device selected</option>
+              ${this.smsDevices
+                .map(
+                  device =>
+                    `<option value="${device.iden}">${this.getDeviceDisplayName(device)} (${device.type})</option>`
+                )
+                .join('')}
+            </select>
+            <button id="update-sms-device" class="button secondary" disabled>
+              Update SMS Device
+            </button>
           </div>
         </div>
       </div>

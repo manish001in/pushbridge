@@ -12,7 +12,7 @@ export interface TokenBucketStatus {
 class TokenBucket {
   private bucket: number = 60; // Start with reasonable tokens for initial requests
   private lastRefill: number = 0;
-  private readonly maxBucketSize: number = 120; // Maximum bucket size
+  private readonly maxBucketSize: number = 240; // Maximum bucket size
 
   // Throttling for consume logging
   private lastConsumeLogTime: number = 0;

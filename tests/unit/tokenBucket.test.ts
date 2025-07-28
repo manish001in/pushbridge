@@ -33,11 +33,11 @@ describe('Token Bucket', () => {
     });
 
     it('should cap bucket at maximum size', () => {
-      const remaining = 200; // More than max bucket size (120)
+      const remaining = 300; // More than max bucket size (240)
       tokenBucket.refillBucket(remaining);
 
       const status = tokenBucket.getStatus();
-      expect(status.bucket).toBe(120); // Should be capped at 120
+      expect(status.bucket).toBe(240); // Should be capped at 240
     });
 
     it('should refill when minute changes', () => {
@@ -216,7 +216,7 @@ describe('Token Bucket', () => {
       tokenBucket.refillBucket(1000000);
 
       const status = tokenBucket.getStatus();
-      expect(status.bucket).toBe(120); // Should be capped at max bucket size
+      expect(status.bucket).toBe(240); // Should be capped at max bucket size
     });
   });
 });

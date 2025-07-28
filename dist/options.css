@@ -230,6 +230,27 @@ body {
   background: #dc2626;
 }
 
+/* SMS device selection layout */
+.sms-device-control {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.sms-device-control .select {
+  flex: 1;
+}
+
+.sms-device-control .button {
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+.sms-device-control .button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Footer */
 .footer {
   text-align: center;
@@ -272,6 +293,16 @@ body {
 
   .setting-control {
     margin-top: 12px;
+    width: 100%;
+  }
+
+  .sms-device-control {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sms-device-control .button {
+    min-width: auto;
     width: 100%;
   }
 

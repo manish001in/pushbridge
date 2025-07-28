@@ -19,8 +19,10 @@ import {
   ensureChromeDevice,
   getPushableDevices,
   clearDeviceCache,
+  getSmsCapableDevices,
+  getDefaultSmsDevice,
+  setDefaultSmsDevice,
 } from './deviceManager';
-import { getDefaultSmsDevice } from './deviceManager';
 import { reportError, PBError } from './errorManager';
 import {
   uploadFile,
@@ -1758,7 +1760,6 @@ async function handleGetSmsCapableDevices(
   sendResponse: (response: any) => void
 ) {
   try {
-    const { getSmsCapableDevices } = await import('./deviceManager');
     const devices = await getSmsCapableDevices();
     sendResponse({ success: true, devices });
   } catch (error) {
@@ -1775,7 +1776,6 @@ async function handleSetDefaultSmsDevice(
   sendResponse: (response: any) => void
 ) {
   try {
-    const { setDefaultSmsDevice } = await import('./deviceManager');
     const success = await setDefaultSmsDevice(deviceIden);
     sendResponse({ success });
   } catch (error) {

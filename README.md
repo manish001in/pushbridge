@@ -97,6 +97,7 @@ A Manifest V3 compatible Chrome extension that replicates core Pushbullet functi
 2. Select a conversation from the list
 3. Type and send messages using your phone's number
 4. Receive incoming SMS messages in real-time
+5. Update the default SMS device in the options page
 
 ### Channel Management
 
@@ -121,6 +122,7 @@ Access settings by right-clicking the extension icon and selecting "Options":
 - **Default Device**: Choose which device receives pushes by default
 - **Connection**: Test WebSocket connection and auto-reconnect settings
 - **Diagnostics**: Export debug logs for troubleshooting
+- **SMS Device**: Choose default SMS device for SMS functionality
 
 ## 🛠️ Development
 
@@ -196,6 +198,7 @@ npm run test:coverage
 - Ensure your phone has Pushbullet app installed
 - Check that SMS mirroring is enabled in Pushbullet app
 - Verify your phone is connected to the internet
+- Make sure the selected default SMS device is active and has SMS capability
 
 **File uploads failing**
 
