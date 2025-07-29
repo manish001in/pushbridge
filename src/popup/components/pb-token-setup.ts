@@ -112,6 +112,12 @@ export class PbTokenSetup extends LitElement {
       color: #10b981;
       font-size: 14px;
       margin-top: 8px;
+      text-align: center;
+      padding: 16px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      font-weight: 500;
     }
 
     .help-text {
@@ -213,7 +219,8 @@ export class PbTokenSetup extends LitElement {
       return html`
         <div class="container">
           <div class="success-message">
-            ✅ Token verified successfully! You can now use Pushbridge.
+            ✅ Token verified successfully! Loading your data...
+            <div class="loading" style="margin-top: 12px;"></div>
           </div>
         </div>
       `;
@@ -296,12 +303,16 @@ export class PbTokenSetup extends LitElement {
 
       if (response.ok) {
         this.isSuccess = true;
-        // Dispatch custom event for parent components
-        this.dispatchEvent(
-          new CustomEvent('token-verified', {
-            detail: { token: this.token.trim() },
-          })
-        );
+        
+        // Show success message briefly before refreshing popup
+        setTimeout(() => {
+          // Dispatch custom event for parent components
+          this.dispatchEvent(
+            new CustomEvent('token-verified', {
+              detail: { token: this.token.trim() },
+            })
+          );
+        }, 1500); // 1.5 second delay to show success message
       } else {
         this.errorMessage =
           response.error ||

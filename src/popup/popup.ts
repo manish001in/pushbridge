@@ -29,6 +29,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('🪟 [Popup] Failed to send POPUP_OPEN message:', error);
   }
 
+  await initializePopup();
+});
+
+/**
+ * Initialize the popup UI based on token status
+ */
+async function initializePopup() {
   const container = document.querySelector('.container');
   if (!container) {
     console.error('Container element not found');
@@ -41,6 +48,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!token) {
       // Show token setup UI
       container.innerHTML = '<pb-token-setup></pb-token-setup>';
+      
+      // Add event listener for token verification
+      const tokenSetup = document.querySelector('pb-token-setup');
+      if (tokenSetup) {
+        tokenSetup.addEventListener('token-verified', async () => {
+          console.log('🪟 [Popup] Token verified, refreshing popup...');
+          // Re-initialize popup to show main UI
+          await initializePopup();
+        });
+      }
     } else {
       // Check if user has SMS-capable devices
       const hasSms = await hasSmsCapableDevices();
@@ -123,7 +140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       </div>
     `;
   }
-});
+}
 
 function setupTabNavigation() {
   const tabButtons = document.querySelectorAll('.tab-button');

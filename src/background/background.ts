@@ -10,8 +10,6 @@ import {
   getOwnedChannels,
   refreshChannelData,
   getSubscriptionPosts,
-  clearSubscriptionsCache,
-  clearOwnedChannelsCache,
 } from './channelManager';
 import { getContacts, clearContactCache, getContactByIden } from './contactManager';
 import { contextManager } from './contextManager';
@@ -23,6 +21,7 @@ import {
   getDefaultSmsDevice,
   setDefaultSmsDevice,
   getDevices,
+  hasSmsCapableDevices,
 } from './deviceManager';
 import { reportError, PBError } from './errorManager';
 import {
@@ -75,43 +74,7 @@ import { unifiedNotificationTracker } from './unifiedNotificationTracker';
 const POPUP_LAST_OPENED_KEY = 'pb_last_popup_opened';
 const ONE_HOUR_MS = 3600000; // 1 hour in milliseconds
 
-/**
- * Clear all cursor storage when user logs out or resets
- */
-async function clearAllCursors(): Promise<void> {
-  try {
-    const cursorKeys = [
-      'pb_recent_pushes_state',
-      'pb_devices_cursor',
-      'pb_devices_has_more',
-      'pb_subscriptions_cursor',
-      'pb_subscriptions_has_more',
-      'pb_channels_cursor',
-      'pb_channels_has_more',
-      'pb_contacts_cursor',
-      'pb_contacts_has_more',
-    ];
 
-    // Clear all cursor-related storage
-    for (const key of cursorKeys) {
-      await setLocal(key, null);
-    }
-
-    // Clear SMS thread cursors (they use dynamic keys)
-    const allStorage = await chrome.storage.local.get(null);
-    const smsCursorKeys = Object.keys(allStorage).filter(key =>
-      key.startsWith('pb_sms_thread_cursor_')
-    );
-
-    for (const key of smsCursorKeys) {
-      await chrome.storage.local.remove(key);
-    }
-
-    console.log('All cursors cleared');
-  } catch (error) {
-    console.error('Failed to clear cursors:', error);
-  }
-}
 
 /**
  * Initialize SMS sync functionality
@@ -562,6 +525,10 @@ async function handleTokenVerification(
   sendResponse: (response: any) => void
 ) {
   try {
+    // Initialize token bucket to ensure we have tokens for API calls
+    tokenBucket.forceRefill(100);
+    console.log('🔑 [Background] Token bucket initialized for verification');
+    
     // Verify token against Pushbullet API
     const response = await httpClient.fetch(
       'https://api.pushbullet.com/v2/users/me',
@@ -586,6 +553,11 @@ async function handleTokenVerification(
       try {
         const deviceIden = await ensureChromeDevice();
         console.log('Chrome device registered:', deviceIden);
+        
+        // Fetch important data after successful token verification
+        console.log('🔄 [Background] Fetching initial data after token verification...');
+        await fetchInitialDataAfterTokenVerification();
+        
         sendResponse({ ok: true, user: userData, deviceIden });
       } catch (deviceError) {
         console.error('Device registration failed:', deviceError);
@@ -630,6 +602,100 @@ async function handleTokenVerification(
       ok: false,
       error: 'Failed to verify token. Please check your internet connection.',
     });
+  }
+}
+
+/**
+ * Fetch important data after successful token verification
+ */
+async function fetchInitialDataAfterTokenVerification(): Promise<void> {
+  try {
+    console.log('🔄 [Background] Starting initial data fetch...');
+    
+    // Fetch data in parallel for better performance
+    const fetchPromises = [
+      // Fetch devices
+      getPushableDevices(true).then(() => {
+        console.log('✅ [Background] Devices fetched successfully');
+      }).catch(error => {
+        console.error('❌ [Background] Failed to fetch devices:', error);
+      }),
+      
+      // Fetch contacts
+      getContacts(true).then(() => {
+        console.log('✅ [Background] Contacts fetched successfully');
+      }).catch(error => {
+        console.error('❌ [Background] Failed to fetch contacts:', error);
+      }),
+      
+      // Fetch channel subscriptions
+      (async () => {
+        try {
+          const { getSubscriptions } = await import('./channelManager');
+          await getSubscriptions(true);
+          console.log('✅ [Background] Channel subscriptions fetched successfully');
+        } catch (error) {
+          console.error('❌ [Background] Failed to fetch channel subscriptions:', error);
+        }
+      })(),
+      
+      // Fetch recent pushes
+      (async () => {
+        try {
+          const history = await getEnhancedPushHistory(
+            { type: 'manual', timestamp: Date.now(), reason: 'token_verification' },
+            50, // Limit to 50 recent pushes
+            0, // No modifiedAfter filter for initial fetch
+            undefined // No cursor for initial fetch
+          );
+          console.log(`✅ [Background] Recent pushes fetched successfully (${history.pushes.length} pushes)`);
+        } catch (error) {
+          console.error('❌ [Background] Failed to fetch recent pushes:', error);
+        }
+      })(),
+      
+      // Initialize SMS sync if available
+      (async () => {
+        try {
+          const hasSms = await hasSmsCapableDevices();
+          if (hasSms) {
+            await triggerSmsSync('token_verification');
+            console.log('✅ [Background] SMS sync triggered successfully');
+          } else {
+            console.log('ℹ️ [Background] No SMS-capable devices found, skipping SMS sync');
+          }
+        } catch (error) {
+          console.error('❌ [Background] Failed to trigger SMS sync:', error);
+        }
+      })(),
+      
+      // Create context menus
+      (async () => {
+        try {
+          await createContextMenus();
+          console.log('✅ [Background] Context menus created successfully');
+        } catch (error) {
+          console.error('❌ [Background] Failed to create context menus:', error);
+        }
+      })(),
+      
+      // Ensure WebSocket is connected
+      (async () => {
+        try {
+          await initializeWebSocket();
+          console.log('✅ [Background] WebSocket connection ensured');
+        } catch (error) {
+          console.error('❌ [Background] Failed to ensure WebSocket connection:', error);
+        }
+      })(),
+    ];
+    
+    // Wait for all fetches to complete (but don't fail if some fail)
+    await Promise.allSettled(fetchPromises);
+    
+    console.log('🎉 [Background] Initial data fetch completed');
+  } catch (error) {
+    console.error('❌ [Background] Error during initial data fetch:', error);
   }
 }
 
@@ -2431,35 +2497,58 @@ async function handleClearSmsNotifications(
  */
 async function handleClearAllData(sendResponse: (response: any) => void) {
   try {
-    // Clear all cursors
-    await clearAllCursors();
+    console.log('🧹 [Background] Starting complete data clear...');
+    
+    // Clear ALL storage from chrome.storage.local (this clears everything)
+    await chrome.storage.local.clear();
+    console.log('🧹 [Background] All chrome.storage.local data cleared');
 
-    // Clear all caches
-    await Promise.all([
-      clearDeviceCache(),
-      clearSubscriptionsCache(),
-      clearOwnedChannelsCache(),
-      clearContactCache(),
-    ]);
+    // Clear ALL storage from chrome.storage.session
+    await chrome.storage.session.clear();
+    console.log('🧹 [Background] All chrome.storage.session data cleared');
 
-    // Clear other storage
-    await Promise.all([
-      setLocal('pb_token', null),
-      setLocal('pb_device_iden', null),
-      setLocal('pb_last_modified', null),
-      setLocal('pb_settings', null),
-      setLocal('pb_device_cache', null),
-      setLocal('pb_channel_subs', null),
-      setLocal('pb_owned_channels', null),
-      setLocal('contacts', null),
-      setLocal('pb_recent_pushes_state', null),
-    ]);
+    // Reset essential in-memory state
+    try {
+      // Reset token bucket
+      tokenBucket.reset();
+      console.log('🧹 [Background] Token bucket reset');
+    } catch (error) {
+      console.warn('🧹 [Background] Failed to reset token bucket:', error);
+    }
 
-    console.log('All data cleared successfully');
-    sendResponse({ success: true });
+    try {
+      // Reset rate limit manager
+      await rateLimitManager.clearState();
+      console.log('🧹 [Background] Rate limit manager reset');
+    } catch (error) {
+      console.warn('🧹 [Background] Failed to reset rate limit manager:', error);
+    }
+
+    try {
+      // Reset notification tracker
+      await unifiedNotificationTracker.clearAllNotifications();
+      console.log('🧹 [Background] Notification tracker reset');
+    } catch (error) {
+      console.warn('🧹 [Background] Failed to reset notification tracker:', error);
+    }
+
+    // Clear any active operations
+    try {
+      await clearQueue();
+      console.log('🧹 [Background] Operation queue cleared');
+    } catch (error) {
+      console.warn('🧹 [Background] Failed to clear operation queue:', error);
+    }
+
+    console.log('🎉 [Background] All extension data cleared successfully');
+    sendResponse({ success: true, message: 'All extension data has been cleared' });
   } catch (error) {
-    console.error('Failed to clear all data:', error);
-    sendResponse({ success: false, error: 'Failed to clear all data' });
+    console.error('❌ [Background] Failed to clear all data:', error);
+    sendResponse({ 
+      success: false, 
+      error: 'Failed to clear all data',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 }
 

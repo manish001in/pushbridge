@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.1] - 2025-07-29
+
+### Fixed
+- How verification is handled after clearing all data!
+
+
 ## [1.2.0] - 2025-07-28
 
 ### Added
