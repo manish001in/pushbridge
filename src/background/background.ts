@@ -1683,80 +1683,88 @@ async function createContextMenus() {
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  console.log('🔄 [Background] Context menu clicked:', info, tab);
   if (!tab) return;
 
+  console.log('🔄 [Background] Context menu processing:', info, tab);
   try {
     const menuId = info.menuItemId as string;
     let payload: PushPayload;
+    let baseAction: string;
 
-    // Determine base payload based on menu ID
-    switch (menuId) {
-      case 'push-page':
-        payload = {
-          type: 'link',
-          url: tab.url!,
-          title: tab.title,
-          body: `Page shared from ${new URL(tab.url!).hostname}`,
-        };
-        break;
-
-      case 'push-link':
-        payload = {
-          type: 'link',
-          url: info.linkUrl!,
-          title: (info as any).linkText || info.linkUrl,
-          body: `Link shared from ${new URL(tab.url!).hostname}`,
-        };
-        break;
-
-      case 'push-image':
-        payload = {
-          type: 'link',
-          url: info.srcUrl!,
-          title: (info as any).altText || 'Image',
-          body: `Image shared from ${new URL(tab.url!).hostname}`,
-        };
-        break;
-
-      case 'push-selection':
-        payload = {
-          type: 'note',
-          body: info.selectionText!,
-          title: `Text from ${new URL(tab.url!).hostname}`,
-        };
-        break;
-
-      default:
-        // Handle device/contact specific pushes
-        if (menuId.startsWith('push-device-') || menuId.startsWith('push-contact-')) {
-          // For device/contact specific pushes, we need to determine the base action
-          // This would be set up in the context menu creation
-          payload = {
-            type: 'note',
-            title: 'Shared via Pushbridge',
-            body: 'Content shared via context menu',
-          };
-        } else {
-          return;
-        }
-        break;
+    // Determine base payload based on menu ID prefix
+    if (menuId.startsWith('push-page')) {
+      baseAction = 'push-page';
+      payload = {
+        type: 'link',
+        url: tab.url!,
+        title: tab.title,
+        body: `Page shared from ${new URL(tab.url!).hostname}`,
+      };
+    } else if (menuId.startsWith('push-link')) {
+      baseAction = 'push-link';
+      payload = {
+        type: 'link',
+        url: info.linkUrl!,
+        title: (info as any).linkText || info.linkUrl,
+        body: `Link shared from ${new URL(tab.url!).hostname}`,
+      };
+    } else if (menuId.startsWith('push-image')) {
+      baseAction = 'push-image';
+      payload = {
+        type: 'link',
+        url: info.srcUrl!,
+        title: (info as any).altText || 'Image',
+        body: `Image shared from ${new URL(tab.url!).hostname}`,
+      };
+    } else if (menuId.startsWith('push-selection')) {
+      baseAction = 'push-selection';
+      payload = {
+        type: 'note',
+        body: info.selectionText!,
+        title: `Text from ${new URL(tab.url!).hostname}`,
+      };
+    } else {
+      console.warn('🔄 [Background] Unknown context menu ID:', menuId);
+      return;
     }
 
     // Handle targeting based on menu ID structure
-    if (menuId.includes('-device-')) {
+    if (menuId.endsWith('-all')) {
+      // Send to all devices (default behavior) - no targeting needed
+      console.log('🔄 [Background] Sending to all devices');
+    } else if (menuId.includes('-device-')) {
       // Extract device iden from menu ID
-      const deviceIden = menuId.substring(menuId.lastIndexOf('-') + 1);
-      payload.targetDeviceIden = deviceIden;
-    } else if (menuId.includes('-contact-')) {
-      // Extract contact iden and get contact email
-      const contactIden = menuId.substring(menuId.lastIndexOf('-') + 1);
-      const contact = await getContactByIden(contactIden);
-      if (contact) {
-        payload.email = contact.email;
+      const deviceMatch = menuId.match(new RegExp(`${baseAction}-device-(.+)`));
+      if (deviceMatch && deviceMatch[1]) {
+        const deviceIden = deviceMatch[1];
+        payload.targetDeviceIden = deviceIden;
+        console.log('🔄 [Background] Sending to device:', deviceIden);
+      } else {
+        console.error('🔄 [Background] Failed to extract device ID from menu ID:', menuId);
+        return;
       }
-    } else if (menuId.endsWith('-all')) {
-      // Send to all devices (default behavior)
-      // No targeting needed
+    } else if (menuId.includes('-contact-')) {
+      // Extract contact iden from menu ID
+      const contactMatch = menuId.match(new RegExp(`${baseAction}-contact-(.+)`));
+      if (contactMatch && contactMatch[1]) {
+        const contactIden = contactMatch[1];
+        const contact = await getContactByIden(contactIden);
+        if (contact) {
+          payload.email = contact.email;
+          console.log('🔄 [Background] Sending to contact:', contact.email);
+        } else {
+          console.error('🔄 [Background] Contact not found for ID:', contactIden);
+          return;
+        }
+      } else {
+        console.error('🔄 [Background] Failed to extract contact ID from menu ID:', menuId);
+        return;
+      }
+    } else {
+      // This is a parent menu item (like 'push-page' without suffix)
+      // Send to all devices by default
+      console.log('🔄 [Background] Parent menu clicked, sending to all devices');
     }
 
     // Create the push
@@ -1770,7 +1778,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       message: 'Your push has been sent successfully!',
     });
   } catch (error) {
-    console.error('Failed to handle context menu click:', error);
+    console.error('❌ [Background] Failed to handle context menu click:', error);
 
     // Show error notification
     await chrome.notifications.create({

@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.2] - 2025-07-29
+
+### Added
+- Added tests for context menu
+
+### Fixed
+- Issue with context menu parsing fixed
+
+
 ## [1.2.1] - 2025-07-29
 
 ### Fixed
