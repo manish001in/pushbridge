@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.3] - 2025-07-30
+
+### Added
+- Deduplication for queue to avoid duplicate requests
+
+### Changed
+- New device is created with timestamp to keep track
+
 ## [1.2.2] - 2025-07-29
 
 ### Added

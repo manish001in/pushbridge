@@ -36,6 +36,7 @@ class OperationQueue {
   private processingInterval: ReturnType<typeof setInterval> | null = null;
   private readonly maxRetryCount: number = 3;
   private readonly processingDelay: number = 5000; // 5 seconds between operations
+  private readonly deduplicationThreshold: number = 5; // Deduplicate when queue has more than 5 operations
 
   // Throttling for log messages
   private lastNoTokensLogTime: number = 0;
@@ -44,6 +45,96 @@ class OperationQueue {
 
   // Track if we've made any successful requests yet (for bootstrap)
   private hasBootstrapped: boolean = false;
+
+  /**
+   * Check if a URL is a /v2/permanents endpoint
+   */
+  private isPermanentsEndpoint(url: string): boolean {
+    return url.includes('/v2/permanents/');
+  }
+
+  /**
+   * Merge callbacks from source operation into target operation
+   */
+  private mergeCallbacks(target: QueuedOperation, source: QueuedOperation): void {
+    // Create wrapper functions to call both the original and the merged callbacks
+    const originalResolve = target.resolve;
+    const originalReject = target.reject;
+
+    target.resolve = (response: Response) => {
+      originalResolve(response);
+      source.resolve(response);
+    };
+
+    target.reject = (error: Error) => {
+      originalReject(error);
+      source.reject(error);
+    };
+  }
+
+  /**
+   * Deduplicate /v2/permanents operations in the queue
+   */
+  private async deduplicateQueue(): Promise<void> {
+    if (this.queue.length <= this.deduplicationThreshold) {
+      return; // No need to deduplicate
+    }
+
+    console.log(`[OperationQueue] Deduplicating queue with ${this.queue.length} operations`);
+
+    // Group operations by URL + method
+    const groups = new Map<string, QueuedOperation[]>();
+
+    for (const op of this.queue) {
+      if (this.isPermanentsEndpoint(op.url)) {
+        const method = op.options.method || 'GET';
+        const key = `${op.url}|${method}`;
+        
+        if (!groups.has(key)) {
+          groups.set(key, []);
+        }
+        groups.get(key)!.push(op);
+      }
+    }
+
+    // For each group with duplicates, keep the latest operation
+    const deduplicatedQueue: QueuedOperation[] = [];
+    let deduplicationCount = 0;
+
+    for (const [key, operations] of groups) {
+      if (operations.length > 1) {
+        // Sort by timestamp, keep the latest
+        operations.sort((a, b) => b.timestamp - a.timestamp);
+        const latestOp = operations[0];
+
+        // Merge callbacks from all duplicate operations into the latest one
+        for (let i = 1; i < operations.length; i++) {
+          this.mergeCallbacks(latestOp, operations[i]);
+          deduplicationCount++;
+        }
+
+        deduplicatedQueue.push(latestOp);
+        console.log(`[OperationQueue] Deduplicated ${operations.length} operations for ${key}`);
+      } else {
+        // No duplicates, keep as-is
+        deduplicatedQueue.push(operations[0]);
+      }
+    }
+
+    // Add non-permanents operations back
+    for (const op of this.queue) {
+      if (!this.isPermanentsEndpoint(op.url)) {
+        deduplicatedQueue.push(op);
+      }
+    }
+
+    this.queue = deduplicatedQueue;
+    
+    if (deduplicationCount > 0) {
+      console.log(`[OperationQueue] Deduplication complete: removed ${deduplicationCount} duplicate operations, queue now has ${this.queue.length} operations`);
+      await this.persistQueue();
+    }
+  }
 
   /**
    * Enqueue an operation for later processing
@@ -132,6 +223,11 @@ class OperationQueue {
         this.lastBackoffLogTime = now;
       }
       return;
+    }
+
+    // Check if we need to deduplicate (only when queue is large)
+    if (this.queue.length > this.deduplicationThreshold) {
+      await this.deduplicateQueue();
     }
 
     // Check if we have tokens available

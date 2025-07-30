@@ -83,7 +83,7 @@ async function createChromeDevice(): Promise<string> {
   }
 
   const deviceData = {
-    nickname: 'Chrome',
+    nickname: `Chrome (Pushbridge ${new Date().toLocaleString()})`,
     type: 'chrome',
     model: 'Chrome Extension',
   };

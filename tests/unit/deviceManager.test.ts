@@ -59,7 +59,7 @@ describe('Device Manager', () => {
         headers: expect.objectContaining({
           'Access-Token': 'test-token',
         }),
-        body: expect.stringContaining('"nickname":"Chrome"'),
+        body: expect.stringContaining('"nickname":"Chrome (Pushbridge'),
       })
     );
   });
