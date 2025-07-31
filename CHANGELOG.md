@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.4] - 2025-07-31
+
+### Changed
+- ver bump and made queue operations more efficient
+
+
 ## [1.2.3] - 2025-07-30
 
 ### Added

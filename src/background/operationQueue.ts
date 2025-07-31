@@ -47,10 +47,11 @@ class OperationQueue {
   private hasBootstrapped: boolean = false;
 
   /**
-   * Check if a URL is a /v2/permanents endpoint
+   * Check if a URL is eligible for deduplication
+   * Currently includes /v2/permanents endpoints and GET /v2/pushes?limit=50
    */
-  private isPermanentsEndpoint(url: string): boolean {
-    return url.includes('/v2/permanents/');
+  private isDeduplicatableEndpoint(url: string): boolean {
+    return url.includes('/v2/permanents/') || url.includes('/v2/pushes?limit=50');
   }
 
   /**
@@ -73,7 +74,8 @@ class OperationQueue {
   }
 
   /**
-   * Deduplicate /v2/permanents operations in the queue
+   * Deduplicate eligible operations in the queue
+   * Currently deduplicates /v2/permanents operations and GET /v2/pushes?limit=50 requests
    */
   private async deduplicateQueue(): Promise<void> {
     if (this.queue.length <= this.deduplicationThreshold) {
@@ -86,8 +88,14 @@ class OperationQueue {
     const groups = new Map<string, QueuedOperation[]>();
 
     for (const op of this.queue) {
-      if (this.isPermanentsEndpoint(op.url)) {
+      if (this.isDeduplicatableEndpoint(op.url)) {
         const method = op.options.method || 'GET';
+        
+        // For /v2/pushes?limit=50, only deduplicate GET requests
+        if (op.url.includes('/v2/pushes?limit=50') && method !== 'GET') {
+          continue;
+        }
+        
         const key = `${op.url}|${method}`;
         
         if (!groups.has(key)) {
@@ -121,9 +129,12 @@ class OperationQueue {
       }
     }
 
-    // Add non-permanents operations back
+    // Add non-deduplicatable operations back
     for (const op of this.queue) {
-      if (!this.isPermanentsEndpoint(op.url)) {
+      if (!this.isDeduplicatableEndpoint(op.url)) {
+        deduplicatedQueue.push(op);
+      } else if (op.url.includes('/v2/pushes?limit=50') && (op.options.method || 'GET') !== 'GET') {
+        // Add back non-GET requests to /v2/pushes?limit=50
         deduplicatedQueue.push(op);
       }
     }
