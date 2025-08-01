@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.5] - 2025-08-01
+
+### Fixed
+- Fixed issue with token bucket not refilling correctly, added automatic time-based refill
+
+
 ## [1.2.4] - 2025-07-31
 
 ### Changed

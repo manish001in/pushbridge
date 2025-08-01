@@ -13,6 +13,8 @@ class TokenBucket {
   private bucket: number = 60; // Start with reasonable tokens for initial requests
   private lastRefill: number = 0;
   private readonly maxBucketSize: number = 240; // Maximum bucket size
+  private lastKnownRemaining: number = 0; // Track last known remaining quota from API
+  private lastTimeBasedRefill: number = 0; // Track last time-based refill
 
   // Throttling for consume logging
   private lastConsumeLogTime: number = 0;
@@ -24,7 +26,7 @@ class TokenBucket {
    */
   initialize(): void {
     if (this.bucket === 0 && this.lastRefill === 0) {
-      this.bucket = 60; // Start with 60 tokens (half of max)
+      this.bucket = 120; // Start with 120 tokens (half of max)
       this.lastRefill = Date.now();
       console.log(
         `[TokenBucket] Initialized with ${this.bucket} tokens for startup`
@@ -39,6 +41,9 @@ class TokenBucket {
   refillBucket(remaining: number): void {
     const now = Date.now();
     const minuteStart = Math.floor(now / 60000) * 60000; // Start of current minute
+
+    // Update last known remaining quota
+    this.lastKnownRemaining = remaining;
 
     // Handle first refill (initialization case)
     if (this.lastRefill === 0) {
@@ -57,7 +62,7 @@ class TokenBucket {
       this.lastRefill = minuteStart;
 
       console.log(
-        `[TokenBucket] Refilled: ${previousBucket} → ${this.bucket} tokens (API remaining: ${remaining}, minute: ${new Date(minuteStart).toISOString()})`
+        `[TokenBucket] Response-based refill: ${previousBucket} → ${this.bucket} tokens (API remaining: ${remaining}, minute: ${new Date(minuteStart).toISOString()})`
       );
     } else {
       // Log when we try to refill but it's not time yet
@@ -69,6 +74,70 @@ class TokenBucket {
         );
       }
     }
+  }
+
+  /**
+   * Check if time-based refill is due and perform it
+   * This method can be called independently of API responses
+   */
+  checkAndRefill(): boolean {
+    const now = Date.now();
+    const minuteStart = Math.floor(now / 60000) * 60000;
+
+    // Check if refill is due
+    if (this.lastRefill < minuteStart) {
+      const estimatedRemaining = this.getEstimatedRemaining();
+      const previousBucket = this.bucket;
+      
+      this.bucket = Math.min(estimatedRemaining, this.maxBucketSize);
+      this.lastRefill = minuteStart;
+      this.lastTimeBasedRefill = now;
+
+      console.log(
+        `[TokenBucket] Time-based refill: ${previousBucket} → ${this.bucket} tokens (estimated remaining: ${estimatedRemaining}, minute: ${new Date(minuteStart).toISOString()})`
+      );
+      
+      return true; // Refill occurred
+    }
+
+    return false; // No refill needed
+  }
+
+  /**
+   * Force a time-based refill (for emergency situations)
+   */
+  forceTimeBasedRefill(): void {
+    const estimatedRemaining = this.getEstimatedRemaining();
+    const previousBucket = this.bucket;
+    
+    this.bucket = Math.min(estimatedRemaining, this.maxBucketSize);
+    this.lastRefill = Date.now();
+    this.lastTimeBasedRefill = Date.now();
+
+    console.log(
+      `[TokenBucket] Emergency time-based refill: ${previousBucket} → ${this.bucket} tokens (estimated remaining: ${estimatedRemaining})`
+    );
+  }
+
+  /**
+   * Get estimated remaining quota for time-based refills
+   * Uses last known API remaining or conservative estimate
+   */
+  private getEstimatedRemaining(): number {
+    // If we have recent API data, use it
+    if (this.lastKnownRemaining > 0) {
+      return this.lastKnownRemaining;
+    }
+
+    // Conservative estimate: assume we get 60 tokens per minute
+    // This is based on typical API rate limits
+    const conservativeEstimate = 60;
+    
+    console.log(
+      `[TokenBucket] No recent API data, using conservative estimate: ${conservativeEstimate} tokens`
+    );
+    
+    return conservativeEstimate;
   }
 
   /**
@@ -108,7 +177,7 @@ class TokenBucket {
   getStatus(): TokenBucketStatus {
     return {
       bucket: this.bucket,
-      remaining: 0, // This will be set by the caller
+      remaining: this.lastKnownRemaining,
       lastRefill: this.lastRefill,
     };
   }
@@ -134,6 +203,7 @@ class TokenBucket {
   forceRefill(remaining: number): void {
     this.bucket = Math.min(remaining, this.maxBucketSize);
     this.lastRefill = Date.now();
+    this.lastKnownRemaining = remaining;
     console.log(`Token bucket force refilled: ${this.bucket} tokens`);
   }
 
@@ -143,6 +213,8 @@ class TokenBucket {
   reset(): void {
     this.bucket = 0;
     this.lastRefill = 0;
+    this.lastKnownRemaining = 0;
+    this.lastTimeBasedRefill = 0;
     console.log('Token bucket reset');
   }
 
@@ -175,6 +247,8 @@ class TokenBucket {
     lastRefillDate: string;
     nextRefillIn: number;
     canConsume1: boolean;
+    lastKnownRemaining: number;
+    lastTimeBasedRefill: number;
   } {
     const now = Date.now();
     const minuteStart = Math.floor(now / 60000) * 60000;
@@ -187,6 +261,8 @@ class TokenBucket {
       lastRefillDate: new Date(this.lastRefill).toISOString(),
       nextRefillIn: Math.ceil((nextRefill - now) / 1000),
       canConsume1: this.canConsume(1),
+      lastKnownRemaining: this.lastKnownRemaining,
+      lastTimeBasedRefill: this.lastTimeBasedRefill,
     };
   }
 }
