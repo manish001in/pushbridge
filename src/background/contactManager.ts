@@ -53,6 +53,17 @@ export async function getContacts(
     console.log('Contact list cached with', contacts.length, 'contacts');
     return contacts;
   } catch (error) {
+    // Gracefully handle first-time setup where token isn't available yet
+    if (error instanceof Error && error.message.includes('No token available')) {
+      const cached = await getLocal<ContactCache>('pb_contact_cache');
+      if (cached) {
+        console.log('No token available, returning cached contact list');
+        return cached.contacts;
+      }
+      console.log('No token available, returning empty contact list');
+      return [];
+    }
+
     console.error('Failed to get contacts:', error);
 
     // Try to return cached data even if expired

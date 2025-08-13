@@ -1669,7 +1669,12 @@ async function createContextMenus() {
         });
       }
     } catch (error) {
-      console.error('Failed to create context menus:', error);
+      // Gracefully handle first-time setup where token isn't available yet
+      if (error instanceof Error && error.message.includes('No token available')) {
+        console.log('No token available, skipping detailed context menu creation');
+      } else {
+        console.error('Failed to create context menus:', error);
+      }
       // Fall back to simple menu structure
       chrome.contextMenus.create({
         id: 'push-page-all',

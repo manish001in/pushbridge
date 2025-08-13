@@ -153,6 +153,17 @@ export async function getDevices(
     console.log('Device list cached with', devices.length, 'devices');
     return devices;
   } catch (error) {
+    // Gracefully handle first-time setup where token isn't available yet
+    if (error instanceof Error && error.message.includes('No token available')) {
+      const cached = await getLocal<DeviceCache>('pb_device_cache');
+      if (cached) {
+        console.log('No token available, returning cached device list');
+        return cached.devices;
+      }
+      console.log('No token available, returning empty device list');
+      return [];
+    }
+
     console.error('Failed to get devices:', error);
 
     // Try to return cached data even if expired
@@ -160,12 +171,6 @@ export async function getDevices(
     if (cached) {
       console.log('Returning expired cache due to fetch error');
       return cached.devices;
-    }
-
-    // Gracefully handle first-time setup where token isn't available yet
-    if (error instanceof Error && error.message.includes('No token available')) {
-      console.log('No token available, returning empty device list');
-      return [];
     }
 
     throw error;
@@ -203,7 +208,8 @@ async function fetchDevicesFromAPI(
 ): Promise<PushbulletDevice[]> {
   const token = await getLocal<string>('pb_token');
   if (!token) {
-    throw new Error('No token available');
+    console.log('No token available, skipping device fetch and returning empty list');
+    return [];
   }
 
   // Get stored cursor for pagination (unless force refresh)
@@ -275,7 +281,8 @@ export async function clearDeviceCache(): Promise<void> {
 export async function activateDevice(deviceIden: string): Promise<void> {
   const token = await getLocal<string>('pb_token');
   if (!token) {
-    throw new Error('No token available');
+    console.log('[DeviceManager] No token available, skipping device activation');
+    return;
   }
 
   const response = await httpClient.fetch(

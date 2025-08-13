@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.8] - 2025-08-13
+### Fixed
+- Fixed some errors
+
+
 ## [1.2.7] - 2025-08-13
 
 ### Fixed

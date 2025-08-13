@@ -228,10 +228,11 @@ describe('Contact Manager', () => {
       expect(mockReportError).toHaveBeenCalled();
     });
 
-    it('should handle no token error', async () => {
+    it('should return empty list when no token is available (first run)', async () => {
       mockGetLocal.mockResolvedValue(undefined);
 
-      await expect(getContacts()).rejects.toThrow('No token available');
+      const result = await getContacts();
+      expect(result).toEqual([]);
     });
 
     it('should filter out inactive chats and invalid contacts', async () => {
