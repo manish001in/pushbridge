@@ -20,7 +20,6 @@ import {
   getSmsCapableDevices,
   getDefaultSmsDevice,
   setDefaultSmsDevice,
-  getDevices,
   hasSmsCapableDevices,
 } from './deviceManager';
 import { reportError, PBError } from './errorManager';
@@ -1602,7 +1601,7 @@ async function createContextMenus() {
   chrome.contextMenus.removeAll(async () => {
     try {
       // Get devices and contacts for submenus
-      const devices = await getDevices();
+      const devices = await getPushableDevices();
       const contacts = await getContacts();
 
       // Create main menu items with submenus
@@ -1634,7 +1633,7 @@ async function createContextMenus() {
           for (const device of devices) {
             chrome.contextMenus.create({
               id: `${menuItem.id}-device-${device.iden}`,
-              title: `📱 ${device.nickname}`,
+              title: `📱 ${device.nickname || 'Unknown Device'}`,
               parentId: `${menuItem.id}-devices`,
               contexts: menuItem.contexts as chrome.contextMenus.ContextType[],
             });

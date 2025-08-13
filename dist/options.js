@@ -41,7 +41,7 @@ console.log("Pushbridge options page loaded");class v{constructor(){this.setting
           <div class="setting-control">
             <select id="default-device" class="select">
               <option value="all">All devices</option>
-              ${this.devices.map(t=>`<option value="${t.iden}">${t.nickname} (${t.type})</option>`).join("")}
+              ${this.devices.map(t=>`<option value="${t.iden}">${this.getDeviceDisplayName(t)} (${t.type})</option>`).join("")}
             </select>
           </div>
         </div>

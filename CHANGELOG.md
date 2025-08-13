@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.6] - 2025-08-13
+
+### Fixed
+- ContextMenu only shows valid devices which are active and pushable now
+
+
 ## [1.2.5] - 2025-08-01
 
 ### Fixed

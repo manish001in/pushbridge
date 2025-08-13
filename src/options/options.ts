@@ -427,7 +427,7 @@ class OptionsPage {
               ${this.devices
                 .map(
                   device =>
-                    `<option value="${device.iden}">${device.nickname} (${device.type})</option>`
+                    `<option value="${device.iden}">${this.getDeviceDisplayName(device)} (${device.type})</option>`
                 )
                 .join('')}
             </select>

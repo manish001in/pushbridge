@@ -394,7 +394,7 @@ export class PushComposer extends LitElement {
       this.sendTargets = [
         ...devices.map((dev: any) => ({
           id: dev.iden,
-          name: dev.nickname,
+          name: dev.nickname || 'Unknown Device',
           type: 'device' as const,
           icon: this.getDeviceIcon(dev.type),
         })),
