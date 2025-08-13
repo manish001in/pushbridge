@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0] - 2025-08-13
+
+### Changed
+- ver bump
+
+
 ## [1.2.8] - 2025-08-13
 ### Fixed
 - Fixed some errors
