@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.7] - 2025-08-13
+
+### Fixed
+- No unnecessary errors thrown when it's first time token input
+
+
 ## [1.2.6] - 2025-08-13
 
 ### Fixed

@@ -162,6 +162,12 @@ export async function getDevices(
       return cached.devices;
     }
 
+    // Gracefully handle first-time setup where token isn't available yet
+    if (error instanceof Error && error.message.includes('No token available')) {
+      console.log('No token available, returning empty device list');
+      return [];
+    }
+
     throw error;
   }
 }
