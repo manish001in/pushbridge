@@ -42,6 +42,7 @@ export class PushComposer extends LitElement {
   private messageTimeout: number | null = null;
 
   static styles = css`
+    /* === Light mode base === */
     :host {
       display: block;
       font-family:
@@ -328,6 +329,76 @@ export class PushComposer extends LitElement {
         font-size: 16px;
       }
     }
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+      background: #212529;
+    }
+
+    :host-context(html[data-theme='dark']) .device-selector label,
+    :host-context(html[data-theme='dark']) .channel-input label,
+    :host-context(html[data-theme='dark']) .form-group label {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .device-selector select,
+    :host-context(html[data-theme='dark']) .form-group input,
+    :host-context(html[data-theme='dark']) .form-group textarea {
+      background: #343a40;
+      color: #dee2e6;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .form-group input::placeholder,
+    :host-context(html[data-theme='dark']) .form-group textarea::placeholder {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .form-group input:focus,
+    :host-context(html[data-theme='dark']) .form-group textarea:focus,
+    :host-context(html[data-theme='dark']) .device-selector select:focus {
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    :host-context(html[data-theme='dark']) .form-text {
+      color: rgba(222, 226, 230, 0.75);
+    }
+
+    :host-context(html[data-theme='dark']) .send-button {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .send-button:hover:not(:disabled) {
+      background: #0b5ed7;
+      box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+    }
+
+    :host-context(html[data-theme='dark']) .send-button:disabled {
+      background: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .message.error {
+      background: #2c0b0e;
+      color: #ea868f;
+      border-color: #842029;
+      border-left-color: #ea868f;
+    }
+
+    :host-context(html[data-theme='dark']) .message.success {
+      background: #051b11;
+      color: #75b798;
+      border-color: #0f5132;
+      border-left-color: #75b798;
+    }
+
+    :host-context(html[data-theme='dark']) .shortcut-hint {
+      color: rgba(222, 226, 230, 0.75);
+      background: #2b3035;
+      border-color: #495057;
+    }
   `;
 
   connectedCallback() {
@@ -369,11 +440,12 @@ export class PushComposer extends LitElement {
   private async loadSendTargets() {
     try {
       // Get devices, owned channels, and contacts in parallel
-      const [devicesResponse, channelsResponse, contactsResponse] = await Promise.all([
-        chrome.runtime.sendMessage({ cmd: 'getDevices' }),
-        chrome.runtime.sendMessage({ cmd: 'GET_OWNED_CHANNELS' }),
-        chrome.runtime.sendMessage({ cmd: 'getContacts' }),
-      ]);
+      const [devicesResponse, channelsResponse, contactsResponse] =
+        await Promise.all([
+          chrome.runtime.sendMessage({ cmd: 'getDevices' }),
+          chrome.runtime.sendMessage({ cmd: 'GET_OWNED_CHANNELS' }),
+          chrome.runtime.sendMessage({ cmd: 'getContacts' }),
+        ]);
 
       const devices = devicesResponse.ok ? devicesResponse.devices : [];
       const channels = channelsResponse.success
@@ -584,7 +656,9 @@ export class PushComposer extends LitElement {
             targetDeviceIden:
               selectedTarget?.type === 'device' ? selectedTarget.id : undefined,
             email:
-              selectedTarget?.type === 'contact' ? selectedTarget.id : undefined,
+              selectedTarget?.type === 'contact'
+                ? selectedTarget.id
+                : undefined,
             // Include push metadata for file pushes
             title: this.pushTitle.trim() || undefined,
             body: this.body.trim() || undefined,

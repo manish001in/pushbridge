@@ -8,6 +8,7 @@ interface Settings {
   autoReconnect: boolean;
   defaultSmsDevice: string;
   autoOpenPushLinksAsTab: boolean;
+  systemTheme: boolean;
 }
 
 class OptionsPage {
@@ -18,12 +19,45 @@ class OptionsPage {
     autoReconnect: true,
     defaultSmsDevice: '',
     autoOpenPushLinksAsTab: false,
+    systemTheme: false,
   };
 
   private devices: Array<{ iden: string; nickname: string; type: string }> = [];
-  private smsDevices: Array<{ iden: string; nickname: string; type: string; manufacturer?: string; model?: string }> = [];
+  private smsDevices: Array<{
+    iden: string;
+    nickname: string;
+    type: string;
+    manufacturer?: string;
+    model?: string;
+  }> = [];
   private pendingSmsDeviceChange: string | null = null;
   private themeMql?: MediaQueryList;
+
+  private ensureThemeListener() {
+    if (!this.settings.systemTheme) {
+      // remove if present
+      if (this.themeMql) {
+        this.themeMql.removeEventListener
+          ? this.themeMql.removeEventListener('change', this.onSchemeChange)
+          : this.themeMql.removeListener(this.onSchemeChange as any);
+        this.themeMql = undefined;
+      }
+      return;
+    }
+
+    if (!this.themeMql) {
+      this.themeMql = window.matchMedia('(prefers-color-scheme: dark)');
+      this.themeMql.addEventListener
+        ? this.themeMql.addEventListener('change', this.onSchemeChange)
+        : this.themeMql.addListener(this.onSchemeChange as any); // old API fallback
+    }
+  }
+
+  private onSchemeChange = () => {
+    if (!this.settings.systemTheme) return;
+    const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  };
 
   async init() {
     await this.loadSettings();
@@ -31,6 +65,12 @@ class OptionsPage {
     await this.loadSmsDevices();
     this.render();
     this.setupEventListeners();
+    this.ensureThemeListener();
+    document.documentElement.dataset.theme =
+      this.settings.systemTheme &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
   }
 
   private async loadSettings() {
@@ -41,16 +81,23 @@ class OptionsPage {
       } else {
         await chrome.storage.local.set({ pb_settings: this.settings });
       }
-      
+
       // Load auto open push links setting from separate storage
       if (stored.pb_settings.autoOpenPushLinksAsTab !== undefined) {
-        this.settings.autoOpenPushLinksAsTab = stored.pb_settings.autoOpenPushLinksAsTab;
+        this.settings.autoOpenPushLinksAsTab =
+          stored.pb_settings.autoOpenPushLinksAsTab;
       } else {
-        await chrome.storage.local.set({ pb_settings: { ...this.settings, autoOpenPushLinksAsTab: this.settings.autoOpenPushLinksAsTab } });
+        await chrome.storage.local.set({
+          pb_settings: {
+            ...this.settings,
+            autoOpenPushLinksAsTab: this.settings.autoOpenPushLinksAsTab,
+          },
+        });
       }
-      
+
       // Load default SMS device from separate storage
-      const defaultSmsDevice = await chrome.storage.local.get('defaultSmsDevice');
+      const defaultSmsDevice =
+        await chrome.storage.local.get('defaultSmsDevice');
       if (defaultSmsDevice.defaultSmsDevice) {
         this.settings.defaultSmsDevice = defaultSmsDevice.defaultSmsDevice;
       }
@@ -72,7 +119,9 @@ class OptionsPage {
 
   private async loadSmsDevices() {
     try {
-      const response = await chrome.runtime.sendMessage({ cmd: 'GET_SMS_CAPABLE_DEVICES' });
+      const response = await chrome.runtime.sendMessage({
+        cmd: 'GET_SMS_CAPABLE_DEVICES',
+      });
       if (response.success) {
         this.smsDevices = response.devices || [];
       }
@@ -81,56 +130,49 @@ class OptionsPage {
     }
   }
 
-  private getDeviceDisplayName(device: { nickname: string; manufacturer?: string; model?: string }): string {
+  private getDeviceDisplayName(device: {
+    nickname: string;
+    manufacturer?: string;
+    model?: string;
+  }): string {
     if (device.nickname) {
       return device.nickname;
     }
-    
+
     if (device.manufacturer && device.model) {
       return `${device.manufacturer} ${device.model}`;
     }
-    
+
     if (device.model) {
       return device.model;
     }
-    
+
     return 'Unknown Device';
   }
 
-  private applyTheme(mode: 'dark' | 'light') {
-    document.documentElement.dataset.theme = mode;
-  }
-
-  private computeTheme(): 'dark' | 'light' {
-    if (this.settings.systemTheme) {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return 'light';
-  }
-
-  private onSchemeChange = (ev: MediaQueryListEvent) => {
-    if (this.settings.systemTheme) this.applyTheme(ev.matches ? 'dark' : 'light');
-  };
-  
   private async saveSettings() {
     try {
-      await chrome.storage.local.set({ 
+      await chrome.storage.local.set({
         pb_settings: this.settings,
       });
       if (this.settings.systemTheme) {
         if (!this.themeMql) {
           this.themeMql = window.matchMedia('(prefers-color-scheme: dark)');
-          (this.themeMql.addEventListener
+          this.themeMql.addEventListener
             ? this.themeMql.addEventListener('change', this.onSchemeChange)
-            : this.themeMql.addListener(this.onSchemeChange));
+            : this.themeMql.addListener(this.onSchemeChange);
         }
       } else if (this.themeMql) {
-        (this.themeMql.removeEventListener
+        this.themeMql.removeEventListener
           ? this.themeMql.removeEventListener('change', this.onSchemeChange)
-          : this.themeMql.removeListener(this.onSchemeChange));
+          : this.themeMql.removeListener(this.onSchemeChange);
         this.themeMql = undefined;
       }
-      this.applyTheme(this.computeTheme());
+      this.ensureThemeListener();
+      const dark = this.settings.systemTheme
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : false;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
       this.showMessage('Settings saved successfully!', 'success');
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -145,7 +187,9 @@ class OptionsPage {
 
     try {
       // Show loading state
-      const updateBtn = document.getElementById('update-sms-device') as HTMLButtonElement;
+      const updateBtn = document.getElementById(
+        'update-sms-device'
+      ) as HTMLButtonElement;
       if (updateBtn) {
         updateBtn.disabled = true;
         updateBtn.textContent = 'Updating...';
@@ -154,31 +198,38 @@ class OptionsPage {
       // Call the background handler to update SMS device
       const response = await chrome.runtime.sendMessage({
         cmd: 'SET_DEFAULT_SMS_DEVICE',
-        deviceIden: this.pendingSmsDeviceChange
+        deviceIden: this.pendingSmsDeviceChange,
       });
 
       if (response.success) {
         // Update the settings
         this.settings.defaultSmsDevice = this.pendingSmsDeviceChange;
         this.pendingSmsDeviceChange = null;
-        
+
         // Save the setting
-        await chrome.storage.local.set({ defaultSmsDevice: this.settings.defaultSmsDevice });
-        
+        await chrome.storage.local.set({
+          defaultSmsDevice: this.settings.defaultSmsDevice,
+        });
+
         this.showMessage('SMS device updated successfully!', 'success');
-        
+
         // Re-render to update UI state
         this.render();
         this.setupEventListeners();
       } else {
-        this.showMessage(`Failed to update SMS device: ${response.error}`, 'error');
+        this.showMessage(
+          `Failed to update SMS device: ${response.error}`,
+          'error'
+        );
       }
     } catch (error) {
       console.error('Failed to update SMS device:', error);
       this.showMessage('Failed to update SMS device', 'error');
     } finally {
       // Reset button state
-      const updateBtn = document.getElementById('update-sms-device') as HTMLButtonElement;
+      const updateBtn = document.getElementById(
+        'update-sms-device'
+      ) as HTMLButtonElement;
       if (updateBtn) {
         updateBtn.disabled = false;
         updateBtn.textContent = 'Update';
@@ -294,7 +345,9 @@ class OptionsPage {
     if (autoOpenLinksToggle) {
       autoOpenLinksToggle.checked = this.settings.autoOpenPushLinksAsTab;
       autoOpenLinksToggle.addEventListener('change', e => {
-        this.settings.autoOpenPushLinksAsTab = (e.target as HTMLInputElement).checked;
+        this.settings.autoOpenPushLinksAsTab = (
+          e.target as HTMLInputElement
+        ).checked;
         this.saveSettings();
       });
     }
@@ -319,7 +372,8 @@ class OptionsPage {
       smsDeviceSelect.value = this.settings.defaultSmsDevice;
       smsDeviceSelect.addEventListener('change', e => {
         const newValue = (e.target as HTMLSelectElement).value;
-        this.pendingSmsDeviceChange = newValue !== this.settings.defaultSmsDevice ? newValue : null;
+        this.pendingSmsDeviceChange =
+          newValue !== this.settings.defaultSmsDevice ? newValue : null;
         this.updateSmsDeviceButtonState();
       });
     }
@@ -351,15 +405,21 @@ class OptionsPage {
     // SMS device update button
     const updateSmsDeviceBtn = document.getElementById('update-sms-device');
     if (updateSmsDeviceBtn) {
-      updateSmsDeviceBtn.addEventListener('click', () => this.updateSmsDevice());
+      updateSmsDeviceBtn.addEventListener('click', () =>
+        this.updateSmsDevice()
+      );
     }
   }
 
   private updateSmsDeviceButtonState() {
-    const updateBtn = document.getElementById('update-sms-device') as HTMLButtonElement;
+    const updateBtn = document.getElementById(
+      'update-sms-device'
+    ) as HTMLButtonElement;
     if (updateBtn) {
       updateBtn.disabled = !this.pendingSmsDeviceChange;
-      updateBtn.textContent = this.pendingSmsDeviceChange ? 'Update SMS Device' : 'Update SMS Device';
+      updateBtn.textContent = this.pendingSmsDeviceChange
+        ? 'Update SMS Device'
+        : 'Update SMS Device';
     }
   }
 
@@ -372,6 +432,7 @@ class OptionsPage {
         autoReconnect: true,
         defaultSmsDevice: '',
         autoOpenPushLinksAsTab: false,
+        systemTheme: false,
       };
       this.pendingSmsDeviceChange = null;
       await this.saveSettings();
@@ -403,6 +464,7 @@ class OptionsPage {
           autoReconnect: true,
           defaultSmsDevice: '',
           autoOpenPushLinksAsTab: false,
+          systemTheme: false,
         };
         this.pendingSmsDeviceChange = null;
         await this.saveSettings();
