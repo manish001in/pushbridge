@@ -23,6 +23,7 @@ class OptionsPage {
   private devices: Array<{ iden: string; nickname: string; type: string }> = [];
   private smsDevices: Array<{ iden: string; nickname: string; type: string; manufacturer?: string; model?: string }> = [];
   private pendingSmsDeviceChange: string | null = null;
+  private themeMql?: MediaQueryList;
 
   async init() {
     await this.loadSettings();
@@ -96,11 +97,40 @@ class OptionsPage {
     return 'Unknown Device';
   }
 
+  private applyTheme(mode: 'dark' | 'light') {
+    document.documentElement.dataset.theme = mode;
+  }
+
+  private computeTheme(): 'dark' | 'light' {
+    if (this.settings.systemTheme) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'light';
+  }
+
+  private onSchemeChange = (ev: MediaQueryListEvent) => {
+    if (this.settings.systemTheme) this.applyTheme(ev.matches ? 'dark' : 'light');
+  };
+  
   private async saveSettings() {
     try {
       await chrome.storage.local.set({ 
         pb_settings: this.settings,
       });
+      if (this.settings.systemTheme) {
+        if (!this.themeMql) {
+          this.themeMql = window.matchMedia('(prefers-color-scheme: dark)');
+          (this.themeMql.addEventListener
+            ? this.themeMql.addEventListener('change', this.onSchemeChange)
+            : this.themeMql.addListener(this.onSchemeChange));
+        }
+      } else if (this.themeMql) {
+        (this.themeMql.removeEventListener
+          ? this.themeMql.removeEventListener('change', this.onSchemeChange)
+          : this.themeMql.removeListener(this.onSchemeChange));
+        this.themeMql = undefined;
+      }
+      this.applyTheme(this.computeTheme());
       this.showMessage('Settings saved successfully!', 'success');
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -229,6 +259,18 @@ class OptionsPage {
         this.settings.notificationsEnabled = (
           e.target as HTMLInputElement
         ).checked;
+        this.saveSettings();
+      });
+    }
+
+    // System theme (auto) toggle
+    const systemThemeToggle = document.getElementById(
+      'system-theme-toggle'
+    ) as HTMLInputElement;
+    if (systemThemeToggle) {
+      systemThemeToggle.checked = !!this.settings.systemTheme;
+      systemThemeToggle.addEventListener('change', e => {
+        this.settings.systemTheme = (e.target as HTMLInputElement).checked;
         this.saveSettings();
       });
     }
@@ -409,6 +451,20 @@ class OptionsPage {
           </div>
           <div class="setting-control">
             <input type="checkbox" id="sound-toggle" class="toggle">
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Customization</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="system-theme-toggle">Match system theme</label>
+            <p>Automatically switch between light and dark mode based on your system settings</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="system-theme-toggle" class="toggle" checked="${this.settings.systemTheme}">
           </div>
         </div>
       </div>
