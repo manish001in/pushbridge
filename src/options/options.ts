@@ -1,6 +1,21 @@
 // Options page entry point
 console.log('Pushbridge options page loaded');
 
+type OptionKey =
+  | 'Send'
+  | 'Messages'
+  | 'Notifications'
+  | 'Subscriptions'
+  | 'SMS/MMS';
+
+const DEFAULT_OPTION_ORDER: OptionKey[] = [
+  'Send',
+  'Messages',
+  'Notifications',
+  'Subscriptions',
+  'SMS/MMS',
+];
+
 interface Settings {
   soundEnabled: boolean;
   defaultDevice: string;
@@ -9,6 +24,7 @@ interface Settings {
   defaultSmsDevice: string;
   autoOpenPushLinksAsTab: boolean;
   systemTheme: boolean;
+  optionOrder: OptionKey[];
 }
 
 class OptionsPage {
@@ -20,6 +36,7 @@ class OptionsPage {
     defaultSmsDevice: '',
     autoOpenPushLinksAsTab: false,
     systemTheme: false,
+    optionOrder: DEFAULT_OPTION_ORDER.slice(),
   };
 
   private devices: Array<{ iden: string; nickname: string; type: string }> = [];
@@ -101,9 +118,52 @@ class OptionsPage {
       if (defaultSmsDevice.defaultSmsDevice) {
         this.settings.defaultSmsDevice = defaultSmsDevice.defaultSmsDevice;
       }
+
+      const normalizeOptionOrder = (order: unknown): OptionKey[] => {
+        const allowed = new Set<OptionKey>(DEFAULT_OPTION_ORDER);
+        const seen = new Set<OptionKey>();
+        const out: OptionKey[] = [];
+        if (Array.isArray(order)) {
+          for (const v of order) {
+            if (
+              typeof v === 'string' &&
+              allowed.has(v as OptionKey) &&
+              !seen.has(v as OptionKey)
+            ) {
+              const k = v as OptionKey;
+              seen.add(k);
+              out.push(k);
+            }
+          }
+        }
+        for (const k of DEFAULT_OPTION_ORDER) if (!seen.has(k)) out.push(k);
+        return out;
+      };
+
+      const incoming =
+        stored.pb_settings?.optionOrder ?? this.settings.optionOrder;
+      const normalized = normalizeOptionOrder(incoming);
+      const changed =
+        JSON.stringify(stored.pb_settings?.optionOrder) !==
+        JSON.stringify(normalized);
+      this.settings.optionOrder = normalized;
+      if (changed) await this.saveSettings();
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
+  }
+
+  private async setOptionOrder(newOrder: OptionKey[]) {
+    const allowed = new Set<OptionKey>(DEFAULT_OPTION_ORDER);
+    const clean = newOrder.filter(
+      (k, i, a): k is OptionKey =>
+        typeof k === 'string' &&
+        allowed.has(k as OptionKey) &&
+        a.indexOf(k) === i
+    ) as OptionKey[];
+    for (const k of DEFAULT_OPTION_ORDER) if (!clean.includes(k)) clean.push(k);
+    this.settings.optionOrder = clean;
+    await this.saveSettings();
   }
 
   private async loadDevices() {
@@ -326,6 +386,77 @@ class OptionsPage {
       });
     }
 
+    const ul = document.getElementById(
+      'option-order'
+    ) as HTMLUListElement | null;
+    if (ul) {
+      const renderOrder = () => {
+        ul.innerHTML = this.settings.optionOrder
+          .map(
+            k => `<li draggable="true" data-key="${k}" class="dnd-item">
+                   <span class="handle" aria-hidden="true">⋮⋮</span>
+                   <span class="label">${k}</span>
+                 </li>`
+          )
+          .join('');
+      };
+      renderOrder();
+
+      let draggingEl: HTMLElement | null = null;
+
+      ul.addEventListener('dragstart', e => {
+        const li = (e.target as HTMLElement)?.closest(
+          'li'
+        ) as HTMLElement | null;
+        if (!li) return;
+        draggingEl = li;
+        li.classList.add('dragging');
+        e.dataTransfer?.setData('text/plain', li.dataset.key || '');
+        e.dataTransfer?.setDragImage(li, 10, 10);
+      });
+
+      ul.addEventListener('dragover', e => {
+        e.preventDefault();
+        const after = getAfterElement(ul, e.clientY);
+        if (!draggingEl) return;
+        if (!after) ul.appendChild(draggingEl);
+        else ul.insertBefore(draggingEl, after);
+      });
+
+      ul.addEventListener('dragend', async () => {
+        if (draggingEl) draggingEl.classList.remove('dragging');
+        draggingEl = null;
+        const order = Array.from(ul.querySelectorAll('li')).map(
+          li => li.getAttribute('data-key') as OptionKey
+        );
+        await this.setOptionOrder(order);
+        renderOrder(); // rehydrate DOM to avoid any ghost states
+      });
+
+      // Option order
+      function getAfterElement(
+        container: HTMLElement,
+        y: number
+      ): HTMLElement | null {
+        const els = Array.from(
+          container.querySelectorAll<HTMLElement>('li:not(.dragging)')
+        );
+
+        let closestOffset = Number.NEGATIVE_INFINITY;
+        let closestEl: HTMLElement | null = null;
+
+        for (const el of els) {
+          const box = el.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closestOffset) {
+            closestOffset = offset;
+            closestEl = el;
+          }
+        }
+        return closestEl;
+      }
+    }
+
     // Auto reconnect toggle
     const autoReconnectToggle = document.getElementById(
       'auto-reconnect-toggle'
@@ -433,6 +564,7 @@ class OptionsPage {
         defaultSmsDevice: '',
         autoOpenPushLinksAsTab: false,
         systemTheme: false,
+        optionOrder: DEFAULT_OPTION_ORDER.slice(),
       };
       this.pendingSmsDeviceChange = null;
       await this.saveSettings();
@@ -465,6 +597,7 @@ class OptionsPage {
           defaultSmsDevice: '',
           autoOpenPushLinksAsTab: false,
           systemTheme: false,
+          optionOrder: DEFAULT_OPTION_ORDER.slice(),
         };
         this.pendingSmsDeviceChange = null;
         await this.saveSettings();
@@ -529,6 +662,17 @@ class OptionsPage {
             <input type="checkbox" id="system-theme-toggle" class="toggle" checked="${this.settings.systemTheme}">
           </div>
         </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Option order</label>
+            <p>Drag to rearrange.</p>
+          </div>
+          <div class="setting-control">
+            <ul id="option-order" class="dnd-list"></ul>
+          </div>
+        </div>
+
       </div>
 
       <div class="settings-section">

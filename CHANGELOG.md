@@ -5,6 +5,7 @@
 ### Added
 - Match system theme toggle
 - Open in window link
+- Added drag-and-drop navigation customization
 
 ## [1.3.0] - 2025-08-13
 

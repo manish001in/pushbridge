@@ -18,6 +18,11 @@ import {
   hasSmsCapableDevices,
   getDefaultSmsDevice,
 } from '../background/deviceManager';
+import {
+  getOptionOrder,
+  buildTabButtonsHTML,
+  activateInitialPane,
+} from './components/pb-nav';
 import { getLocal } from '../background/storage';
 
 // Initialize popup
@@ -65,6 +70,7 @@ async function initializePopup() {
       // Check if user has SMS-capable devices
       const hasSms = await hasSmsCapableDevices();
       const defaultSmsDevice = hasSms ? await getDefaultSmsDevice() : null;
+      const order = await getOptionOrder();
 
       // Show main UI with tabs
       container.innerHTML = `
@@ -72,12 +78,7 @@ async function initializePopup() {
           <div class="popup-header">
             <h2 class="popup-title">Pushbridge</h2>
             <div class="tab-navigation">
-              <button class="tab-button active" data-tab="composer">Send</button>
-              <button class="tab-button" data-tab="pushes">Messages</button>
-              <button class="tab-button" data-tab="notifications">Notifications Mirroring</button>
-
-              <button class="tab-button" data-tab="channels">Subscriptions</button>
-              ${hasSms ? '<button class="tab-button" data-tab="messages">SMS/MMS</button>' : ''}
+              ${buildTabButtonsHTML(order, hasSms)}
             </div>
           </div>
           <div class="tab-content">
@@ -125,6 +126,9 @@ async function initializePopup() {
             </div>
         </div>
       `;
+
+      // Activate initial tab pane
+      activateInitialPane(container);
 
       // Initialize tab switching
       setupTabNavigation();
