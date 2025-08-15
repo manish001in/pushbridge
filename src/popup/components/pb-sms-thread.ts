@@ -67,6 +67,7 @@ export class PbSmsThread extends LitElement {
   }
 
   static styles = css`
+    /* === Light mode base === */
     :host {
       display: flex;
       flex-direction: column;
@@ -637,6 +638,162 @@ export class PbSmsThread extends LitElement {
         width: 18px;
         height: 18px;
       }
+    }
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      background: #212529;
+      color: #dee2e6;
+    }
+
+    /* Header */
+    :host-context(html[data-theme='dark']) .thread-header {
+      background: #343a40;
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .contact-name {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .unread-badge {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    /* Messages */
+    :host-context(html[data-theme='dark']) .message.inbound .message-bubble {
+      background: #343a40;
+      color: #dee2e6;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .message.outbound .message-bubble {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .message-time {
+      color: #868e96;
+    }
+
+    /* Input area */
+    :host-context(html[data-theme='dark']) .input-container {
+      background: #343a40;
+      border-top-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .recipients-label,
+    :host-context(html[data-theme='dark']) .device-info {
+      color: #adb5bd;
+    }
+
+    /* Recipient chips */
+    :host-context(html[data-theme='dark']) .recipient-chip {
+      background: #031633; /* primary-bg-subtle */
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .recipient-chip .remove-btn {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .recipient-chip .remove-btn:hover {
+      color: #ea868f;
+    }
+
+    /* Text inputs */
+    :host-context(html[data-theme='dark']) .recipient-input,
+    :host-context(html[data-theme='dark']) .message-input {
+      background: #2b3035;
+      border-color: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .recipient-input:focus,
+    :host-context(html[data-theme='dark']) .message-input:focus {
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+      outline: 0;
+    }
+
+    /* Buttons */
+    :host-context(html[data-theme='dark']) .add-recipient-btn,
+    :host-context(html[data-theme='dark']) .send-button,
+    :host-context(html[data-theme='dark']) .reload-button {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .add-recipient-btn:hover:not(:disabled),
+    :host-context(html[data-theme='dark']) .send-button:hover:not(:disabled),
+    :host-context(html[data-theme='dark']) .reload-button:hover:not(:disabled) {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .add-recipient-btn:disabled,
+    :host-context(html[data-theme='dark']) .send-button:disabled,
+    :host-context(html[data-theme='dark']) .reload-button:disabled {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    /* File select and selected file */
+    :host-context(html[data-theme='dark']) .file-select-btn,
+    :host-context(html[data-theme='dark']) .selected-file {
+      background: #2b3035;
+      border-color: #495057;
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .file-select-btn:hover {
+      background: #343a40;
+    }
+
+    :host-context(html[data-theme='dark']) .file-icon {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .file-info {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .file-size {
+      color: #868e96;
+    }
+
+    /* Load older */
+    :host-context(html[data-theme='dark']) .load-older-btn {
+      background: #2b3035;
+      border-color: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .load-older-btn:hover:not(:disabled) {
+      background: #343a40;
+    }
+
+    /* States */
+    :host-context(html[data-theme='dark']) .empty-state,
+    :host-context(html[data-theme='dark']) .error-state,
+    :host-context(html[data-theme='dark']) .loading {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .error-icon {
+      color: #ea868f;
+    }
+
+    /* Spinners */
+    :host-context(html[data-theme='dark']) .spinner {
+      border-color: #343a40;
+      border-top-color: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .spinner-small {
+      color: #6ea8fe;
     }
   `;
 

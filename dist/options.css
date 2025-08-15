@@ -453,3 +453,162 @@ body {
     font-size: 22px;
   }
 }
+
+.dnd-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.dnd-list .dnd-item {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+}
+
+.dnd-list .dnd-item.dragging {
+  opacity: 0.6;
+}
+
+.dnd-list .handle {
+  cursor: grab;
+  user-select: none;
+}
+
+/* Dark theme, triggered by <html data-theme="dark"> or <body data-theme="dark"> */
+:where(html[data-theme='dark'], body[data-theme='dark']) {
+  color-scheme: dark;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) body {
+  background: #0b1220;
+  color: #e5e7eb;
+}
+
+/* Components */
+:where(html[data-theme='dark'], body[data-theme='dark']) .options-header {
+  border-bottom: 1px solid #1f2937;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .options-header h1 {
+  color: #f3f4f6;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .subtitle {
+  color: #9ca3af;
+}
+
+:where(html[data-theme='dark'], body[data-theme='dark']) .settings-section {
+  background: #0f172a;
+  border: 1px solid #1f2937;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .settings-section h2 {
+  color: #f3f4f6;
+  border-bottom: 1px solid #1f2937;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .setting-item {
+  border-bottom: 1px solid #111827;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .setting-info label {
+  color: #e5e7eb;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .setting-info p {
+  color: #9ca3af;
+}
+
+/* Controls */
+:where(html[data-theme='dark'], body[data-theme='dark']) .toggle {
+  background: #374151;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .toggle:checked {
+  background: #3b82f6;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .toggle::before {
+  background: #e5e7eb;
+}
+
+:where(html[data-theme='dark'], body[data-theme='dark']) .select {
+  background: #0b1220;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  outline: none;
+}
+
+/* Buttons */
+:where(html[data-theme='dark'], body[data-theme='dark']) .button.secondary {
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+:where(html[data-theme='dark'], body[data-theme='dark'])
+  .button.secondary:hover {
+  background: #374151;
+  border-color: #4b5563;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .button.danger {
+  background: #dc2626;
+  color: #fff;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .button.danger:hover {
+  background: #b91c1c;
+}
+
+/* Messages */
+:where(html[data-theme='dark'], body[data-theme='dark']) .message {
+  border-width: 1px;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .message.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #a7f3d0;
+  border-color: #34d399;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .message.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fecaca;
+  border-color: #f87171;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .message.info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #bfdbfe;
+  border-color: #60a5fa;
+}
+
+/* Footer */
+:where(html[data-theme='dark'], body[data-theme='dark']) .footer {
+  border-top: 1px solid #1f2937;
+  color: #9ca3af;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .footer a {
+  color: #93c5fd;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .disclaimer {
+  color: #6b7280;
+}
+
+/* Scrollbars */
+:where(html[data-theme='dark'], body[data-theme='dark'])
+  *::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+:where(html[data-theme='dark'], body[data-theme='dark'])
+  *::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+:where(html[data-theme='dark'], body[data-theme='dark'])
+  *::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+:where(html[data-theme="dark"], body[data-theme="dark"]) .dnd-list .dnd-item {
+  border-color: var(--border-color-dark, #444);
+  background: var(--surface-dark, #1e1e1e);
+  color: var(--text-color-dark, #e6e6e6);
+}
