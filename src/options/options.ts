@@ -665,7 +665,7 @@ class OptionsPage {
 
         <div class="setting-item">
           <div class="setting-info">
-            <label>Option order</label>
+            <label>Navigation order</label>
             <p>Drag to rearrange.</p>
           </div>
           <div class="setting-control">
