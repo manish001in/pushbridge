@@ -1,13 +1,16 @@
 // Popup entry point
 console.log('Pushbridge popup loaded');
 
+// Import theme component
+import { bootTheme } from './components/pb-theme';
+bootTheme();
+
 // Import components
 import './components/pb-token-setup';
 import './components/pb-composer';
 import './components/pb-recent-pushes';
 import './components/pb-mirror-list';
 import './components/pb-file-drop';
-
 import './components/pb-sms-thread';
 import './components/pb-conversation-list';
 import './components/pb-channels';
@@ -15,6 +18,7 @@ import {
   hasSmsCapableDevices,
   getDefaultSmsDevice,
 } from '../background/deviceManager';
+
 import { getLocal } from '../background/storage';
 
 // Initialize popup
@@ -48,7 +52,7 @@ async function initializePopup() {
     if (!token) {
       // Show token setup UI
       container.innerHTML = '<pb-token-setup></pb-token-setup>';
-      
+
       // Add event listener for token verification
       const tokenSetup = document.querySelector('pb-token-setup');
       if (tokenSetup) {
@@ -62,7 +66,6 @@ async function initializePopup() {
       // Check if user has SMS-capable devices
       const hasSms = await hasSmsCapableDevices();
       const defaultSmsDevice = hasSms ? await getDefaultSmsDevice() : null;
-
       // Show main UI with tabs
       container.innerHTML = `
         <div class="popup-container">
@@ -72,7 +75,6 @@ async function initializePopup() {
               <button class="tab-button active" data-tab="composer">Send</button>
               <button class="tab-button" data-tab="pushes">Messages</button>
               <button class="tab-button" data-tab="notifications">Notifications Mirroring</button>
-
               <button class="tab-button" data-tab="channels">Subscriptions</button>
               ${hasSms ? '<button class="tab-button" data-tab="messages">SMS/MMS</button>' : ''}
             </div>
@@ -115,6 +117,9 @@ async function initializePopup() {
                 <span class="copyright">© 2025 Pushbridge</span>
                 <span class="disclaimer">· Unofficial</span>
                 <button class="about-button" id="about-button">About</button>
+                <button id="open-window-btn" class="about-button">
+                  Open in Window
+                </button>
               </div>
             </div>
         </div>
@@ -130,6 +135,8 @@ async function initializePopup() {
 
       // Setup About dialog
       setupAboutDialog();
+
+      setupOpenInWindowButton();
     }
   } catch (error) {
     console.error('Failed to initialize popup:', error);
@@ -304,9 +311,51 @@ function showAboutDialog() {
   });
 }
 
+async function setupOpenInWindowButton() {
+  const windowButton = document.getElementById('open-window-btn');
+  if (!windowButton) return;
+
+  // hide if running in a tab instead of the extension popup panel
+  const tab = await chrome.tabs.getCurrent();
+  if (tab) {
+    windowButton.style.display = 'none';
+    return;
+  }
+
+  windowButton.addEventListener('click', launchOpenInWindowButton);
+}
+
+async function launchOpenInWindowButton() {
+  const url = chrome.runtime.getURL('popup.html?windowMode=1');
+
+  try {
+    const wins = await chrome.windows.getAll({ populate: true });
+    const existing = wins.find(w => w.tabs?.some(t => t.url?.startsWith(url)));
+
+    if (existing) {
+      await chrome.windows.update(existing.id!, {
+        focused: true,
+        drawAttention: true,
+      });
+    } else {
+      await chrome.windows.create({
+        url,
+        type: 'popup',
+        width: 500,
+        height: 700,
+      });
+    }
+  } finally {
+    // Always close current popup
+    window.close();
+  }
+}
+
 // Add styles for the popup
 const style = document.createElement('style');
 style.textContent = `
+  /* === Light mode base === */
+
   /* Scrollbar styling for consistent appearance */
   * {
     scrollbar-width: thin;
@@ -753,6 +802,104 @@ style.textContent = `
       flex: 1;
       min-width: 0;
     }
+  }
+
+  /* === Dark mode overrides === */
+  :host-context(html[data-theme='dark']) {
+    --scrollbar-track: #1e1e1e;
+    --scrollbar-thumb: #4b5563;
+    --scrollbar-thumb-hover: #6b7280;
+    --surface: #121212;
+    --surface-alt: #1e1e1e;
+    --border-color: #2d2d2d;
+    --text-primary: #e6e1e3;
+    --text-secondary: #a1a1aa;
+    --accent: #8b5cf6;
+    --accent-hover: #7c3aed;
+  }
+
+  :host-context(html[data-theme='dark']) * {
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  :host-context(html[data-theme='dark']) *::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  :host-context(html[data-theme='dark']) *::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+  }
+
+  :host-context(html[data-theme='dark']) *::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  :host-context(html[data-theme='dark']) .popup-header {
+    background: var(--surface-alt);
+    border-bottom-color: var(--border-color);
+  }
+
+  :host-context(html[data-theme='dark']) .popup-title {
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .tab-navigation {
+    background: var(--surface) !important;
+    border-color: var(--border-color) !important;
+  }
+
+  :host-context(html[data-theme='dark']) .tab-button {
+    color: var(--text-secondary);
+  }
+
+  :host-context(html[data-theme='dark']) .tab-button.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  :host-context(html[data-theme='dark']) .tab-button:hover:not(.active) {
+    background: #1f1f1f;
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .sms-thread-header {
+    background: var(--surface-alt);
+    border-bottom-color: var(--border-color);
+  }
+
+  :host-context(html[data-theme='dark']) .conversation-title {
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .popup-footer {
+    background: var(--surface-alt);
+    border-top-color: var(--border-color);
+    color: var(--text-secondary);
+  }
+
+  :host-context(html[data-theme='dark']) .about-dialog {
+    background: var(--surface-alt);
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .about-header h3 {
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .about-content p {
+    color: var(--text-secondary);
+  }
+
+  :host-context(html[data-theme='dark']) .about-links a {
+    color: var(--accent);
+  }
+
+  :host-context(html[data-theme='dark']) .about-links a:hover {
+    color: var(--accent-hover);
+  }
+
+  :host-context(html[data-theme='dark']) .license-info a {
+    color: var(--accent);
   }
 `;
 document.head.appendChild(style);

@@ -453,3 +453,191 @@ body {
     font-size: 22px;
   }
 }
+
+/* list */
+.dnd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px }
+
+/* each row: [handle][label][button] */
+.dnd-item {
+  display: grid;
+  grid-template-columns: 20px 1fr auto; /* <-- add 3rd column for the button */
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+}
+
+.dnd-item.dragging { opacity: .6 }
+.dnd-item .handle { cursor: grab; user-select: none }
+.dnd-item .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+
+.toggle-visibility {
+  appearance: none;
+  border: none;
+  border-radius: 9999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+:where(html[data-theme="light"], body[data-theme="light"]) .toggle-visibility {
+  background-color: #e0e7ff; /* light indigo */
+  color: #1e3a8a;            /* dark indigo text */
+}
+
+:where(html[data-theme="light"], body[data-theme="light"]) .toggle-visibility[data-state="hide"] {
+  background-color: #fee2e2; /* light red */
+  color: #991b1b;            /* dark red text */
+}
+
+/* Dark theme, triggered by <html data-theme="dark"> or <body data-theme="dark"> */
+:where(html[data-theme='dark'], body[data-theme='dark']) {
+  color-scheme: dark;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) body {
+  background: #0b1220;
+  color: #e5e7eb;
+}
+
+/* Components */
+:where(html[data-theme='dark'], body[data-theme='dark']) .options-header {
+  border-bottom: 1px solid #1f2937;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .options-header h1 {
+  color: #f3f4f6;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .subtitle {
+  color: #9ca3af;
+}
+
+:where(html[data-theme='dark'], body[data-theme='dark']) .settings-section {
+  background: #0f172a;
+  border: 1px solid #1f2937;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .settings-section h2 {
+  color: #f3f4f6;
+  border-bottom: 1px solid #1f2937;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .setting-item {
+  border-bottom: 1px solid #111827;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .setting-info label {
+  color: #e5e7eb;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .setting-info p {
+  color: #9ca3af;
+}
+
+/* Controls */
+:where(html[data-theme='dark'], body[data-theme='dark']) .toggle {
+  background: #374151;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .toggle:checked {
+  background: #3b82f6;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .toggle::before {
+  background: #e5e7eb;
+}
+
+:where(html[data-theme='dark'], body[data-theme='dark']) .select {
+  background: #0b1220;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  outline: none;
+}
+
+/* Buttons */
+:where(html[data-theme='dark'], body[data-theme='dark']) .button.secondary {
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #374151;
+}
+:where(html[data-theme='dark'], body[data-theme='dark'])
+  .button.secondary:hover {
+  background: #374151;
+  border-color: #4b5563;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .button.danger {
+  background: #dc2626;
+  color: #fff;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .button.danger:hover {
+  background: #b91c1c;
+}
+
+/* Messages */
+:where(html[data-theme='dark'], body[data-theme='dark']) .message {
+  border-width: 1px;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .message.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #a7f3d0;
+  border-color: #34d399;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .message.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fecaca;
+  border-color: #f87171;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .message.info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #bfdbfe;
+  border-color: #60a5fa;
+}
+
+/* Footer */
+:where(html[data-theme='dark'], body[data-theme='dark']) .footer {
+  border-top: 1px solid #1f2937;
+  color: #9ca3af;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .footer a {
+  color: #93c5fd;
+}
+:where(html[data-theme='dark'], body[data-theme='dark']) .disclaimer {
+  color: #6b7280;
+}
+
+/* Scrollbars */
+:where(html[data-theme='dark'], body[data-theme='dark'])
+  *::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+:where(html[data-theme='dark'], body[data-theme='dark'])
+  *::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+:where(html[data-theme='dark'], body[data-theme='dark'])
+  *::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+:where(html[data-theme="dark"], body[data-theme="dark"]) .dnd-item {
+  border-color: var(--border-color-dark, #3a3a3a);
+  background: var(--surface-dark, #1c1c1c);
+  color: var(--text-color-dark, #e6e6e6);
+}
+
+:where(html[data-theme="dark"], body[data-theme="dark"]) .toggle-visibility {
+  background-color: #3730a3; /* deep indigo */
+  color: #c7d2fe;            /* soft indigo text */
+}
+
+:where(html[data-theme="dark"], body[data-theme="dark"]) .toggle-visibility[data-state="hide"] {
+  background-color: #7f1d1d; /* deep red */
+  color: #fecaca;            /* soft red text */
+}
+
+:host-context(html[data-theme='dark']) .option-item .material-symbols-outlined {
+  color: #ddd;
+}

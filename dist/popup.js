@@ -1,41 +1,41 @@
-import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
+import{g as Se,o as Fe,e as _e}from"./notificationBadge.js";let $,F=!1,ue=!1;function ae(e){const t=e?"dark":"light";document.documentElement.getAttribute("data-theme")!==t&&document.documentElement.setAttribute("data-theme",t)}function J(){F&&ae(window.matchMedia("(prefers-color-scheme: dark)").matches)}function Me(){F?$||($=window.matchMedia("(prefers-color-scheme: dark)"),$.addEventListener?$.addEventListener("change",J):$.addListener(J)):$&&($.removeEventListener?$.removeEventListener("change",J):$.removeListener(J),$=void 0)}async function Ie(){try{F=!!(await Se("pb_settings"))?.systemTheme}catch{F=!1}ae(F?window.matchMedia("(prefers-color-scheme: dark)").matches:!1),Me()}function Re(){if(!ue){ue=!0;try{const e=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.setAttribute("data-theme",e?"dark":"light")}catch{document.documentElement.setAttribute("data-theme","light")}Ie(),chrome.storage.onChanged.addListener((e,t)=>{if(t!=="local")return;const o=e.pb_settings?.newValue;o&&(F=!!o.systemTheme,ae(F?window.matchMedia("(prefers-color-scheme: dark)").matches:!1),Me())})}}/**
  * @license
  * Copyright 2019 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const Y=globalThis,ie=Y.ShadowRoot&&(Y.ShadyCSS===void 0||Y.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,oe=Symbol(),de=new WeakMap;let ye=class{constructor(t,s,i){if(this._$cssResult$=!0,i!==oe)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=t,this.t=s}get styleSheet(){let t=this.o;const s=this.t;if(ie&&t===void 0){const i=s!==void 0&&s.length===1;i&&(t=de.get(s)),t===void 0&&((this.o=t=new CSSStyleSheet).replaceSync(this.cssText),i&&de.set(s,t))}return t}toString(){return this.cssText}};const Te=e=>new ye(typeof e=="string"?e:e+"",void 0,oe),T=(e,...t)=>{const s=e.length===1?e[0]:t.reduce((i,o,r)=>i+(n=>{if(n._$cssResult$===!0)return n.cssText;if(typeof n=="number")return n;throw Error("Value passed to 'css' function must be a 'css' function result: "+n+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(o)+e[r+1],e[0]);return new ye(s,e,oe)},Pe=(e,t)=>{if(ie)e.adoptedStyleSheets=t.map(s=>s instanceof CSSStyleSheet?s:s.styleSheet);else for(const s of t){const i=document.createElement("style"),o=Y.litNonce;o!==void 0&&i.setAttribute("nonce",o),i.textContent=s.cssText,e.appendChild(i)}},ce=ie?e=>e:e=>e instanceof CSSStyleSheet?(t=>{let s="";for(const i of t.cssRules)s+=i.cssText;return Te(s)})(e):e;/**
+ */const X=globalThis,ne=X.ShadowRoot&&(X.ShadyCSS===void 0||X.ShadyCSS.nativeShadow)&&"adoptedStyleSheets"in Document.prototype&&"replace"in CSSStyleSheet.prototype,de=Symbol(),me=new WeakMap;let Ce=class{constructor(t,o,s){if(this._$cssResult$=!0,s!==de)throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");this.cssText=t,this.t=o}get styleSheet(){let t=this.o;const o=this.t;if(ne&&t===void 0){const s=o!==void 0&&o.length===1;s&&(t=me.get(o)),t===void 0&&((this.o=t=new CSSStyleSheet).replaceSync(this.cssText),s&&me.set(o,t))}return t}toString(){return this.cssText}};const De=e=>new Ce(typeof e=="string"?e:e+"",void 0,de),P=(e,...t)=>{const o=e.length===1?e[0]:t.reduce((s,i,r)=>s+(a=>{if(a._$cssResult$===!0)return a.cssText;if(typeof a=="number")return a;throw Error("Value passed to 'css' function must be a 'css' function result: "+a+". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.")})(i)+e[r+1],e[0]);return new Ce(o,e,de)},Oe=(e,t)=>{if(ne)e.adoptedStyleSheets=t.map(o=>o instanceof CSSStyleSheet?o:o.styleSheet);else for(const o of t){const s=document.createElement("style"),i=X.litNonce;i!==void 0&&s.setAttribute("nonce",i),s.textContent=o.cssText,e.appendChild(s)}},be=ne?e=>e:e=>e instanceof CSSStyleSheet?(t=>{let o="";for(const s of t.cssRules)o+=s.cssText;return De(o)})(e):e;/**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const{is:Ae,defineProperty:Ee,getOwnPropertyDescriptor:Fe,getOwnPropertyNames:Le,getOwnPropertySymbols:Ie,getPrototypeOf:Re}=Object,X=globalThis,pe=X.trustedTypes,De=pe?pe.emptyScript:"",Oe=X.reactiveElementPolyfillSupport,j=(e,t)=>e,Z={toAttribute(e,t){switch(t){case Boolean:e=e?De:null;break;case Object:case Array:e=e==null?e:JSON.stringify(e)}return e},fromAttribute(e,t){let s=e;switch(t){case Boolean:s=e!==null;break;case Number:s=e===null?null:Number(e);break;case Object:case Array:try{s=JSON.parse(e)}catch{s=null}}return s}},re=(e,t)=>!Ae(e,t),he={attribute:!0,type:String,converter:Z,reflect:!1,useDefault:!1,hasChanged:re};Symbol.metadata??=Symbol("metadata"),X.litPropertyMetadata??=new WeakMap;let R=class extends HTMLElement{static addInitializer(t){this._$Ei(),(this.l??=[]).push(t)}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(t,s=he){if(s.state&&(s.attribute=!1),this._$Ei(),this.prototype.hasOwnProperty(t)&&((s=Object.create(s)).wrapped=!0),this.elementProperties.set(t,s),!s.noAccessor){const i=Symbol(),o=this.getPropertyDescriptor(t,i,s);o!==void 0&&Ee(this.prototype,t,o)}}static getPropertyDescriptor(t,s,i){const{get:o,set:r}=Fe(this.prototype,t)??{get(){return this[s]},set(n){this[s]=n}};return{get:o,set(n){const c=o?.call(this);r?.call(this,n),this.requestUpdate(t,c,i)},configurable:!0,enumerable:!0}}static getPropertyOptions(t){return this.elementProperties.get(t)??he}static _$Ei(){if(this.hasOwnProperty(j("elementProperties")))return;const t=Re(this);t.finalize(),t.l!==void 0&&(this.l=[...t.l]),this.elementProperties=new Map(t.elementProperties)}static finalize(){if(this.hasOwnProperty(j("finalized")))return;if(this.finalized=!0,this._$Ei(),this.hasOwnProperty(j("properties"))){const s=this.properties,i=[...Le(s),...Ie(s)];for(const o of i)this.createProperty(o,s[o])}const t=this[Symbol.metadata];if(t!==null){const s=litPropertyMetadata.get(t);if(s!==void 0)for(const[i,o]of s)this.elementProperties.set(i,o)}this._$Eh=new Map;for(const[s,i]of this.elementProperties){const o=this._$Eu(s,i);o!==void 0&&this._$Eh.set(o,s)}this.elementStyles=this.finalizeStyles(this.styles)}static finalizeStyles(t){const s=[];if(Array.isArray(t)){const i=new Set(t.flat(1/0).reverse());for(const o of i)s.unshift(ce(o))}else t!==void 0&&s.push(ce(t));return s}static _$Eu(t,s){const i=s.attribute;return i===!1?void 0:typeof i=="string"?i:typeof t=="string"?t.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=!1,this.hasUpdated=!1,this._$Em=null,this._$Ev()}_$Ev(){this._$ES=new Promise(t=>this.enableUpdating=t),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach(t=>t(this))}addController(t){(this._$EO??=new Set).add(t),this.renderRoot!==void 0&&this.isConnected&&t.hostConnected?.()}removeController(t){this._$EO?.delete(t)}_$E_(){const t=new Map,s=this.constructor.elementProperties;for(const i of s.keys())this.hasOwnProperty(i)&&(t.set(i,this[i]),delete this[i]);t.size>0&&(this._$Ep=t)}createRenderRoot(){const t=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return Pe(t,this.constructor.elementStyles),t}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(!0),this._$EO?.forEach(t=>t.hostConnected?.())}enableUpdating(t){}disconnectedCallback(){this._$EO?.forEach(t=>t.hostDisconnected?.())}attributeChangedCallback(t,s,i){this._$AK(t,i)}_$ET(t,s){const i=this.constructor.elementProperties.get(t),o=this.constructor._$Eu(t,i);if(o!==void 0&&i.reflect===!0){const r=(i.converter?.toAttribute!==void 0?i.converter:Z).toAttribute(s,i.type);this._$Em=t,r==null?this.removeAttribute(o):this.setAttribute(o,r),this._$Em=null}}_$AK(t,s){const i=this.constructor,o=i._$Eh.get(t);if(o!==void 0&&this._$Em!==o){const r=i.getPropertyOptions(o),n=typeof r.converter=="function"?{fromAttribute:r.converter}:r.converter?.fromAttribute!==void 0?r.converter:Z;this._$Em=o;const c=n.fromAttribute(s,r.type);this[o]=c??this._$Ej?.get(o)??c,this._$Em=null}}requestUpdate(t,s,i){if(t!==void 0){const o=this.constructor,r=this[t];if(i??=o.getPropertyOptions(t),!((i.hasChanged??re)(r,s)||i.useDefault&&i.reflect&&r===this._$Ej?.get(t)&&!this.hasAttribute(o._$Eu(t,i))))return;this.C(t,s,i)}this.isUpdatePending===!1&&(this._$ES=this._$EP())}C(t,s,{useDefault:i,reflect:o,wrapped:r},n){i&&!(this._$Ej??=new Map).has(t)&&(this._$Ej.set(t,n??s??this[t]),r!==!0||n!==void 0)||(this._$AL.has(t)||(this.hasUpdated||i||(s=void 0),this._$AL.set(t,s)),o===!0&&this._$Em!==t&&(this._$Eq??=new Set).add(t))}async _$EP(){this.isUpdatePending=!0;try{await this._$ES}catch(s){Promise.reject(s)}const t=this.scheduleUpdate();return t!=null&&await t,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(const[o,r]of this._$Ep)this[o]=r;this._$Ep=void 0}const i=this.constructor.elementProperties;if(i.size>0)for(const[o,r]of i){const{wrapped:n}=r,c=this[o];n!==!0||this._$AL.has(o)||c===void 0||this.C(o,void 0,r,c)}}let t=!1;const s=this._$AL;try{t=this.shouldUpdate(s),t?(this.willUpdate(s),this._$EO?.forEach(i=>i.hostUpdate?.()),this.update(s)):this._$EM()}catch(i){throw t=!1,this._$EM(),i}t&&this._$AE(s)}willUpdate(t){}_$AE(t){this._$EO?.forEach(s=>s.hostUpdated?.()),this.hasUpdated||(this.hasUpdated=!0,this.firstUpdated(t)),this.updated(t)}_$EM(){this._$AL=new Map,this.isUpdatePending=!1}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(t){return!0}update(t){this._$Eq&&=this._$Eq.forEach(s=>this._$ET(s,this[s])),this._$EM()}updated(t){}firstUpdated(t){}};R.elementStyles=[],R.shadowRootOptions={mode:"open"},R[j("elementProperties")]=new Map,R[j("finalized")]=new Map,Oe?.({ReactiveElement:R}),(X.reactiveElementVersions??=[]).push("2.1.1");/**
+ */const{is:Ne,defineProperty:Ue,getOwnPropertyDescriptor:He,getOwnPropertyNames:Be,getOwnPropertySymbols:je,getPrototypeOf:Ve}=Object,oe=globalThis,ge=oe.trustedTypes,qe=ge?ge.emptyScript:"",We=oe.reactiveElementPolyfillSupport,V=(e,t)=>e,ee={toAttribute(e,t){switch(t){case Boolean:e=e?qe:null;break;case Object:case Array:e=e==null?e:JSON.stringify(e)}return e},fromAttribute(e,t){let o=e;switch(t){case Boolean:o=e!==null;break;case Number:o=e===null?null:Number(e);break;case Object:case Array:try{o=JSON.parse(e)}catch{o=null}}return o}},le=(e,t)=>!Ne(e,t),fe={attribute:!0,type:String,converter:ee,reflect:!1,useDefault:!1,hasChanged:le};Symbol.metadata??=Symbol("metadata"),oe.litPropertyMetadata??=new WeakMap;let O=class extends HTMLElement{static addInitializer(t){this._$Ei(),(this.l??=[]).push(t)}static get observedAttributes(){return this.finalize(),this._$Eh&&[...this._$Eh.keys()]}static createProperty(t,o=fe){if(o.state&&(o.attribute=!1),this._$Ei(),this.prototype.hasOwnProperty(t)&&((o=Object.create(o)).wrapped=!0),this.elementProperties.set(t,o),!o.noAccessor){const s=Symbol(),i=this.getPropertyDescriptor(t,s,o);i!==void 0&&Ue(this.prototype,t,i)}}static getPropertyDescriptor(t,o,s){const{get:i,set:r}=He(this.prototype,t)??{get(){return this[o]},set(a){this[o]=a}};return{get:i,set(a){const c=i?.call(this);r?.call(this,a),this.requestUpdate(t,c,s)},configurable:!0,enumerable:!0}}static getPropertyOptions(t){return this.elementProperties.get(t)??fe}static _$Ei(){if(this.hasOwnProperty(V("elementProperties")))return;const t=Ve(this);t.finalize(),t.l!==void 0&&(this.l=[...t.l]),this.elementProperties=new Map(t.elementProperties)}static finalize(){if(this.hasOwnProperty(V("finalized")))return;if(this.finalized=!0,this._$Ei(),this.hasOwnProperty(V("properties"))){const o=this.properties,s=[...Be(o),...je(o)];for(const i of s)this.createProperty(i,o[i])}const t=this[Symbol.metadata];if(t!==null){const o=litPropertyMetadata.get(t);if(o!==void 0)for(const[s,i]of o)this.elementProperties.set(s,i)}this._$Eh=new Map;for(const[o,s]of this.elementProperties){const i=this._$Eu(o,s);i!==void 0&&this._$Eh.set(i,o)}this.elementStyles=this.finalizeStyles(this.styles)}static finalizeStyles(t){const o=[];if(Array.isArray(t)){const s=new Set(t.flat(1/0).reverse());for(const i of s)o.unshift(be(i))}else t!==void 0&&o.push(be(t));return o}static _$Eu(t,o){const s=o.attribute;return s===!1?void 0:typeof s=="string"?s:typeof t=="string"?t.toLowerCase():void 0}constructor(){super(),this._$Ep=void 0,this.isUpdatePending=!1,this.hasUpdated=!1,this._$Em=null,this._$Ev()}_$Ev(){this._$ES=new Promise(t=>this.enableUpdating=t),this._$AL=new Map,this._$E_(),this.requestUpdate(),this.constructor.l?.forEach(t=>t(this))}addController(t){(this._$EO??=new Set).add(t),this.renderRoot!==void 0&&this.isConnected&&t.hostConnected?.()}removeController(t){this._$EO?.delete(t)}_$E_(){const t=new Map,o=this.constructor.elementProperties;for(const s of o.keys())this.hasOwnProperty(s)&&(t.set(s,this[s]),delete this[s]);t.size>0&&(this._$Ep=t)}createRenderRoot(){const t=this.shadowRoot??this.attachShadow(this.constructor.shadowRootOptions);return Oe(t,this.constructor.elementStyles),t}connectedCallback(){this.renderRoot??=this.createRenderRoot(),this.enableUpdating(!0),this._$EO?.forEach(t=>t.hostConnected?.())}enableUpdating(t){}disconnectedCallback(){this._$EO?.forEach(t=>t.hostDisconnected?.())}attributeChangedCallback(t,o,s){this._$AK(t,s)}_$ET(t,o){const s=this.constructor.elementProperties.get(t),i=this.constructor._$Eu(t,s);if(i!==void 0&&s.reflect===!0){const r=(s.converter?.toAttribute!==void 0?s.converter:ee).toAttribute(o,s.type);this._$Em=t,r==null?this.removeAttribute(i):this.setAttribute(i,r),this._$Em=null}}_$AK(t,o){const s=this.constructor,i=s._$Eh.get(t);if(i!==void 0&&this._$Em!==i){const r=s.getPropertyOptions(i),a=typeof r.converter=="function"?{fromAttribute:r.converter}:r.converter?.fromAttribute!==void 0?r.converter:ee;this._$Em=i;const c=a.fromAttribute(o,r.type);this[i]=c??this._$Ej?.get(i)??c,this._$Em=null}}requestUpdate(t,o,s){if(t!==void 0){const i=this.constructor,r=this[t];if(s??=i.getPropertyOptions(t),!((s.hasChanged??le)(r,o)||s.useDefault&&s.reflect&&r===this._$Ej?.get(t)&&!this.hasAttribute(i._$Eu(t,s))))return;this.C(t,o,s)}this.isUpdatePending===!1&&(this._$ES=this._$EP())}C(t,o,{useDefault:s,reflect:i,wrapped:r},a){s&&!(this._$Ej??=new Map).has(t)&&(this._$Ej.set(t,a??o??this[t]),r!==!0||a!==void 0)||(this._$AL.has(t)||(this.hasUpdated||s||(o=void 0),this._$AL.set(t,o)),i===!0&&this._$Em!==t&&(this._$Eq??=new Set).add(t))}async _$EP(){this.isUpdatePending=!0;try{await this._$ES}catch(o){Promise.reject(o)}const t=this.scheduleUpdate();return t!=null&&await t,!this.isUpdatePending}scheduleUpdate(){return this.performUpdate()}performUpdate(){if(!this.isUpdatePending)return;if(!this.hasUpdated){if(this.renderRoot??=this.createRenderRoot(),this._$Ep){for(const[i,r]of this._$Ep)this[i]=r;this._$Ep=void 0}const s=this.constructor.elementProperties;if(s.size>0)for(const[i,r]of s){const{wrapped:a}=r,c=this[i];a!==!0||this._$AL.has(i)||c===void 0||this.C(i,void 0,r,c)}}let t=!1;const o=this._$AL;try{t=this.shouldUpdate(o),t?(this.willUpdate(o),this._$EO?.forEach(s=>s.hostUpdate?.()),this.update(o)):this._$EM()}catch(s){throw t=!1,this._$EM(),s}t&&this._$AE(o)}willUpdate(t){}_$AE(t){this._$EO?.forEach(o=>o.hostUpdated?.()),this.hasUpdated||(this.hasUpdated=!0,this.firstUpdated(t)),this.updated(t)}_$EM(){this._$AL=new Map,this.isUpdatePending=!1}get updateComplete(){return this.getUpdateComplete()}getUpdateComplete(){return this._$ES}shouldUpdate(t){return!0}update(t){this._$Eq&&=this._$Eq.forEach(o=>this._$ET(o,this[o])),this._$EM()}updated(t){}firstUpdated(t){}};O.elementStyles=[],O.shadowRootOptions={mode:"open"},O[V("elementProperties")]=new Map,O[V("finalized")]=new Map,We?.({ReactiveElement:O}),(oe.reactiveElementVersions??=[]).push("2.1.1");/**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const ne=globalThis,J=ne.trustedTypes,ue=J?J.createPolicy("lit-html",{createHTML:e=>e}):void 0,we="$lit$",C=`lit$${Math.random().toFixed(9).slice(2)}$`,$e="?"+C,Ne=`<${$e}>`,F=document,B=()=>F.createComment(""),V=e=>e===null||typeof e!="object"&&typeof e!="function",ae=Array.isArray,Ue=e=>ae(e)||typeof e?.[Symbol.iterator]=="function",se=`[ 	
-\f\r]`,H=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,ge=/-->/g,fe=/>/g,A=RegExp(`>|${se}(?:([^\\s"'>=/]+)(${se}*=${se}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`,"g"),me=/'/g,be=/"/g,Se=/^(?:script|style|textarea|title)$/i,He=e=>(t,...s)=>({_$litType$:e,strings:t,values:s}),a=He(1),D=Symbol.for("lit-noChange"),u=Symbol.for("lit-nothing"),xe=new WeakMap,E=F.createTreeWalker(F,129);function _e(e,t){if(!ae(e)||!e.hasOwnProperty("raw"))throw Error("invalid template strings array");return ue!==void 0?ue.createHTML(t):t}const je=(e,t)=>{const s=e.length-1,i=[];let o,r=t===2?"<svg>":t===3?"<math>":"",n=H;for(let c=0;c<s;c++){const d=e[c];let h,f,p=-1,_=0;for(;_<d.length&&(n.lastIndex=_,f=n.exec(d),f!==null);)_=n.lastIndex,n===H?f[1]==="!--"?n=ge:f[1]!==void 0?n=fe:f[2]!==void 0?(Se.test(f[2])&&(o=RegExp("</"+f[2],"g")),n=A):f[3]!==void 0&&(n=A):n===A?f[0]===">"?(n=o??H,p=-1):f[1]===void 0?p=-2:(p=n.lastIndex-f[2].length,h=f[1],n=f[3]===void 0?A:f[3]==='"'?be:me):n===be||n===me?n=A:n===ge||n===fe?n=H:(n=A,o=void 0);const M=n===A&&e[c+1].startsWith("/>")?" ":"";r+=n===H?d+Ne:p>=0?(i.push(h),d.slice(0,p)+we+d.slice(p)+C+M):d+C+(p===-2?c:M)}return[_e(e,r+(e[s]||"<?>")+(t===2?"</svg>":t===3?"</math>":"")),i]};class q{constructor({strings:t,_$litType$:s},i){let o;this.parts=[];let r=0,n=0;const c=t.length-1,d=this.parts,[h,f]=je(t,s);if(this.el=q.createElement(h,i),E.currentNode=this.el.content,s===2||s===3){const p=this.el.content.firstChild;p.replaceWith(...p.childNodes)}for(;(o=E.nextNode())!==null&&d.length<c;){if(o.nodeType===1){if(o.hasAttributes())for(const p of o.getAttributeNames())if(p.endsWith(we)){const _=f[n++],M=o.getAttribute(p).split(C),Q=/([.?@])?(.*)/.exec(_);d.push({type:1,index:r,name:Q[2],strings:M,ctor:Q[1]==="."?Ve:Q[1]==="?"?qe:Q[1]==="@"?We:ee}),o.removeAttribute(p)}else p.startsWith(C)&&(d.push({type:6,index:r}),o.removeAttribute(p));if(Se.test(o.tagName)){const p=o.textContent.split(C),_=p.length-1;if(_>0){o.textContent=J?J.emptyScript:"";for(let M=0;M<_;M++)o.append(p[M],B()),E.nextNode(),d.push({type:2,index:++r});o.append(p[_],B())}}}else if(o.nodeType===8)if(o.data===$e)d.push({type:2,index:r});else{let p=-1;for(;(p=o.data.indexOf(C,p+1))!==-1;)d.push({type:7,index:r}),p+=C.length-1}r++}}static createElement(t,s){const i=F.createElement("template");return i.innerHTML=t,i}}function O(e,t,s=e,i){if(t===D)return t;let o=i!==void 0?s._$Co?.[i]:s._$Cl;const r=V(t)?void 0:t._$litDirective$;return o?.constructor!==r&&(o?._$AO?.(!1),r===void 0?o=void 0:(o=new r(e),o._$AT(e,s,i)),i!==void 0?(s._$Co??=[])[i]=o:s._$Cl=o),o!==void 0&&(t=O(e,o._$AS(e,t.values),o,i)),t}class Be{constructor(t,s){this._$AV=[],this._$AN=void 0,this._$AD=t,this._$AM=s}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(t){const{el:{content:s},parts:i}=this._$AD,o=(t?.creationScope??F).importNode(s,!0);E.currentNode=o;let r=E.nextNode(),n=0,c=0,d=i[0];for(;d!==void 0;){if(n===d.index){let h;d.type===2?h=new W(r,r.nextSibling,this,t):d.type===1?h=new d.ctor(r,d.name,d.strings,this,t):d.type===6&&(h=new Ge(r,this,t)),this._$AV.push(h),d=i[++c]}n!==d?.index&&(r=E.nextNode(),n++)}return E.currentNode=F,o}p(t){let s=0;for(const i of this._$AV)i!==void 0&&(i.strings!==void 0?(i._$AI(t,i,s),s+=i.strings.length-2):i._$AI(t[s])),s++}}class W{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(t,s,i,o){this.type=2,this._$AH=u,this._$AN=void 0,this._$AA=t,this._$AB=s,this._$AM=i,this.options=o,this._$Cv=o?.isConnected??!0}get parentNode(){let t=this._$AA.parentNode;const s=this._$AM;return s!==void 0&&t?.nodeType===11&&(t=s.parentNode),t}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(t,s=this){t=O(this,t,s),V(t)?t===u||t==null||t===""?(this._$AH!==u&&this._$AR(),this._$AH=u):t!==this._$AH&&t!==D&&this._(t):t._$litType$!==void 0?this.$(t):t.nodeType!==void 0?this.T(t):Ue(t)?this.k(t):this._(t)}O(t){return this._$AA.parentNode.insertBefore(t,this._$AB)}T(t){this._$AH!==t&&(this._$AR(),this._$AH=this.O(t))}_(t){this._$AH!==u&&V(this._$AH)?this._$AA.nextSibling.data=t:this.T(F.createTextNode(t)),this._$AH=t}$(t){const{values:s,_$litType$:i}=t,o=typeof i=="number"?this._$AC(t):(i.el===void 0&&(i.el=q.createElement(_e(i.h,i.h[0]),this.options)),i);if(this._$AH?._$AD===o)this._$AH.p(s);else{const r=new Be(o,this),n=r.u(this.options);r.p(s),this.T(n),this._$AH=r}}_$AC(t){let s=xe.get(t.strings);return s===void 0&&xe.set(t.strings,s=new q(t)),s}k(t){ae(this._$AH)||(this._$AH=[],this._$AR());const s=this._$AH;let i,o=0;for(const r of t)o===s.length?s.push(i=new W(this.O(B()),this.O(B()),this,this.options)):i=s[o],i._$AI(r),o++;o<s.length&&(this._$AR(i&&i._$AB.nextSibling,o),s.length=o)}_$AR(t=this._$AA.nextSibling,s){for(this._$AP?.(!1,!0,s);t!==this._$AB;){const i=t.nextSibling;t.remove(),t=i}}setConnected(t){this._$AM===void 0&&(this._$Cv=t,this._$AP?.(t))}}class ee{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(t,s,i,o,r){this.type=1,this._$AH=u,this._$AN=void 0,this.element=t,this.name=s,this._$AM=o,this.options=r,i.length>2||i[0]!==""||i[1]!==""?(this._$AH=Array(i.length-1).fill(new String),this.strings=i):this._$AH=u}_$AI(t,s=this,i,o){const r=this.strings;let n=!1;if(r===void 0)t=O(this,t,s,0),n=!V(t)||t!==this._$AH&&t!==D,n&&(this._$AH=t);else{const c=t;let d,h;for(t=r[0],d=0;d<r.length-1;d++)h=O(this,c[i+d],s,d),h===D&&(h=this._$AH[d]),n||=!V(h)||h!==this._$AH[d],h===u?t=u:t!==u&&(t+=(h??"")+r[d+1]),this._$AH[d]=h}n&&!o&&this.j(t)}j(t){t===u?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,t??"")}}class Ve extends ee{constructor(){super(...arguments),this.type=3}j(t){this.element[this.name]=t===u?void 0:t}}class qe extends ee{constructor(){super(...arguments),this.type=4}j(t){this.element.toggleAttribute(this.name,!!t&&t!==u)}}class We extends ee{constructor(t,s,i,o,r){super(t,s,i,o,r),this.type=5}_$AI(t,s=this){if((t=O(this,t,s,0)??u)===D)return;const i=this._$AH,o=t===u&&i!==u||t.capture!==i.capture||t.once!==i.once||t.passive!==i.passive,r=t!==u&&(i===u||o);o&&this.element.removeEventListener(this.name,this,i),r&&this.element.addEventListener(this.name,this,t),this._$AH=t}handleEvent(t){typeof this._$AH=="function"?this._$AH.call(this.options?.host??this.element,t):this._$AH.handleEvent(t)}}class Ge{constructor(t,s,i){this.element=t,this.type=6,this._$AN=void 0,this._$AM=s,this.options=i}get _$AU(){return this._$AM._$AU}_$AI(t){O(this,t)}}const Ke=ne.litHtmlPolyfillSupport;Ke?.(q,W),(ne.litHtmlVersions??=[]).push("3.3.1");const Qe=(e,t,s)=>{const i=s?.renderBefore??t;let o=i._$litPart$;if(o===void 0){const r=s?.renderBefore??null;i._$litPart$=o=new W(t.insertBefore(B(),r),r,void 0,s??{})}return o._$AI(e),o};/**
+ */const ce=globalThis,te=ce.trustedTypes,xe=te?te.createPolicy("lit-html",{createHTML:e=>e}):void 0,ze="$lit$",z=`lit$${Math.random().toFixed(9).slice(2)}$`,Te="?"+z,Ge=`<${Te}>`,I=document,q=()=>I.createComment(""),W=e=>e===null||typeof e!="object"&&typeof e!="function",he=Array.isArray,Ke=e=>he(e)||typeof e?.[Symbol.iterator]=="function",re=`[ 	
+\f\r]`,j=/<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g,ve=/-->/g,ye=/>/g,E=RegExp(`>|${re}(?:([^\\s"'>=/]+)(${re}*=${re}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`,"g"),ke=/'/g,we=/"/g,Pe=/^(?:script|style|textarea|title)$/i,Qe=e=>(t,...o)=>({_$litType$:e,strings:t,values:o}),n=Qe(1),N=Symbol.for("lit-noChange"),u=Symbol.for("lit-nothing"),$e=new WeakMap,L=I.createTreeWalker(I,129);function Ae(e,t){if(!he(e)||!e.hasOwnProperty("raw"))throw Error("invalid template strings array");return xe!==void 0?xe.createHTML(t):t}const Ye=(e,t)=>{const o=e.length-1,s=[];let i,r=t===2?"<svg>":t===3?"<math>":"",a=j;for(let c=0;c<o;c++){const l=e[c];let p,b,h=-1,_=0;for(;_<l.length&&(a.lastIndex=_,b=a.exec(l),b!==null);)_=a.lastIndex,a===j?b[1]==="!--"?a=ve:b[1]!==void 0?a=ye:b[2]!==void 0?(Pe.test(b[2])&&(i=RegExp("</"+b[2],"g")),a=E):b[3]!==void 0&&(a=E):a===E?b[0]===">"?(a=i??j,h=-1):b[1]===void 0?h=-2:(h=a.lastIndex-b[2].length,p=b[1],a=b[3]===void 0?E:b[3]==='"'?we:ke):a===we||a===ke?a=E:a===ve||a===ye?a=j:(a=E,i=void 0);const C=a===E&&e[c+1].startsWith("/>")?" ":"";r+=a===j?l+Ge:h>=0?(s.push(p),l.slice(0,h)+ze+l.slice(h)+z+C):l+z+(h===-2?c:C)}return[Ae(e,r+(e[o]||"<?>")+(t===2?"</svg>":t===3?"</math>":"")),s]};class G{constructor({strings:t,_$litType$:o},s){let i;this.parts=[];let r=0,a=0;const c=t.length-1,l=this.parts,[p,b]=Ye(t,o);if(this.el=G.createElement(p,s),L.currentNode=this.el.content,o===2||o===3){const h=this.el.content.firstChild;h.replaceWith(...h.childNodes)}for(;(i=L.nextNode())!==null&&l.length<c;){if(i.nodeType===1){if(i.hasAttributes())for(const h of i.getAttributeNames())if(h.endsWith(ze)){const _=b[a++],C=i.getAttribute(h).split(z),Z=/([.?@])?(.*)/.exec(_);l.push({type:1,index:r,name:Z[2],strings:C,ctor:Z[1]==="."?Je:Z[1]==="?"?Xe:Z[1]==="@"?et:se}),i.removeAttribute(h)}else h.startsWith(z)&&(l.push({type:6,index:r}),i.removeAttribute(h));if(Pe.test(i.tagName)){const h=i.textContent.split(z),_=h.length-1;if(_>0){i.textContent=te?te.emptyScript:"";for(let C=0;C<_;C++)i.append(h[C],q()),L.nextNode(),l.push({type:2,index:++r});i.append(h[_],q())}}}else if(i.nodeType===8)if(i.data===Te)l.push({type:2,index:r});else{let h=-1;for(;(h=i.data.indexOf(z,h+1))!==-1;)l.push({type:7,index:r}),h+=z.length-1}r++}}static createElement(t,o){const s=I.createElement("template");return s.innerHTML=t,s}}function U(e,t,o=e,s){if(t===N)return t;let i=s!==void 0?o._$Co?.[s]:o._$Cl;const r=W(t)?void 0:t._$litDirective$;return i?.constructor!==r&&(i?._$AO?.(!1),r===void 0?i=void 0:(i=new r(e),i._$AT(e,o,s)),s!==void 0?(o._$Co??=[])[s]=i:o._$Cl=i),i!==void 0&&(t=U(e,i._$AS(e,t.values),i,s)),t}class Ze{constructor(t,o){this._$AV=[],this._$AN=void 0,this._$AD=t,this._$AM=o}get parentNode(){return this._$AM.parentNode}get _$AU(){return this._$AM._$AU}u(t){const{el:{content:o},parts:s}=this._$AD,i=(t?.creationScope??I).importNode(o,!0);L.currentNode=i;let r=L.nextNode(),a=0,c=0,l=s[0];for(;l!==void 0;){if(a===l.index){let p;l.type===2?p=new K(r,r.nextSibling,this,t):l.type===1?p=new l.ctor(r,l.name,l.strings,this,t):l.type===6&&(p=new tt(r,this,t)),this._$AV.push(p),l=s[++c]}a!==l?.index&&(r=L.nextNode(),a++)}return L.currentNode=I,i}p(t){let o=0;for(const s of this._$AV)s!==void 0&&(s.strings!==void 0?(s._$AI(t,s,o),o+=s.strings.length-2):s._$AI(t[o])),o++}}class K{get _$AU(){return this._$AM?._$AU??this._$Cv}constructor(t,o,s,i){this.type=2,this._$AH=u,this._$AN=void 0,this._$AA=t,this._$AB=o,this._$AM=s,this.options=i,this._$Cv=i?.isConnected??!0}get parentNode(){let t=this._$AA.parentNode;const o=this._$AM;return o!==void 0&&t?.nodeType===11&&(t=o.parentNode),t}get startNode(){return this._$AA}get endNode(){return this._$AB}_$AI(t,o=this){t=U(this,t,o),W(t)?t===u||t==null||t===""?(this._$AH!==u&&this._$AR(),this._$AH=u):t!==this._$AH&&t!==N&&this._(t):t._$litType$!==void 0?this.$(t):t.nodeType!==void 0?this.T(t):Ke(t)?this.k(t):this._(t)}O(t){return this._$AA.parentNode.insertBefore(t,this._$AB)}T(t){this._$AH!==t&&(this._$AR(),this._$AH=this.O(t))}_(t){this._$AH!==u&&W(this._$AH)?this._$AA.nextSibling.data=t:this.T(I.createTextNode(t)),this._$AH=t}$(t){const{values:o,_$litType$:s}=t,i=typeof s=="number"?this._$AC(t):(s.el===void 0&&(s.el=G.createElement(Ae(s.h,s.h[0]),this.options)),s);if(this._$AH?._$AD===i)this._$AH.p(o);else{const r=new Ze(i,this),a=r.u(this.options);r.p(o),this.T(a),this._$AH=r}}_$AC(t){let o=$e.get(t.strings);return o===void 0&&$e.set(t.strings,o=new G(t)),o}k(t){he(this._$AH)||(this._$AH=[],this._$AR());const o=this._$AH;let s,i=0;for(const r of t)i===o.length?o.push(s=new K(this.O(q()),this.O(q()),this,this.options)):s=o[i],s._$AI(r),i++;i<o.length&&(this._$AR(s&&s._$AB.nextSibling,i),o.length=i)}_$AR(t=this._$AA.nextSibling,o){for(this._$AP?.(!1,!0,o);t!==this._$AB;){const s=t.nextSibling;t.remove(),t=s}}setConnected(t){this._$AM===void 0&&(this._$Cv=t,this._$AP?.(t))}}class se{get tagName(){return this.element.tagName}get _$AU(){return this._$AM._$AU}constructor(t,o,s,i,r){this.type=1,this._$AH=u,this._$AN=void 0,this.element=t,this.name=o,this._$AM=i,this.options=r,s.length>2||s[0]!==""||s[1]!==""?(this._$AH=Array(s.length-1).fill(new String),this.strings=s):this._$AH=u}_$AI(t,o=this,s,i){const r=this.strings;let a=!1;if(r===void 0)t=U(this,t,o,0),a=!W(t)||t!==this._$AH&&t!==N,a&&(this._$AH=t);else{const c=t;let l,p;for(t=r[0],l=0;l<r.length-1;l++)p=U(this,c[s+l],o,l),p===N&&(p=this._$AH[l]),a||=!W(p)||p!==this._$AH[l],p===u?t=u:t!==u&&(t+=(p??"")+r[l+1]),this._$AH[l]=p}a&&!i&&this.j(t)}j(t){t===u?this.element.removeAttribute(this.name):this.element.setAttribute(this.name,t??"")}}class Je extends se{constructor(){super(...arguments),this.type=3}j(t){this.element[this.name]=t===u?void 0:t}}class Xe extends se{constructor(){super(...arguments),this.type=4}j(t){this.element.toggleAttribute(this.name,!!t&&t!==u)}}class et extends se{constructor(t,o,s,i,r){super(t,o,s,i,r),this.type=5}_$AI(t,o=this){if((t=U(this,t,o,0)??u)===N)return;const s=this._$AH,i=t===u&&s!==u||t.capture!==s.capture||t.once!==s.once||t.passive!==s.passive,r=t!==u&&(s===u||i);i&&this.element.removeEventListener(this.name,this,s),r&&this.element.addEventListener(this.name,this,t),this._$AH=t}handleEvent(t){typeof this._$AH=="function"?this._$AH.call(this.options?.host??this.element,t):this._$AH.handleEvent(t)}}class tt{constructor(t,o,s){this.element=t,this.type=6,this._$AN=void 0,this._$AM=o,this.options=s}get _$AU(){return this._$AM._$AU}_$AI(t){U(this,t)}}const ot=ce.litHtmlPolyfillSupport;ot?.(G,K),(ce.litHtmlVersions??=[]).push("3.3.1");const st=(e,t,o)=>{const s=o?.renderBefore??t;let i=s._$litPart$;if(i===void 0){const r=o?.renderBefore??null;s._$litPart$=i=new K(t.insertBefore(q(),r),r,void 0,o??{})}return i._$AI(e),i};/**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const le=globalThis;class v extends R{constructor(){super(...arguments),this.renderOptions={host:this},this._$Do=void 0}createRenderRoot(){const t=super.createRenderRoot();return this.renderOptions.renderBefore??=t.firstChild,t}update(t){const s=this.render();this.hasUpdated||(this.renderOptions.isConnected=this.isConnected),super.update(t),this._$Do=Qe(s,this.renderRoot,this.renderOptions)}connectedCallback(){super.connectedCallback(),this._$Do?.setConnected(!0)}disconnectedCallback(){super.disconnectedCallback(),this._$Do?.setConnected(!1)}render(){return D}}v._$litElement$=!0,v.finalized=!0,le.litElementHydrateSupport?.({LitElement:v});const Ye=le.litElementPolyfillSupport;Ye?.({LitElement:v});(le.litElementVersions??=[]).push("4.2.1");/**
+ */const pe=globalThis;class v extends O{constructor(){super(...arguments),this.renderOptions={host:this},this._$Do=void 0}createRenderRoot(){const t=super.createRenderRoot();return this.renderOptions.renderBefore??=t.firstChild,t}update(t){const o=this.render();this.hasUpdated||(this.renderOptions.isConnected=this.isConnected),super.update(t),this._$Do=st(o,this.renderRoot,this.renderOptions)}connectedCallback(){super.connectedCallback(),this._$Do?.setConnected(!0)}disconnectedCallback(){super.disconnectedCallback(),this._$Do?.setConnected(!1)}render(){return N}}v._$litElement$=!0,v.finalized=!0,pe.litElementHydrateSupport?.({LitElement:v});const it=pe.litElementPolyfillSupport;it?.({LitElement:v});(pe.litElementVersions??=[]).push("4.2.1");/**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const P=e=>(t,s)=>{s!==void 0?s.addInitializer(()=>{customElements.define(e,t)}):customElements.define(e,t)};/**
+ */const A=e=>(t,o)=>{o!==void 0?o.addInitializer(()=>{customElements.define(e,t)}):customElements.define(e,t)};/**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */const Ze={attribute:!0,type:String,converter:Z,reflect:!1,hasChanged:re},Je=(e=Ze,t,s)=>{const{kind:i,metadata:o}=s;let r=globalThis.litPropertyMetadata.get(o);if(r===void 0&&globalThis.litPropertyMetadata.set(o,r=new Map),i==="setter"&&((e=Object.create(e)).wrapped=!0),r.set(s.name,e),i==="accessor"){const{name:n}=s;return{set(c){const d=t.get.call(this);t.set.call(this,c),this.requestUpdate(n,d,e)},init(c){return c!==void 0&&this.C(n,void 0,e,c),c}}}if(i==="setter"){const{name:n}=s;return function(c){const d=this[n];t.call(this,c),this.requestUpdate(n,d,e)}}throw Error("Unsupported decorator location: "+i)};function S(e){return(t,s)=>typeof s=="object"?Je(e,t,s):((i,o,r)=>{const n=o.hasOwnProperty(r);return o.constructor.createProperty(r,i),n?Object.getOwnPropertyDescriptor(o,r):void 0})(e,t,s)}/**
+ */const rt={attribute:!0,type:String,converter:ee,reflect:!1,hasChanged:le},at=(e=rt,t,o)=>{const{kind:s,metadata:i}=o;let r=globalThis.litPropertyMetadata.get(i);if(r===void 0&&globalThis.litPropertyMetadata.set(i,r=new Map),s==="setter"&&((e=Object.create(e)).wrapped=!0),r.set(o.name,e),s==="accessor"){const{name:a}=o;return{set(c){const l=t.get.call(this);t.set.call(this,c),this.requestUpdate(a,l,e)},init(c){return c!==void 0&&this.C(a,void 0,e,c),c}}}if(s==="setter"){const{name:a}=o;return function(c){const l=this[a];t.call(this,c),this.requestUpdate(a,l,e)}}throw Error("Unsupported decorator location: "+s)};function S(e){return(t,o)=>typeof o=="object"?at(e,t,o):((s,i,r)=>{const a=i.hasOwnProperty(r);return i.constructor.createProperty(r,s),a?Object.getOwnPropertyDescriptor(i,r):void 0})(e,t,o)}/**
  * @license
  * Copyright 2017 Google LLC
  * SPDX-License-Identifier: BSD-3-Clause
- */function l(e){return S({...e,state:!0,attribute:!1})}var Xe=Object.defineProperty,et=Object.getOwnPropertyDescriptor,G=(e,t,s,i)=>{for(var o=i>1?void 0:i?et(t,s):t,r=e.length-1,n;r>=0;r--)(n=e[r])&&(o=(i?n(t,s,o):n(o))||o);return i&&o&&Xe(t,s,o),o};let L=class extends v{constructor(){super(...arguments),this.token="",this.isVerifying=!1,this.errorMessage="",this.isSuccess=!1}render(){return this.isSuccess?a`
+ */function d(e){return S({...e,state:!0,attribute:!1})}var nt=Object.defineProperty,dt=Object.getOwnPropertyDescriptor,Q=(e,t,o,s)=>{for(var i=s>1?void 0:s?dt(t,o):t,r=e.length-1,a;r>=0;r--)(a=e[r])&&(i=(s?a(t,o,i):a(i))||i);return s&&i&&nt(t,o,i),i};let R=class extends v{constructor(){super(...arguments),this.token="",this.isVerifying=!1,this.errorMessage="",this.isSuccess=!1}render(){return this.isSuccess?n`
         <div class="container">
           <div class="success-message">
             ✅ Token verified successfully! Loading your data...
             <div class="loading" style="margin-top: 12px;"></div>
           </div>
         </div>
-      `:a`
+      `:n`
       <div class="container">
         <div class="header">
           <h1 class="title">Welcome to Pushbridge</h1>
@@ -67,21 +67,22 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             </div>
           </div>
 
-          ${this.errorMessage?a` <div class="error-message">${this.errorMessage}</div> `:""}
+          ${this.errorMessage?n` <div class="error-message">${this.errorMessage}</div> `:""}
 
           <button
             type="submit"
             class="button"
             ?disabled=${!this.token.trim()||this.isVerifying}
           >
-            ${this.isVerifying?a`
+            ${this.isVerifying?n`
                   <span class="loading"></span>
                   Verifying...
                 `:"Save & Verify"}
           </button>
         </form>
       </div>
-    `}handleTokenInput(e){const t=e.target;this.token=t.value,this.errorMessage=""}async handleSubmit(e){if(e.preventDefault(),!!this.token.trim()){this.isVerifying=!0,this.errorMessage="";try{const t=await chrome.runtime.sendMessage({cmd:"verifyToken",token:this.token.trim()});t.ok?(this.isSuccess=!0,setTimeout(()=>{this.dispatchEvent(new CustomEvent("token-verified",{detail:{token:this.token.trim()}}))},1500)):this.errorMessage=t.error||"Token verification failed. Please check your token and try again."}catch(t){console.error("Token verification error:",t),this.errorMessage="Failed to verify token. Please check your internet connection and try again."}finally{this.isVerifying=!1}}}};L.styles=T`
+    `}handleTokenInput(e){const t=e.target;this.token=t.value,this.errorMessage=""}async handleSubmit(e){if(e.preventDefault(),!!this.token.trim()){this.isVerifying=!0,this.errorMessage="";try{const t=await chrome.runtime.sendMessage({cmd:"verifyToken",token:this.token.trim()});t.ok?(this.isSuccess=!0,setTimeout(()=>{this.dispatchEvent(new CustomEvent("token-verified",{detail:{token:this.token.trim()}}))},1500)):this.errorMessage=t.error||"Token verification failed. Please check your token and try again."}catch(t){console.error("Token verification error:",t),this.errorMessage="Failed to verify token. Please check your internet connection and try again."}finally{this.isVerifying=!1}}}};R.styles=P`
+    /* === Light mode base === */
     :host {
       display: block;
       font-family:
@@ -278,10 +279,75 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
         font-size: 13px;
       }
     }
-  `;G([S({type:String})],L.prototype,"token",2);G([l()],L.prototype,"isVerifying",2);G([l()],L.prototype,"errorMessage",2);G([l()],L.prototype,"isSuccess",2);L=G([P("pb-token-setup")],L);var tt=Object.defineProperty,st=Object.getOwnPropertyDescriptor,y=(e,t,s,i)=>{for(var o=i>1?void 0:i?st(t,s):t,r=e.length-1,n;r>=0;r--)(n=e[r])&&(o=(i?n(t,s,o):n(o))||o);return i&&o&&tt(t,s,o),o};let b=class extends v{constructor(){super(...arguments),this.defaultUrl="",this.pushTitle="",this.body="",this.sendTo="all",this.sendTargets=[],this.selectedFile=null,this.isLoading=!1,this.isSending=!1,this.errorMessage="",this.successMessage="",this.messageTimeout=null}connectedCallback(){super.connectedCallback(),this.loadSendTargets(),this.defaultUrl&&(this.body=this.defaultUrl)}determinePushType(e,t){if(t)return"file";const s=e.trim();if(!s)return"note";const i=/https?:\/\/[^\s]+/g,o=s.match(i);return o?.length===1&&s===o[0]?"link":"note"}async loadSendTargets(){try{const[e,t,s]=await Promise.all([chrome.runtime.sendMessage({cmd:"getDevices"}),chrome.runtime.sendMessage({cmd:"GET_OWNED_CHANNELS"}),chrome.runtime.sendMessage({cmd:"getContacts"})]),i=e.ok?e.devices:[],o=t.success?t.ownedChannels:[],r=s.ok?s.contacts:[];console.log("Loaded devices:",i.length,"channels:",o.length,"contacts:",r.length),this.sendTargets=[...i.map(n=>({id:n.iden,name:n.nickname||"Unknown Device",type:"device",icon:this.getDeviceIcon(n.type)})),...r.map(n=>({id:n.email,name:n.name,type:"contact",icon:"👤"})),...o.map(n=>({id:n.tag,name:n.name,type:"channel",icon:"📢"}))],console.log("Total send targets:",this.sendTargets.length)}catch(e){console.error("Failed to load send targets:",e)}}getDeviceIcon(e){switch(e){case"android":return"📱";case"ios":return"📱";case"chrome":return"💻";case"firefox":return"🦊";case"windows":return"🖥️";case"mac":return"🖥️";default:return"📱"}}handleInputChange(e){const t=e.target,s=t.name;s==="title"?this.pushTitle=t.value:s==="body"&&(this.body=t.value)}clearMessages(){this.errorMessage="",this.successMessage="",this.messageTimeout&&(clearTimeout(this.messageTimeout),this.messageTimeout=null)}setMessageWithTimeout(e,t=!1){console.log("Setting message:",e,"isError:",t),this.messageTimeout&&clearTimeout(this.messageTimeout),t?(this.errorMessage=e,this.successMessage=""):(this.successMessage=e,this.errorMessage=""),console.log("Message set - errorMessage:",this.errorMessage,"successMessage:",this.successMessage),this.messageTimeout=window.setTimeout(()=>{console.log("Clearing message after timeout"),this.clearMessages()},1e4)}validateForm(){return!this.pushTitle.trim()&&!this.body.trim()&&!this.selectedFile?(this.setMessageWithTimeout("Please provide a title, message, or file",!0),!1):!0}handleFileSelect(e){const t=e.target;t.files&&t.files[0]?this.selectedFile=t.files[0]:this.selectedFile=null}handleSendToChange(e){const t=e.target;this.sendTo=t.value}async handleSend(){if(this.validateForm()){this.isSending=!0,this.clearMessages();try{const e=this.determinePushType(this.body,this.selectedFile||void 0),t=this.sendTargets.find(o=>o.id===this.sendTo);if(!t&&this.sendTo!=="all"){this.setMessageWithTimeout("Please select a valid send target",!0),this.isSending=!1;return}let s={type:e,title:this.pushTitle.trim()||void 0,body:this.body.trim()||void 0};if(e==="link"&&(s.url=this.body.trim()),t?.type==="channel"?s.channel_tag=t.id:t?.type==="contact"?s.email=t.id:this.sendTo!=="all"&&(s.targetDeviceIden=t?.id),this.selectedFile&&e==="file"){const o=await this.selectedFile.arrayBuffer(),r={name:this.selectedFile.name,type:this.selectedFile.type,size:this.selectedFile.size,lastModified:this.selectedFile.lastModified,buffer:Array.from(new Uint8Array(o))},n=await chrome.runtime.sendMessage({cmd:"UPLOAD_FILE",payload:{fileData:r,targetDeviceIden:t?.type==="device"?t.id:void 0,email:t?.type==="contact"?t.id:void 0,title:this.pushTitle.trim()||void 0,body:this.body.trim()||void 0,channel_tag:t?.type==="channel"?t.id:void 0}});n.success?(this.setMessageWithTimeout("File sent successfully!"),this.resetForm()):this.setMessageWithTimeout(n.error||"Failed to send file",!0),this.isSending=!1;return}const i=await chrome.runtime.sendMessage({cmd:"createPush",payload:s});i.ok?(this.setMessageWithTimeout("Push sent successfully!"),this.resetForm()):this.setMessageWithTimeout(i.error||"Failed to send push",!0)}catch(e){console.error("Failed to send push:",e),this.setMessageWithTimeout("Failed to send push. Please try again.",!0)}finally{this.isSending=!1}}}resetForm(){this.pushTitle="",this.body="",this.selectedFile=null;const e=this.shadowRoot?.querySelector("#file-input");e&&(e.value="")}handleKeyDown(e){(e.ctrlKey||e.metaKey)&&e.key==="Enter"&&(e.preventDefault(),this.handleSend())}render(){return console.log("Rendering - errorMessage:",this.errorMessage,"successMessage:",this.successMessage),a`
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      background: #121212;
+      color: #e6e1e3;
+    }
+
+    :host-context(html[data-theme='dark']) .title {
+      color: #e6e1e3;
+    }
+
+    :host-context(html[data-theme='dark']) .subtitle {
+      color: #a1a1aa;
+    }
+
+    :host-context(html[data-theme='dark']) .label {
+      color: #d4d4d8;
+    }
+
+    :host-context(html[data-theme='dark']) .input {
+      background: #1e1e1e;
+      border-color: #3f3f46;
+      color: #e6e1e3;
+    }
+
+    :host-context(html[data-theme='dark']) .input:focus {
+      border-color: #8b5cf6;
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.3);
+    }
+
+    :host-context(html[data-theme='dark']) .input.error {
+      border-color: #f87171;
+    }
+
+    :host-context(html[data-theme='dark']) .button {
+      background-color: #8b5cf6;
+      color: white;
+    }
+
+    :host-context(html[data-theme='dark']) .button:hover:not(:disabled) {
+      background-color: #7c3aed;
+    }
+
+    :host-context(html[data-theme='dark']) .button:disabled {
+      background-color: #52525b;
+    }
+
+    :host-context(html[data-theme='dark']) .error-message {
+      color: #f87171;
+    }
+
+    :host-context(html[data-theme='dark']) .success-message {
+      color: #4ade80;
+      background: #052e16;
+      border-color: #14532d;
+    }
+
+    :host-context(html[data-theme='dark']) .help-text {
+      color: #a1a1aa;
+    }
+
+    :host-context(html[data-theme='dark']) .loading {
+      border-color: #e6e1e3;
+      border-top-color: transparent;
+    }
+  `;Q([S({type:String})],R.prototype,"token",2);Q([d()],R.prototype,"isVerifying",2);Q([d()],R.prototype,"errorMessage",2);Q([d()],R.prototype,"isSuccess",2);R=Q([A("pb-token-setup")],R);var lt=Object.defineProperty,ct=Object.getOwnPropertyDescriptor,y=(e,t,o,s)=>{for(var i=s>1?void 0:s?ct(t,o):t,r=e.length-1,a;r>=0;r--)(a=e[r])&&(i=(s?a(t,o,i):a(i))||i);return s&&i&&lt(t,o,i),i};let f=class extends v{constructor(){super(...arguments),this.defaultUrl="",this.pushTitle="",this.body="",this.sendTo="all",this.sendTargets=[],this.selectedFile=null,this.isLoading=!1,this.isSending=!1,this.errorMessage="",this.successMessage="",this.messageTimeout=null}connectedCallback(){super.connectedCallback(),this.loadSendTargets(),this.defaultUrl&&(this.body=this.defaultUrl)}determinePushType(e,t){if(t)return"file";const o=e.trim();if(!o)return"note";const s=/https?:\/\/[^\s]+/g,i=o.match(s);return i?.length===1&&o===i[0]?"link":"note"}async loadSendTargets(){try{const[e,t,o]=await Promise.all([chrome.runtime.sendMessage({cmd:"getDevices"}),chrome.runtime.sendMessage({cmd:"GET_OWNED_CHANNELS"}),chrome.runtime.sendMessage({cmd:"getContacts"})]),s=e.ok?e.devices:[],i=t.success?t.ownedChannels:[],r=o.ok?o.contacts:[];console.log("Loaded devices:",s.length,"channels:",i.length,"contacts:",r.length),this.sendTargets=[...s.map(a=>({id:a.iden,name:a.nickname||"Unknown Device",type:"device",icon:this.getDeviceIcon(a.type)})),...r.map(a=>({id:a.email,name:a.name,type:"contact",icon:"👤"})),...i.map(a=>({id:a.tag,name:a.name,type:"channel",icon:"📢"}))],console.log("Total send targets:",this.sendTargets.length)}catch(e){console.error("Failed to load send targets:",e)}}getDeviceIcon(e){switch(e){case"android":return"📱";case"ios":return"📱";case"chrome":return"💻";case"firefox":return"🦊";case"windows":return"🖥️";case"mac":return"🖥️";default:return"📱"}}handleInputChange(e){const t=e.target,o=t.name;o==="title"?this.pushTitle=t.value:o==="body"&&(this.body=t.value)}clearMessages(){this.errorMessage="",this.successMessage="",this.messageTimeout&&(clearTimeout(this.messageTimeout),this.messageTimeout=null)}setMessageWithTimeout(e,t=!1){console.log("Setting message:",e,"isError:",t),this.messageTimeout&&clearTimeout(this.messageTimeout),t?(this.errorMessage=e,this.successMessage=""):(this.successMessage=e,this.errorMessage=""),console.log("Message set - errorMessage:",this.errorMessage,"successMessage:",this.successMessage),this.messageTimeout=window.setTimeout(()=>{console.log("Clearing message after timeout"),this.clearMessages()},1e4)}validateForm(){return!this.pushTitle.trim()&&!this.body.trim()&&!this.selectedFile?(this.setMessageWithTimeout("Please provide a title, message, or file",!0),!1):!0}handleFileSelect(e){const t=e.target;t.files&&t.files[0]?this.selectedFile=t.files[0]:this.selectedFile=null}handleSendToChange(e){const t=e.target;this.sendTo=t.value}async handleSend(){if(this.validateForm()){this.isSending=!0,this.clearMessages();try{const e=this.determinePushType(this.body,this.selectedFile||void 0),t=this.sendTargets.find(i=>i.id===this.sendTo);if(!t&&this.sendTo!=="all"){this.setMessageWithTimeout("Please select a valid send target",!0),this.isSending=!1;return}let o={type:e,title:this.pushTitle.trim()||void 0,body:this.body.trim()||void 0};if(e==="link"&&(o.url=this.body.trim()),t?.type==="channel"?o.channel_tag=t.id:t?.type==="contact"?o.email=t.id:this.sendTo!=="all"&&(o.targetDeviceIden=t?.id),this.selectedFile&&e==="file"){const i=await this.selectedFile.arrayBuffer(),r={name:this.selectedFile.name,type:this.selectedFile.type,size:this.selectedFile.size,lastModified:this.selectedFile.lastModified,buffer:Array.from(new Uint8Array(i))},a=await chrome.runtime.sendMessage({cmd:"UPLOAD_FILE",payload:{fileData:r,targetDeviceIden:t?.type==="device"?t.id:void 0,email:t?.type==="contact"?t.id:void 0,title:this.pushTitle.trim()||void 0,body:this.body.trim()||void 0,channel_tag:t?.type==="channel"?t.id:void 0}});a.success?(this.setMessageWithTimeout("File sent successfully!"),this.resetForm()):this.setMessageWithTimeout(a.error||"Failed to send file",!0),this.isSending=!1;return}const s=await chrome.runtime.sendMessage({cmd:"createPush",payload:o});s.ok?(this.setMessageWithTimeout("Push sent successfully!"),this.resetForm()):this.setMessageWithTimeout(s.error||"Failed to send push",!0)}catch(e){console.error("Failed to send push:",e),this.setMessageWithTimeout("Failed to send push. Please try again.",!0)}finally{this.isSending=!1}}}resetForm(){this.pushTitle="",this.body="",this.selectedFile=null;const e=this.shadowRoot?.querySelector("#file-input");e&&(e.value="")}handleKeyDown(e){(e.ctrlKey||e.metaKey)&&e.key==="Enter"&&(e.preventDefault(),this.handleSend())}render(){return console.log("Rendering - errorMessage:",this.errorMessage,"successMessage:",this.successMessage),n`
       <div class="composer-container" @keydown=${this.handleKeyDown}>
-        ${this.errorMessage?a` <div class="message error">${this.errorMessage}</div> `:""}
-        ${this.successMessage?a` <div class="message success">${this.successMessage}</div> `:""}
+        ${this.errorMessage?n` <div class="message error">${this.errorMessage}</div> `:""}
+        ${this.successMessage?n` <div class="message success">${this.successMessage}</div> `:""}
 
         <!-- Unified Send Target Selector -->
         <div class="device-selector">
@@ -293,7 +359,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             ?disabled=${this.isLoading}
           >
             <option value="all">All Devices</option>
-            ${this.sendTargets.map(e=>a`
+            ${this.sendTargets.map(e=>n`
                 <option value=${e.id}>
                   ${e.icon} ${e.name}
                   ${e.type==="channel"?"(Channel)":""}
@@ -306,7 +372,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
         <div class="form-group">
           <label for="file-input">File (optional):</label>
           <input id="file-input" type="file" @change=${this.handleFileSelect} />
-          ${this.selectedFile?a`
+          ${this.selectedFile?n`
                 <small class="form-text">
                   Selected: ${this.selectedFile.name}
                   (${(this.selectedFile.size/1024/1024).toFixed(2)} MB)
@@ -342,13 +408,14 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
           @click=${this.handleSend}
           ?disabled=${this.isSending||this.isLoading}
         >
-          ${this.isSending?a` <span class="loading"></span> `:""}
+          ${this.isSending?n` <span class="loading"></span> `:""}
           ${this.isSending?"Sending...":"Send Push"}
         </button>
 
         <div class="shortcut-hint">Press Ctrl+Enter to send quickly</div>
       </div>
-    `}};b.styles=T`
+    `}};f.styles=P`
+    /* === Light mode base === */
     :host {
       display: block;
       font-family:
@@ -635,9 +702,79 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
         font-size: 16px;
       }
     }
-  `;y([S({type:String})],b.prototype,"defaultUrl",2);y([l()],b.prototype,"pushTitle",2);y([l()],b.prototype,"body",2);y([l()],b.prototype,"sendTo",2);y([l()],b.prototype,"sendTargets",2);y([l()],b.prototype,"selectedFile",2);y([l()],b.prototype,"isLoading",2);y([l()],b.prototype,"isSending",2);y([l()],b.prototype,"errorMessage",2);y([l()],b.prototype,"successMessage",2);y([l()],b.prototype,"messageTimeout",2);b=y([P("pb-composer")],b);var it=Object.defineProperty,ot=Object.getOwnPropertyDescriptor,k=(e,t,s,i)=>{for(var o=i>1?void 0:i?ot(t,s):t,r=e.length-1,n;r>=0;r--)(n=e[r])&&(o=(i?n(t,s,o):n(o))||o);return i&&o&&it(t,s,o),o};let w=class extends v{constructor(){super(...arguments),this.pushes=[],this.isLoading=!1,this.errorMessage="",this.hasMore=!1,this.activeSubtab="devices",this.devices=[]}connectedCallback(){super.connectedCallback(),this.loadStoredState(),this.loadDevices(),this.loadPushes(!0),chrome.runtime.onMessage.addListener(this.handleMessage.bind(this))}disconnectedCallback(){super.disconnectedCallback(),chrome.runtime.onMessage.removeListener(this.handleMessage.bind(this))}async loadStoredState(){try{const e=await chrome.storage.local.get("pb_recent_pushes_state");if(e.pb_recent_pushes_state){const t=e.pb_recent_pushes_state;this.pushes=t.pushes||[],this.cursor=t.cursor,this.hasMore=t.hasMore||!1,this.lastModified=t.lastModified,this.activeSubtab=t.activeSubtab||"devices",console.log("🔄 [RecentPushes] Restored state:",{pushesCount:this.pushes.length,cursor:this.cursor,hasMore:this.hasMore,activeSubtab:this.activeSubtab})}}catch(e){console.error("Failed to load stored state:",e)}}async saveState(){try{const e={pushes:this.pushes,cursor:this.cursor,hasMore:this.hasMore,lastModified:this.lastModified,activeSubtab:this.activeSubtab};await chrome.storage.local.set({pb_recent_pushes_state:e})}catch(e){console.error("Failed to save state:",e)}}async loadDevices(){try{const e=await chrome.runtime.sendMessage({cmd:"getDevices"});e.ok&&(this.devices=e.devices||[]);const t=await chrome.storage.local.get("pb_device_iden");this.currentDeviceIden=t.pb_device_iden,console.log("🔄 [RecentPushes] Current device ID:",this.currentDeviceIden)}catch(e){console.error("Failed to load devices:",e)}}async loadPushes(e=!1){if(console.log("🔄 [RecentPushes] loadPushes called with refresh:",e),this.isLoading){console.log("⚠️ [RecentPushes] Already loading, skipping request");return}console.log("🔄 [RecentPushes] Setting isLoading to true"),this.isLoading=!0,this.errorMessage="";try{const t=e?void 0:this.lastModified;console.log("📋 [RecentPushes] Request params:",{refresh:e,lastModified:t,cursor:e?"undefined":this.cursor,currentPushesCount:this.pushes.length});const s=await chrome.runtime.sendMessage({cmd:"getEnhancedPushHistory",limit:100,modifiedAfter:t,cursor:e?void 0:this.cursor,trigger:{type:"popup_open",timestamp:Date.now()}});if(console.log("📡 [RecentPushes] Response received:",{ok:s.ok,error:s.error,pushesCount:s.history?.pushes?.length||0,hasCursor:!!s.history?.cursor}),s.ok){if(e)console.log("🔄 [RecentPushes] Refreshing pushes list"),this.pushes=s.history.pushes;else{console.log("➕ [RecentPushes] Appending pushes to existing list with deduplication");const i=new Map(this.pushes.map(r=>[r.iden,r])),o=s.history.pushes.filter(r=>!i.has(r.iden));o.length>0?(console.log(`➕ [RecentPushes] Adding ${o.length} new pushes (filtered out ${s.history.pushes.length-o.length} duplicates)`),this.pushes=[...this.pushes,...o]):console.log("ℹ️ [RecentPushes] No new pushes to add (all were duplicates)")}if(this.pushes.sort((i,o)=>o.created-i.created),this.cursor=s.history.cursor,this.hasMore=!!s.history.cursor,s.history.pushes.length>0){const i=Math.max(...s.history.pushes.map(o=>o.modified));this.lastModified=i}await this.saveState(),console.log("✅ [RecentPushes] Successfully updated pushes:",{totalPushes:this.pushes.length,newCursor:this.cursor,hasMore:this.hasMore})}else console.error("❌ [RecentPushes] API returned error:",s.error),this.errorMessage=s.error||"Failed to load pushes"}catch(t){console.error("❌ [RecentPushes] Exception occurred:",t),this.errorMessage="Failed to load pushes"}finally{console.log("🔄 [RecentPushes] Setting isLoading to false"),this.isLoading=!1}}async handleDismiss(e){try{(await chrome.runtime.sendMessage({cmd:"dismissPush",pushIden:e})).ok?(this.pushes=this.pushes.filter(s=>s.iden!==e),await this.saveState()):this.errorMessage="Failed to dismiss push"}catch(t){this.errorMessage="Failed to dismiss push",console.error("Failed to dismiss push:",t)}}async handleDelete(e){try{const t=this.pushes.find(i=>i.iden===e);if(!t){this.errorMessage="Push not found";return}if(!this.isPushOwnedByCurrentDevice(t)){this.errorMessage="Cannot delete - you do not own this push";return}(await chrome.runtime.sendMessage({cmd:"deletePush",pushIden:e})).ok?(this.pushes=this.pushes.filter(i=>i.iden!==e),await this.saveState()):this.errorMessage="Failed to delete push"}catch(t){this.errorMessage="Failed to delete push",console.error("Failed to delete push:",t)}}handleRefresh(){this.loadPushes(!0)}handleLoadMore(){this.loadPushes(!1)}handleSubtabChange(e){this.activeSubtab=e,this.saveState()}handleMessage(e){e.cmd==="syncHistory"&&(e.source==="tickle"||e.source==="background")&&(console.log("🔄 [RecentPushes] Received sync message:",e),this.loadPushes(!0)),e.cmd==="pushCreated"&&(console.log("🔔 [RecentPushes] Received pushCreated message, refreshing pushes."),this.loadPushes(!0))}getFilteredPushes(){return this.activeSubtab==="channels"?this.pushes.filter(e=>e.channel_iden&&!e.receiver_iden):this.pushes.filter(e=>!e.channel_iden)}getDeviceName(e){const t=this.devices.find(s=>s.iden===e);return t?t.nickname:"Unknown Device"}getDeviceType(e){const t=this.devices.find(s=>s.iden===e);return t?t.type:"unknown"}getEmptyStateMessage(){return this.activeSubtab==="channels"?"channel pushes yet":"device pushes yet"}getEmptyStateSubMessage(){return this.activeSubtab==="channels"?"Subscribe to channels to see posts here!":"Send your first push to get started!"}isPushOwnedByCurrentDevice(e){return e.metadata?.is_owned_by_user||!1}getDeviceIcon(e){switch(e){case"android":return"📱";case"ios":return"📱";case"chrome":return"🌐";case"firefox":return"🦊";case"safari":return"🍎";case"opera":return"🔴";case"edge":return"🔵";default:return"💻"}}formatTime(e){const t=e*1e3,i=Date.now()-t,o=Math.floor(i/6e4),r=Math.floor(i/36e5),n=Math.floor(i/864e5);return o<1?"Just now":o<60?`${o}m ago`:r<24?`${r}h ago`:n<7?`${n}d ago`:new Date(t).toLocaleDateString()}getPushIcon(e){switch(e){case"note":return"📝";case"link":return"🔗";case"file":return"📎";case"address":return"📍";case"list":return"📋";default:return"📄"}}getFileIcon(e,t){if(!e&&!t)return"📎";const s=e?.toLowerCase()||"",i=t?.toLowerCase()||"";return s.startsWith("image/")||/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/.test(i)?"🖼️":s.startsWith("video/")||/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/.test(i)?"🎥":s.startsWith("audio/")||/\.(mp3|wav|flac|aac|ogg|m4a)$/.test(i)?"🎵":s.includes("pdf")||i.endsWith(".pdf")?"📄":s.includes("word")||/\.(doc|docx)$/.test(i)?"📝":s.includes("excel")||/\.(xls|xlsx)$/.test(i)||s.includes("powerpoint")||/\.(ppt|pptx)$/.test(i)?"📊":/\.(zip|rar|7z|tar|gz)$/.test(i)?"📦":/\.(js|ts|html|css|json|xml|py|java|cpp|c|h)$/.test(i)?"💻":"📎"}isImageFile(e){if(e.image_url)return!0;if(!e.file_type&&!e.file_name)return!1;const t=e.file_type?.toLowerCase()||"",s=e.file_name?.toLowerCase()||"";return t.startsWith("image/")||/\.(jpg|jpeg|png|gif|bmp|webp)$/.test(s)}handleFileDownload(e){e.file_url&&(chrome?.downloads?chrome.downloads.download({url:e.file_url,filename:e.file_name||"download"}):window.open(e.file_url,"_blank"))}renderFileDisplay(e){return e.type!=="file"?"":a`
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+      background: #212529;
+    }
+
+    :host-context(html[data-theme='dark']) .device-selector label,
+    :host-context(html[data-theme='dark']) .channel-input label,
+    :host-context(html[data-theme='dark']) .form-group label {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .device-selector select,
+    :host-context(html[data-theme='dark']) .form-group input,
+    :host-context(html[data-theme='dark']) .form-group textarea {
+      background: #343a40;
+      color: #dee2e6;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .form-group input::placeholder,
+    :host-context(html[data-theme='dark']) .form-group textarea::placeholder {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .form-group input:focus,
+    :host-context(html[data-theme='dark']) .form-group textarea:focus,
+    :host-context(html[data-theme='dark']) .device-selector select:focus {
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    :host-context(html[data-theme='dark']) .form-text {
+      color: rgba(222, 226, 230, 0.75);
+    }
+
+    :host-context(html[data-theme='dark']) .send-button {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .send-button:hover:not(:disabled) {
+      background: #0b5ed7;
+      box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+    }
+
+    :host-context(html[data-theme='dark']) .send-button:disabled {
+      background: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .message.error {
+      background: #2c0b0e;
+      color: #ea868f;
+      border-color: #842029;
+      border-left-color: #ea868f;
+    }
+
+    :host-context(html[data-theme='dark']) .message.success {
+      background: #051b11;
+      color: #75b798;
+      border-color: #0f5132;
+      border-left-color: #75b798;
+    }
+
+    :host-context(html[data-theme='dark']) .shortcut-hint {
+      color: rgba(222, 226, 230, 0.75);
+      background: #2b3035;
+      border-color: #495057;
+    }
+  `;y([S({type:String})],f.prototype,"defaultUrl",2);y([d()],f.prototype,"pushTitle",2);y([d()],f.prototype,"body",2);y([d()],f.prototype,"sendTo",2);y([d()],f.prototype,"sendTargets",2);y([d()],f.prototype,"selectedFile",2);y([d()],f.prototype,"isLoading",2);y([d()],f.prototype,"isSending",2);y([d()],f.prototype,"errorMessage",2);y([d()],f.prototype,"successMessage",2);y([d()],f.prototype,"messageTimeout",2);f=y([A("pb-composer")],f);var ht=Object.defineProperty,pt=Object.getOwnPropertyDescriptor,M=(e,t,o,s)=>{for(var i=s>1?void 0:s?pt(t,o):t,r=e.length-1,a;r>=0;r--)(a=e[r])&&(i=(s?a(t,o,i):a(i))||i);return s&&i&&ht(t,o,i),i};let k=class extends v{constructor(){super(...arguments),this.pushes=[],this.isLoading=!1,this.errorMessage="",this.hasMore=!1,this.activeSubtab="devices",this.devices=[]}connectedCallback(){super.connectedCallback(),this.loadStoredState(),this.loadDevices(),this.loadPushes(!0),chrome.runtime.onMessage.addListener(this.handleMessage.bind(this))}disconnectedCallback(){super.disconnectedCallback(),chrome.runtime.onMessage.removeListener(this.handleMessage.bind(this))}async loadStoredState(){try{const e=await chrome.storage.local.get("pb_recent_pushes_state");if(e.pb_recent_pushes_state){const t=e.pb_recent_pushes_state;this.pushes=t.pushes||[],this.cursor=t.cursor,this.hasMore=t.hasMore||!1,this.lastModified=t.lastModified,this.activeSubtab=t.activeSubtab||"devices",console.log("🔄 [RecentPushes] Restored state:",{pushesCount:this.pushes.length,cursor:this.cursor,hasMore:this.hasMore,activeSubtab:this.activeSubtab})}}catch(e){console.error("Failed to load stored state:",e)}}async saveState(){try{const e={pushes:this.pushes,cursor:this.cursor,hasMore:this.hasMore,lastModified:this.lastModified,activeSubtab:this.activeSubtab};await chrome.storage.local.set({pb_recent_pushes_state:e})}catch(e){console.error("Failed to save state:",e)}}async loadDevices(){try{const e=await chrome.runtime.sendMessage({cmd:"getDevices"});e.ok&&(this.devices=e.devices||[]);const t=await chrome.storage.local.get("pb_device_iden");this.currentDeviceIden=t.pb_device_iden,console.log("🔄 [RecentPushes] Current device ID:",this.currentDeviceIden)}catch(e){console.error("Failed to load devices:",e)}}async loadPushes(e=!1){if(console.log("🔄 [RecentPushes] loadPushes called with refresh:",e),this.isLoading){console.log("⚠️ [RecentPushes] Already loading, skipping request");return}console.log("🔄 [RecentPushes] Setting isLoading to true"),this.isLoading=!0,this.errorMessage="";try{const t=e?void 0:this.lastModified;console.log("📋 [RecentPushes] Request params:",{refresh:e,lastModified:t,cursor:e?"undefined":this.cursor,currentPushesCount:this.pushes.length});const o=await chrome.runtime.sendMessage({cmd:"getEnhancedPushHistory",limit:100,modifiedAfter:t,cursor:e?void 0:this.cursor,trigger:{type:"popup_open",timestamp:Date.now()}});if(console.log("📡 [RecentPushes] Response received:",{ok:o.ok,error:o.error,pushesCount:o.history?.pushes?.length||0,hasCursor:!!o.history?.cursor}),o.ok){if(e)console.log("🔄 [RecentPushes] Refreshing pushes list"),this.pushes=o.history.pushes;else{console.log("➕ [RecentPushes] Appending pushes to existing list with deduplication");const s=new Map(this.pushes.map(r=>[r.iden,r])),i=o.history.pushes.filter(r=>!s.has(r.iden));i.length>0?(console.log(`➕ [RecentPushes] Adding ${i.length} new pushes (filtered out ${o.history.pushes.length-i.length} duplicates)`),this.pushes=[...this.pushes,...i]):console.log("ℹ️ [RecentPushes] No new pushes to add (all were duplicates)")}if(this.pushes.sort((s,i)=>i.created-s.created),this.cursor=o.history.cursor,this.hasMore=!!o.history.cursor,o.history.pushes.length>0){const s=Math.max(...o.history.pushes.map(i=>i.modified));this.lastModified=s}await this.saveState(),console.log("✅ [RecentPushes] Successfully updated pushes:",{totalPushes:this.pushes.length,newCursor:this.cursor,hasMore:this.hasMore})}else console.error("❌ [RecentPushes] API returned error:",o.error),this.errorMessage=o.error||"Failed to load pushes"}catch(t){console.error("❌ [RecentPushes] Exception occurred:",t),this.errorMessage="Failed to load pushes"}finally{console.log("🔄 [RecentPushes] Setting isLoading to false"),this.isLoading=!1}}async handleDismiss(e){try{(await chrome.runtime.sendMessage({cmd:"dismissPush",pushIden:e})).ok?(this.pushes=this.pushes.filter(o=>o.iden!==e),await this.saveState()):this.errorMessage="Failed to dismiss push"}catch(t){this.errorMessage="Failed to dismiss push",console.error("Failed to dismiss push:",t)}}async handleDelete(e){try{const t=this.pushes.find(s=>s.iden===e);if(!t){this.errorMessage="Push not found";return}if(!this.isPushOwnedByCurrentDevice(t)){this.errorMessage="Cannot delete - you do not own this push";return}(await chrome.runtime.sendMessage({cmd:"deletePush",pushIden:e})).ok?(this.pushes=this.pushes.filter(s=>s.iden!==e),await this.saveState()):this.errorMessage="Failed to delete push"}catch(t){this.errorMessage="Failed to delete push",console.error("Failed to delete push:",t)}}handleRefresh(){this.loadPushes(!0)}handleLoadMore(){this.loadPushes(!1)}handleSubtabChange(e){this.activeSubtab=e,this.saveState()}handleMessage(e){e.cmd==="syncHistory"&&(e.source==="tickle"||e.source==="background")&&(console.log("🔄 [RecentPushes] Received sync message:",e),this.loadPushes(!0)),e.cmd==="pushCreated"&&(console.log("🔔 [RecentPushes] Received pushCreated message, refreshing pushes."),this.loadPushes(!0))}getFilteredPushes(){return this.activeSubtab==="channels"?this.pushes.filter(e=>e.channel_iden&&!e.receiver_iden):this.pushes.filter(e=>!e.channel_iden)}getDeviceName(e){const t=this.devices.find(o=>o.iden===e);return t?t.nickname:"Unknown Device"}getDeviceType(e){const t=this.devices.find(o=>o.iden===e);return t?t.type:"unknown"}getEmptyStateMessage(){return this.activeSubtab==="channels"?"channel pushes yet":"device pushes yet"}getEmptyStateSubMessage(){return this.activeSubtab==="channels"?"Subscribe to channels to see posts here!":"Send your first push to get started!"}isPushOwnedByCurrentDevice(e){return e.metadata?.is_owned_by_user||!1}getDeviceIcon(e){switch(e){case"android":return"📱";case"ios":return"📱";case"chrome":return"🌐";case"firefox":return"🦊";case"safari":return"🍎";case"opera":return"🔴";case"edge":return"🔵";default:return"💻"}}formatTime(e){const t=e*1e3,s=Date.now()-t,i=Math.floor(s/6e4),r=Math.floor(s/36e5),a=Math.floor(s/864e5);return i<1?"Just now":i<60?`${i}m ago`:r<24?`${r}h ago`:a<7?`${a}d ago`:new Date(t).toLocaleDateString()}getPushIcon(e){switch(e){case"note":return"📝";case"link":return"🔗";case"file":return"📎";case"address":return"📍";case"list":return"📋";default:return"📄"}}getFileIcon(e,t){if(!e&&!t)return"📎";const o=e?.toLowerCase()||"",s=t?.toLowerCase()||"";return o.startsWith("image/")||/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/.test(s)?"🖼️":o.startsWith("video/")||/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/.test(s)?"🎥":o.startsWith("audio/")||/\.(mp3|wav|flac|aac|ogg|m4a)$/.test(s)?"🎵":o.includes("pdf")||s.endsWith(".pdf")?"📄":o.includes("word")||/\.(doc|docx)$/.test(s)?"📝":o.includes("excel")||/\.(xls|xlsx)$/.test(s)||o.includes("powerpoint")||/\.(ppt|pptx)$/.test(s)?"📊":/\.(zip|rar|7z|tar|gz)$/.test(s)?"📦":/\.(js|ts|html|css|json|xml|py|java|cpp|c|h)$/.test(s)?"💻":"📎"}isImageFile(e){if(e.image_url)return!0;if(!e.file_type&&!e.file_name)return!1;const t=e.file_type?.toLowerCase()||"",o=e.file_name?.toLowerCase()||"";return t.startsWith("image/")||/\.(jpg|jpeg|png|gif|bmp|webp)$/.test(o)}handleFileDownload(e){e.file_url&&(chrome?.downloads?chrome.downloads.download({url:e.file_url,filename:e.file_name||"download"}):window.open(e.file_url,"_blank"))}renderFileDisplay(e){return e.type!=="file"?"":n`
       <div class="file-display">
-        ${this.isImageFile(e)&&e.image_url?a`
+        ${this.isImageFile(e)&&e.image_url?n`
               <div
                 class="file-preview"
                 @click=${()=>window.open(e.image_url,"_blank")}
@@ -659,7 +796,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             <div class="file-name">${e.file_name||"Unknown File"}</div>
             <div class="file-type">${e.file_type||"Unknown Type"}</div>
           </div>
-          ${e.file_url?a`
+          ${e.file_url?n`
                 <button
                   class="file-download"
                   @click=${()=>this.handleFileDownload(e)}
@@ -670,7 +807,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
               `:""}
         </div>
       </div>
-    `}render(){const e=this.getFilteredPushes();return a`
+    `}render(){const e=this.getFilteredPushes();return n`
       <div class="pushes-container">
         <div class="pushes-header">
           <h3 class="pushes-title">Recent Pushes</h3>
@@ -679,7 +816,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             @click=${this.handleRefresh}
             ?disabled=${this.isLoading}
           >
-            ${this.isLoading?a` <span class="loading-spinner"></span> `:""}
+            ${this.isLoading?n` <span class="loading-spinner"></span> `:""}
             Refresh
           </button>
         </div>
@@ -699,24 +836,28 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
           </button>
         </div>
 
-        ${this.errorMessage?a` <div class="error">${this.errorMessage}</div> `:""}
+        ${this.errorMessage?n` <div class="error">${this.errorMessage}</div> `:""}
 
         <div class="content-area">
           <div class="push-list">
-            ${e.length===0&&!this.isLoading?a`
+            ${e.length===0&&!this.isLoading?n`
                   <div class="empty-state">
                     <div class="empty-state-icon">📭</div>
                     <p>No ${this.getEmptyStateMessage()}</p>
                     <p>${this.getEmptyStateSubMessage()}</p>
                   </div>
                 `:""}
-            ${e.map(t=>a`
+            ${e.map(t=>n`
                 <div class="push-item">
                   <div class="push-header">
                     <h4 class="push-title">
                       ${t.type==="file"?this.getFileIcon(t.file_type,t.file_name):this.getPushIcon(t.type)}
                       ${t.title||(t.type==="link"?t.url:t.type==="file"?t.file_name||"File":"Untitled")}
-                      ${t.sender_name?a`<span style="font-weight: normal; color: #666; font-size: 12px;"> • from ${t.sender_name}</span>`:""}
+                      ${t.sender_name?n`<span
+                            style="font-weight: normal; color: #666; font-size: 12px;"
+                          >
+                            • from ${t.sender_name}</span
+                          >`:""}
                     </h4>
                     <div class="push-actions">
                       <button
@@ -726,7 +867,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                       >
                         ✓
                       </button>
-                      ${this.isPushOwnedByCurrentDevice(t)?a`
+                      ${this.isPushOwnedByCurrentDevice(t)?n`
                             <button
                               class="action-button delete"
                               @click=${()=>this.handleDelete(t.iden)}
@@ -738,8 +879,8 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                     </div>
                   </div>
 
-                  ${t.body?a` <div class="push-body">${t.body}</div> `:""}
-                  ${t.url?a`
+                  ${t.body?n` <div class="push-body">${t.body}</div> `:""}
+                  ${t.url?n`
                         <a href=${t.url} class="push-url" target="_blank">
                           ${t.url}
                         </a>
@@ -749,7 +890,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                   <div class="push-meta">
                     <div class="push-info">
                       <span class="push-type">${t.type}</span>
-                      ${t.channel_iden?a`<span class="channel-badge"
+                      ${t.channel_iden?n`<span class="channel-badge"
                             >${t.metadata?.source_channel_name||t.channel_iden}</span
                           >`:""}
                     </div>
@@ -765,20 +906,20 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                     <span
                       >${t.metadata?.display_source||`From: ${this.getDeviceName(t.source_device_iden)}`}</span
                     >
-                    ${t.metadata?.ownership_reason?a`<span class="ownership-info"
+                    ${t.metadata?.ownership_reason?n`<span class="ownership-info"
                           >• ${t.metadata.ownership_reason}</span
                         >`:""}
                   </div>
                 </div>
               `)}
-            ${this.isLoading?a`
+            ${this.isLoading?n`
                   <div class="loading">
                     <span class="loading-spinner"></span>
                     Loading pushes...
                   </div>
                 `:""}
           </div>
-          ${this.hasMore&&!this.isLoading?a`
+          ${this.hasMore&&!this.isLoading?n`
                 <div class="load-more-container">
                   <button class="load-more" @click=${this.handleLoadMore}>
                     <span class="load-more-icon">📄</span>
@@ -786,7 +927,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                   </button>
                 </div>
               `:""}
-          ${this.isLoading&&this.hasMore?a`
+          ${this.isLoading&&this.hasMore?n`
                 <div class="load-more-container">
                   <button class="load-more" disabled>
                     <span class="loading-spinner"></span>
@@ -796,7 +937,8 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
               `:""}
         </div>
       </div>
-    `}};w.styles=T`
+    `}};k.styles=P`
+    /* === Light mode base === */
     :host {
       display: block;
       font-family:
@@ -1389,11 +1531,153 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
         padding: 14px 18px;
       }
     }
-  `;k([l()],w.prototype,"pushes",2);k([l()],w.prototype,"isLoading",2);k([l()],w.prototype,"errorMessage",2);k([l()],w.prototype,"hasMore",2);k([l()],w.prototype,"cursor",2);k([l()],w.prototype,"activeSubtab",2);k([l()],w.prototype,"devices",2);k([l()],w.prototype,"lastModified",2);w=k([P("pb-recent-pushes")],w);var rt=Object.defineProperty,nt=Object.getOwnPropertyDescriptor,te=(e,t,s,i)=>{for(var o=i>1?void 0:i?nt(t,s):t,r=e.length-1,n;r>=0;r--)(n=e[r])&&(o=(i?n(t,s,o):n(o))||o);return i&&o&&rt(t,s,o),o};let N=class extends v{constructor(){super(...arguments),this.loading=!1,this.mirrors=[],this.error=null}connectedCallback(){super.connectedCallback(),this.loadMirrors()}async loadMirrors(){this.loading=!0,this.error=null;try{console.log("🔍 [MirrorList] Loading active mirrors");const e=await chrome.runtime.sendMessage({cmd:"getActiveMirrors"});e.success?(this.mirrors=e.mirrors||[],console.log("🔍 [MirrorList] Loaded mirrors:",{count:this.mirrors.length,mirrors:this.mirrors.map(t=>({id:t.id,app:t.meta.application_name,title:t.meta.title}))})):(this.error=e.error||"Failed to load notifications",console.error("🔍 [MirrorList] Failed to load mirrors:",e.error))}catch(e){console.error("🔍 [MirrorList] Failed to load mirrors:",e),this.error="Failed to load notifications"}finally{this.loading=!1}}async handleMirrorClick(e){try{console.log("👆 [MirrorList] Mirror clicked:",{id:e.id,app:e.meta.application_name,title:e.meta.title}),await chrome.notifications.update(e.id,{priority:2}),setTimeout(()=>{chrome.notifications.update(e.id,{priority:0})},2e3)}catch(t){console.error("👆 [MirrorList] Failed to focus notification:",t)}}render(){return this.loading?a`
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .pushes-header {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .pushes-title {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button:hover {
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button:disabled {
+      color: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-navigation {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button.active {
+      color: #6ea8fe;
+      border-bottom-color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button:hover:not(.active) {
+      color: #dee2e6;
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .push-item {
+      background: #343a40;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .push-title {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .push-body {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .push-url {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .push-url:hover {
+      color: #9ec5fe;
+    }
+
+    :host-context(html[data-theme='dark']) .push-meta,
+    :host-context(html[data-theme='dark']) .push-time {
+      color: #868e96;
+    }
+
+    :host-context(html[data-theme='dark']) .push-type {
+      background: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .device-info {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .ownership-info {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .file-display {
+      background: #2b3035;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .file-name {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .file-type {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .file-download {
+      background: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .file-download:hover {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-badge {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .loading {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .error {
+      background: #2c0b0e;
+      color: #ea868f;
+      border-color: #842029;
+    }
+
+    :host-context(html[data-theme='dark']) .empty-state {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .load-more {
+      background: #0d6efd;
+      border-color: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .load-more:hover:not(:disabled) {
+      background: #0b5ed7;
+      border-color: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .load-more:disabled {
+      background: #6c757d;
+      border-color: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .loading-spinner {
+      border-color: #343a40;
+      border-top-color: #0d6efd;
+    }
+  `;M([d()],k.prototype,"pushes",2);M([d()],k.prototype,"isLoading",2);M([d()],k.prototype,"errorMessage",2);M([d()],k.prototype,"hasMore",2);M([d()],k.prototype,"cursor",2);M([d()],k.prototype,"activeSubtab",2);M([d()],k.prototype,"devices",2);M([d()],k.prototype,"lastModified",2);k=M([A("pb-recent-pushes")],k);var ut=Object.defineProperty,mt=Object.getOwnPropertyDescriptor,ie=(e,t,o,s)=>{for(var i=s>1?void 0:s?mt(t,o):t,r=e.length-1,a;r>=0;r--)(a=e[r])&&(i=(s?a(t,o,i):a(i))||i);return s&&i&&ut(t,o,i),i};let H=class extends v{constructor(){super(...arguments),this.loading=!1,this.mirrors=[],this.error=null}connectedCallback(){super.connectedCallback(),this.loadMirrors()}async loadMirrors(){this.loading=!0,this.error=null;try{console.log("🔍 [MirrorList] Loading active mirrors");const e=await chrome.runtime.sendMessage({cmd:"getActiveMirrors"});e.success?(this.mirrors=e.mirrors||[],console.log("🔍 [MirrorList] Loaded mirrors:",{count:this.mirrors.length,mirrors:this.mirrors.map(t=>({id:t.id,app:t.meta.application_name,title:t.meta.title}))})):(this.error=e.error||"Failed to load notifications",console.error("🔍 [MirrorList] Failed to load mirrors:",e.error))}catch(e){console.error("🔍 [MirrorList] Failed to load mirrors:",e),this.error="Failed to load notifications"}finally{this.loading=!1}}async handleMirrorClick(e){try{console.log("👆 [MirrorList] Mirror clicked:",{id:e.id,app:e.meta.application_name,title:e.meta.title}),await chrome.notifications.update(e.id,{priority:2}),setTimeout(()=>{chrome.notifications.update(e.id,{priority:0})},2e3)}catch(t){console.error("👆 [MirrorList] Failed to focus notification:",t)}}render(){return this.loading?n`
         <div class="loading-state">
           <div>Loading notifications...</div>
         </div>
-      `:this.error?a`
+      `:this.error?n`
         <div class="error-state">
           <div>${this.error}</div>
           <button
@@ -1404,7 +1688,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             Retry
           </button>
         </div>
-      `:this.mirrors.length===0?a`
+      `:this.mirrors.length===0?n`
         <div class="empty-state">
           <div class="empty-state-icon">🔔</div>
           <div>No active notifications</div>
@@ -1412,9 +1696,9 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             Phone notifications will appear here
           </div>
         </div>
-      `:a`
+      `:n`
       <div class="mirror-list">
-        ${this.mirrors.map(e=>a`
+        ${this.mirrors.map(e=>n`
             <div class="shortcut-hint">Dismiss on origin device</div>
             <div
               class="mirror-item"
@@ -1422,13 +1706,13 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
               title="Click to focus notification"
             >
               <div class="app-icon">
-                ${e.meta.icon_url?a`
+                ${e.meta.icon_url?n`
                       <img
                         src="${e.meta.icon_url}"
                         alt="${e.meta.application_name||"App"}"
                         style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;"
                       />
-                    `:a`
+                    `:n`
                       ${(e.meta.application_name||"A").charAt(0).toUpperCase()}
                     `}
               </div>
@@ -1442,7 +1726,8 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             </div>
           `)}
       </div>
-    `}};N.styles=T`
+    `}};H.styles=P`
+    /* === Light mode base === */
     :host {
       display: block;
       width: 100%;
@@ -1586,7 +1871,79 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       border-radius: 4px;
       border: 1px solid #e9ecef;
     }
-  `;te([S({type:Boolean})],N.prototype,"loading",2);te([l()],N.prototype,"mirrors",2);te([l()],N.prototype,"error",2);N=te([P("pb-mirror-list")],N);var at=Object.defineProperty,lt=Object.getOwnPropertyDescriptor,K=(e,t,s,i)=>{for(var o=i>1?void 0:i?lt(t,s):t,r=e.length-1,n;r>=0;r--)(n=e[r])&&(o=(i?n(t,s,o):n(o))||o);return i&&o&&at(t,s,o),o};let I=class extends v{constructor(){super(...arguments),this.dragOver=!1,this.uploadState={file:null,uploading:!1,progress:0,error:null},this.maxFileSize=25*1024*1024}render(){return a`
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .mirror-list {
+      border-color: #495057;
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .mirror-item {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .mirror-item:hover {
+      background-color: #343a40;
+    }
+
+    :host-context(html[data-theme='dark']) .mirror-item:active {
+      background-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .app-icon {
+      background: #495057;
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .app-name {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .notification-title {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .notification-body {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .empty-state {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .loading-state {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .error-state {
+      background: #2c0b0e;
+      border-color: #842029;
+      color: #ea868f;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button:hover {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button:disabled {
+      background: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .shortcut-hint {
+      color: rgba(222, 226, 230, 0.75);
+      background: #2b3035;
+      border-color: #495057;
+    }
+  `;ie([S({type:Boolean})],H.prototype,"loading",2);ie([d()],H.prototype,"mirrors",2);ie([d()],H.prototype,"error",2);H=ie([A("pb-mirror-list")],H);var bt=Object.defineProperty,gt=Object.getOwnPropertyDescriptor,Y=(e,t,o,s)=>{for(var i=s>1?void 0:s?gt(t,o):t,r=e.length-1,a;r>=0;r--)(a=e[r])&&(i=(s?a(t,o,i):a(i))||i);return s&&i&&bt(t,o,i),i};let D=class extends v{constructor(){super(...arguments),this.dragOver=!1,this.uploadState={file:null,uploading:!1,progress:0,error:null},this.maxFileSize=25*1024*1024}render(){return n`
       <div
         class="file-drop-zone ${this.getZoneClasses()}"
         @click=${this.handleZoneClick}
@@ -1601,14 +1958,14 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
           @drop=${this.handleDrop}
         />
 
-        ${this.uploadState.file?a`
+        ${this.uploadState.file?n`
               <div class="file-info">
                 <div class="file-name">${this.uploadState.file.name}</div>
                 <div class="file-size">
                   ${this.formatFileSize(this.uploadState.file.size)}
                 </div>
 
-                ${this.uploadState.uploading?a`
+                ${this.uploadState.uploading?n`
                       <div class="progress-bar">
                         <div
                           class="progress-fill"
@@ -1619,12 +1976,12 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                         ${this.uploadState.progress}% uploaded
                       </div>
                     `:""}
-                ${this.uploadState.error?a`
+                ${this.uploadState.error?n`
                       <div class="error-message">${this.uploadState.error}</div>
                     `:""}
 
                 <div class="button-group">
-                  ${this.uploadState.uploading?"":a`
+                  ${this.uploadState.uploading?"":n`
                         <button
                           class="upload-button"
                           @click=${this.handleUpload}
@@ -1641,13 +1998,14 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                       `}
                 </div>
               </div>
-            `:a`
+            `:n`
               <div class="drop-icon">📁</div>
               <div class="drop-text">Drop a file here or click to browse</div>
               <div class="drop-hint">Maximum file size: 25MB</div>
             `}
       </div>
-    `}getZoneClasses(){const e=[];return this.dragOver&&e.push("drag-over"),this.uploadState.error&&e.push("error"),this.uploadState.uploading&&e.push("uploading"),e.join(" ")}handleZoneClick(e){if(e.target.tagName==="BUTTON")return;this.shadowRoot?.querySelector(".file-input")?.click()}handleFileSelect(e){const s=e.target.files?.[0];s&&this.setFile(s)}handleDragEnter(e){e.preventDefault(),this.dragOver=!0}handleDragOver(e){e.preventDefault(),this.dragOver=!0}handleDragLeave(e){e.preventDefault(),this.dragOver=!1}handleDrop(e){e.preventDefault(),this.dragOver=!1;const t=e.dataTransfer?.files;t&&t.length>0&&this.setFile(t[0])}setFile(e){this.uploadState={file:e,uploading:!1,progress:0,error:null},this.isFileValid(e)||(this.uploadState.error=`File size (${this.formatFileSize(e.size)}) exceeds the 25MB limit`)}isFileValid(e){return e.size<=this.maxFileSize}formatFileSize(e){if(e===0)return"0 Bytes";const t=1024,s=["Bytes","KB","MB","GB"],i=Math.floor(Math.log(e)/Math.log(t));return parseFloat((e/Math.pow(t,i)).toFixed(2))+" "+s[i]}async handleUpload(){if(!(!this.uploadState.file||!this.isFileValid(this.uploadState.file))){this.uploadState.uploading=!0,this.uploadState.progress=0,this.uploadState.error=null;try{const e=await this.uploadState.file.arrayBuffer(),t={name:this.uploadState.file.name,type:this.uploadState.file.type,size:this.uploadState.file.size,lastModified:this.uploadState.file.lastModified,buffer:Array.from(new Uint8Array(e))},s=await chrome.runtime.sendMessage({cmd:"UPLOAD_FILE",payload:{fileData:t,targetDeviceIden:this.targetDeviceIden}});s.success?(this.dispatchEvent(new CustomEvent("upload-complete",{detail:{file:this.uploadState.file}})),this.uploadState={file:null,uploading:!1,progress:0,error:null}):(this.uploadState.error=s.error||"Upload failed",this.uploadState.uploading=!1)}catch(e){console.error("Upload error:",e),this.uploadState.error="Upload failed. Please try again.",this.uploadState.uploading=!1}}}handleCancel(){this.uploadState={file:null,uploading:!1,progress:0,error:null};const e=this.shadowRoot?.querySelector(".file-input");e&&(e.value="")}updateProgress(e){this.uploadState.uploading&&(this.uploadState.progress=e)}setError(e){this.uploadState.error=e,this.uploadState.uploading=!1}};I.styles=T`
+    `}getZoneClasses(){const e=[];return this.dragOver&&e.push("drag-over"),this.uploadState.error&&e.push("error"),this.uploadState.uploading&&e.push("uploading"),e.join(" ")}handleZoneClick(e){if(e.target.tagName==="BUTTON")return;this.shadowRoot?.querySelector(".file-input")?.click()}handleFileSelect(e){const o=e.target.files?.[0];o&&this.setFile(o)}handleDragEnter(e){e.preventDefault(),this.dragOver=!0}handleDragOver(e){e.preventDefault(),this.dragOver=!0}handleDragLeave(e){e.preventDefault(),this.dragOver=!1}handleDrop(e){e.preventDefault(),this.dragOver=!1;const t=e.dataTransfer?.files;t&&t.length>0&&this.setFile(t[0])}setFile(e){this.uploadState={file:e,uploading:!1,progress:0,error:null},this.isFileValid(e)||(this.uploadState.error=`File size (${this.formatFileSize(e.size)}) exceeds the 25MB limit`)}isFileValid(e){return e.size<=this.maxFileSize}formatFileSize(e){if(e===0)return"0 Bytes";const t=1024,o=["Bytes","KB","MB","GB"],s=Math.floor(Math.log(e)/Math.log(t));return parseFloat((e/Math.pow(t,s)).toFixed(2))+" "+o[s]}async handleUpload(){if(!(!this.uploadState.file||!this.isFileValid(this.uploadState.file))){this.uploadState.uploading=!0,this.uploadState.progress=0,this.uploadState.error=null;try{const e=await this.uploadState.file.arrayBuffer(),t={name:this.uploadState.file.name,type:this.uploadState.file.type,size:this.uploadState.file.size,lastModified:this.uploadState.file.lastModified,buffer:Array.from(new Uint8Array(e))},o=await chrome.runtime.sendMessage({cmd:"UPLOAD_FILE",payload:{fileData:t,targetDeviceIden:this.targetDeviceIden}});o.success?(this.dispatchEvent(new CustomEvent("upload-complete",{detail:{file:this.uploadState.file}})),this.uploadState={file:null,uploading:!1,progress:0,error:null}):(this.uploadState.error=o.error||"Upload failed",this.uploadState.uploading=!1)}catch(e){console.error("Upload error:",e),this.uploadState.error="Upload failed. Please try again.",this.uploadState.uploading=!1}}}handleCancel(){this.uploadState={file:null,uploading:!1,progress:0,error:null};const e=this.shadowRoot?.querySelector(".file-input");e&&(e.value="")}updateProgress(e){this.uploadState.uploading&&(this.uploadState.progress=e)}setError(e){this.uploadState.error=e,this.uploadState.uploading=!1}};D.styles=P`
+    /* === Light mode base === */
     :host {
       display: block;
       font-family:
@@ -1812,12 +2170,105 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       justify-content: center;
       margin-top: 0.5rem;
     }
-  `;K([S({type:String})],I.prototype,"targetDeviceIden",2);K([l()],I.prototype,"dragOver",2);K([l()],I.prototype,"uploadState",2);K([l()],I.prototype,"maxFileSize",2);I=K([P("pb-file-drop")],I);var dt=Object.defineProperty,ct=Object.getOwnPropertyDescriptor,m=(e,t,s,i)=>{for(var o=i>1?void 0:i?ct(t,s):t,r=e.length-1,n;r>=0;r--)(n=e[r])&&(o=(i?n(t,s,o):n(o))||o);return i&&o&&dt(t,s,o),o};let g=class extends v{constructor(){super(...arguments),this.conversationId="",this.deviceIden="",this.isGroupConversation=!1,this.thread=null,this.messageText="",this.isLoading=!1,this.isSending=!1,this.selectedFile=null,this.recipients=[],this.newRecipientNumber="",this.isLoadingOlder=!1,this.hasMoreMessages=!0,this.messageCursor=null,this.conversationNotFound=!1,this.isReloading=!1}get smsCursorStorageKey(){return`pb_sms_thread_cursor_${this.conversationId}`}connectedCallback(){super.connectedCallback(),this.loadThread(),this.initializeRecipients(),setTimeout(()=>this.scrollToBottom(),200)}updated(e){e.has("conversationId")&&this.conversationId&&(this.loadThread(),this.initializeRecipients()),e.has("thread")&&this.thread&&this.scrollToBottom()}initializeRecipients(){if(this.conversationId&&this.isGroupConversation){const e=this.conversationId.split(",").map(t=>t.trim());this.recipients=e.map(t=>({number:t,name:t}))}else this.conversationId&&!this.isGroupConversation?this.recipients=[{number:this.conversationId,name:this.conversationId}]:this.recipients=[]}async loadThread(){if(!this.conversationId){this.thread=null;return}this.isLoading=!0;try{console.log("💬 [SmsThread] Loading conversation from API:",this.conversationId);let e=this.deviceIden;if(e)console.log("💬 [SmsThread] Using provided device ID:",e);else{console.log("💬 [SmsThread] No device ID provided, getting default SMS device");try{const s=await chrome.runtime.sendMessage({cmd:"GET_DEFAULT_SMS_DEVICE"});if(console.log("💬 [SmsThread] GET_DEFAULT_SMS_DEVICE response:",s),s.success&&s.device)e=s.device.iden,console.log("💬 [SmsThread] Got default SMS device:",e);else throw console.error("💬 [SmsThread] Failed to get default SMS device:",s.error),new Error(s.error||"No SMS device available")}catch(s){throw console.error("💬 [SmsThread] Error getting default SMS device:",s),new Error("No SMS device available")}}this.deviceIden=e,await this.loadStoredCursor();const t=await chrome.runtime.sendMessage({cmd:"LOAD_FULL_SMS_THREAD",conversationId:this.conversationId,deviceIden:e});if(t.success){this.thread=t.thread,this.messageCursor=t.cursor||null,this.hasMoreMessages=t.hasMore||!1,await this.saveStoredCursor(),console.log("💬 [SmsThread] Conversation opened, clearing SMS notifications from badge");try{await chrome.runtime.sendMessage({cmd:"CLEAR_SMS_NOTIFICATIONS"}),console.log("💬 [SmsThread] SMS notifications cleared from badge")}catch(s){console.error("💬 [SmsThread] Failed to clear SMS notifications:",s)}this.scrollToBottom(),setTimeout(()=>this.scrollToBottom(),300),console.log("💬 [SmsThread] Loaded conversation from API:",{conversationId:this.conversationId,deviceIden:this.deviceIden,messageCount:this.thread?.messages?.length||0})}else console.error("💬 [SmsThread] Failed to load thread from API:",t.error)}catch(e){console.error("💬 [SmsThread] Failed to load thread from API:",e)}finally{this.isLoading=!1}}async loadOlderMessages(){if(!(!this.conversationId||this.isLoadingOlder||!this.hasMoreMessages)){this.isLoadingOlder=!0;try{const e=await chrome.runtime.sendMessage({cmd:"GET_SMS_THREAD_PAGED",conversationId:this.conversationId,cursor:this.messageCursor});if(e.success&&this.thread){const t=e.messages||[];this.thread={...this.thread,messages:[...t,...this.thread.messages]},this.messageCursor=e.cursor||null,this.hasMoreMessages=e.hasMore||!1,await this.saveStoredCursor()}}catch(e){console.error("Failed to load older messages:",e)}finally{this.isLoadingOlder=!1}}}scrollToBottom(){console.log("🔄 [SmsThread] scrollToBottom called"),this.updateComplete.then(()=>{const e=this.shadowRoot?.querySelector(".messages-container");if(console.log("🔄 [SmsThread] Container found:",!!e),e){const t=e;console.log("🔄 [SmsThread] Container dimensions:",{scrollHeight:t.scrollHeight,clientHeight:t.clientHeight,scrollTop:t.scrollTop,offsetHeight:t.offsetHeight});const s=e.querySelectorAll("img"),i=Array.from(s).map(o=>o.complete?Promise.resolve():new Promise(r=>{o.onload=r,o.onerror=r}));Promise.all(i).then(()=>{if(t.scrollHeight<=t.clientHeight){console.log("🔄 [SmsThread] No scrollable content - scrollHeight <= clientHeight");return}requestAnimationFrame(()=>{console.log("🔄 [SmsThread] Scrolling to bottom...");const o=t.scrollHeight-t.clientHeight;t.scrollTop=o,setTimeout(()=>{const r=t.scrollTop,n=t.scrollHeight-t.clientHeight;Math.abs(r-n)>5?(console.log(`🔄 [SmsThread] Final scroll adjustment - current: ${r}, target: ${n}`),t.scrollTop=n):console.log("🔄 [SmsThread] Successfully scrolled to bottom")},100)})})}})}handleScrollTop(){const e=this.shadowRoot?.querySelector(".messages-container");e&&e.scrollTop===0&&this.hasMoreMessages&&this.loadOlderMessages()}async loadStoredCursor(){try{const e=await chrome.storage.local.get(this.smsCursorStorageKey);e[this.smsCursorStorageKey]&&(this.messageCursor=e[this.smsCursorStorageKey],console.log(`📱 [SMS Thread] Loaded stored cursor for ${this.conversationId}:`,this.messageCursor))}catch(e){console.error("Failed to load stored SMS cursor:",e)}}async saveStoredCursor(){try{await chrome.storage.local.set({[this.smsCursorStorageKey]:this.messageCursor}),console.log(`📱 [SMS Thread] Saved cursor for ${this.conversationId}:`,this.messageCursor)}catch(e){console.error("Failed to save SMS cursor:",e)}}handleInputChange(e){const t=e.target;this.messageText=t.value,t.style.height="auto",t.style.height=Math.min(t.scrollHeight,120)+"px"}handleKeyDown(e){e.key==="Enter"&&(e.ctrlKey||e.metaKey)&&(e.preventDefault(),this.sendMessage())}handleRecipientInputChange(e){const t=e.target;this.newRecipientNumber=t.value}handleRecipientInputKeyDown(e){e.key==="Enter"&&(e.preventDefault(),this.addRecipient())}addRecipient(){const e=this.newRecipientNumber.trim();if(e&&/^\+?[\d\s\-()]+$/.test(e)){if(this.recipients.some(t=>t.number===e)){this.newRecipientNumber="";return}this.recipients=[...this.recipients,{number:e,name:e}],this.newRecipientNumber="",this.updateGroupConversationId()}}removeRecipient(e){this.recipients=this.recipients.filter(t=>t.number!==e),this.updateGroupConversationId()}updateGroupConversationId(){this.recipients.length>1?(this.conversationId=this.recipients.map(e=>e.number).join(","),this.isGroupConversation=!0):this.recipients.length===1?(this.conversationId=this.recipients[0].number,this.isGroupConversation=!1):(this.conversationId="",this.isGroupConversation=!1)}handleFileSelect(e){const s=e.target.files?.[0];if(s){if(s.size>25*1024*1024){console.error("File too large. Maximum size is 25MB.");return}if(!s.type.startsWith("image/")){console.error("Only image files are supported for MMS.");return}this.selectedFile=s}}removeSelectedFile(){this.selectedFile=null;const e=this.shadowRoot?.querySelector(".file-input");e&&(e.value="")}formatFileSize(e){if(e===0)return"0 Bytes";const t=1024,s=["Bytes","KB","MB"],i=Math.floor(Math.log(e)/Math.log(t));return parseFloat((e/Math.pow(t,i)).toFixed(1))+" "+s[i]}async sendMessage(){if(console.log("💬 [SmsThread] sendMessage called",{messageText:this.messageText,selectedFile:!!this.selectedFile,conversationId:this.conversationId,deviceIden:this.deviceIden,isSending:this.isSending}),!this.messageText.trim()&&!this.selectedFile||!this.conversationId||!this.deviceIden||this.isSending){console.log("💬 [SmsThread] sendMessage early return - conditions not met");return}this.isSending=!0;try{let e;if(this.selectedFile){const s=await this.selectedFile.arrayBuffer(),i={name:this.selectedFile.name,type:this.selectedFile.type,size:this.selectedFile.size,lastModified:this.selectedFile.lastModified,buffer:Array.from(new Uint8Array(s))},o=await chrome.runtime.sendMessage({cmd:"UPLOAD_FILE_FOR_SMS",payload:{fileData:i,targetDeviceIden:this.deviceIden}});if(!o.success){console.error("Failed to upload file:",o.error);return}e=[{content_type:this.selectedFile.type,name:this.selectedFile.name,url:o.fileUrl}]}const t=await chrome.runtime.sendMessage({cmd:"SEND_SMS",payload:{conversationId:this.conversationId,message:this.messageText,deviceIden:this.deviceIden,attachments:e}});t.success?(this.messageText="",this.selectedFile=null,this.requestUpdate(),console.log("💬 [SmsThread] Message sent successfully, reloading thread to show new message"),await this.loadThread(),this.dispatchEvent(new CustomEvent("message-sent",{detail:{conversationId:this.conversationId},bubbles:!0}))):(console.error("Failed to send SMS:",t.error),t.error&&t.error.includes("CONVERSATION_NOT_FOUND:")&&(this.conversationNotFound=!0,console.log("💬 [SmsThread] Conversation not found, showing reload option")))}catch(e){console.error("Failed to send message:",e)}finally{this.isSending=!1}}formatTime(e){return new Date(e).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}async reloadThread(){if(!(!this.conversationId||!this.deviceIden||this.isReloading)){console.log("💬 [SmsThread] Reloading thread:",this.conversationId),this.isReloading=!0,this.conversationNotFound=!1;try{const e=await chrome.runtime.sendMessage({cmd:"RELOAD_SMS_THREAD",deviceIden:this.deviceIden,threadId:this.conversationId});e.success&&e.thread?(console.log("💬 [SmsThread] Thread reloaded successfully"),this.thread=e.thread,this.conversationNotFound=!1,this.dispatchEvent(new CustomEvent("thread-reloaded",{detail:{conversationId:this.conversationId},bubbles:!0}))):console.error("💬 [SmsThread] Failed to reload thread:",e.error)}catch(e){console.error("💬 [SmsThread] Error reloading thread:",e)}finally{this.isReloading=!1}}}openImage(e){chrome.tabs.create({url:e})}render(){return this.isLoading?a`
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone {
+      border-color: #495057;
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone:hover {
+      border-color: #0d6efd;
+      background: #031633;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone.drag-over {
+      border-color: #0d6efd;
+      background: #031633;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone.error {
+      border-color: #ea868f;
+      background: #2c0b0e;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone.uploading {
+      border-color: #75b798;
+      background: #051b11;
+    }
+
+    :host-context(html[data-theme='dark']) .drop-icon {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .drop-text {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .drop-hint {
+      color: #868e96;
+    }
+
+    :host-context(html[data-theme='dark']) .file-info {
+      background: #343a40;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .file-name {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .file-size {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .progress-bar {
+      background: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .progress-fill {
+      background: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .progress-text {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .error-message {
+      color: #ea868f;
+    }
+
+    :host-context(html[data-theme='dark']) .upload-button {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .upload-button:hover:not(:disabled) {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .upload-button:disabled {
+      background: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .cancel-button {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .cancel-button:hover {
+      background: #5c636a;
+    }
+  `;Y([S({type:String})],D.prototype,"targetDeviceIden",2);Y([d()],D.prototype,"dragOver",2);Y([d()],D.prototype,"uploadState",2);Y([d()],D.prototype,"maxFileSize",2);D=Y([A("pb-file-drop")],D);var ft=Object.defineProperty,xt=Object.getOwnPropertyDescriptor,g=(e,t,o,s)=>{for(var i=s>1?void 0:s?xt(t,o):t,r=e.length-1,a;r>=0;r--)(a=e[r])&&(i=(s?a(t,o,i):a(i))||i);return s&&i&&ft(t,o,i),i};let m=class extends v{constructor(){super(...arguments),this.conversationId="",this.deviceIden="",this.isGroupConversation=!1,this.thread=null,this.messageText="",this.isLoading=!1,this.isSending=!1,this.selectedFile=null,this.recipients=[],this.newRecipientNumber="",this.isLoadingOlder=!1,this.hasMoreMessages=!0,this.messageCursor=null,this.conversationNotFound=!1,this.isReloading=!1}get smsCursorStorageKey(){return`pb_sms_thread_cursor_${this.conversationId}`}connectedCallback(){super.connectedCallback(),this.loadThread(),this.initializeRecipients(),setTimeout(()=>this.scrollToBottom(),200)}updated(e){e.has("conversationId")&&this.conversationId&&(this.loadThread(),this.initializeRecipients()),e.has("thread")&&this.thread&&this.scrollToBottom()}initializeRecipients(){if(this.conversationId&&this.isGroupConversation){const e=this.conversationId.split(",").map(t=>t.trim());this.recipients=e.map(t=>({number:t,name:t}))}else this.conversationId&&!this.isGroupConversation?this.recipients=[{number:this.conversationId,name:this.conversationId}]:this.recipients=[]}async loadThread(){if(!this.conversationId){this.thread=null;return}this.isLoading=!0;try{console.log("💬 [SmsThread] Loading conversation from API:",this.conversationId);let e=this.deviceIden;if(e)console.log("💬 [SmsThread] Using provided device ID:",e);else{console.log("💬 [SmsThread] No device ID provided, getting default SMS device");try{const o=await chrome.runtime.sendMessage({cmd:"GET_DEFAULT_SMS_DEVICE"});if(console.log("💬 [SmsThread] GET_DEFAULT_SMS_DEVICE response:",o),o.success&&o.device)e=o.device.iden,console.log("💬 [SmsThread] Got default SMS device:",e);else throw console.error("💬 [SmsThread] Failed to get default SMS device:",o.error),new Error(o.error||"No SMS device available")}catch(o){throw console.error("💬 [SmsThread] Error getting default SMS device:",o),new Error("No SMS device available")}}this.deviceIden=e,await this.loadStoredCursor();const t=await chrome.runtime.sendMessage({cmd:"LOAD_FULL_SMS_THREAD",conversationId:this.conversationId,deviceIden:e});if(t.success){this.thread=t.thread,this.messageCursor=t.cursor||null,this.hasMoreMessages=t.hasMore||!1,await this.saveStoredCursor(),console.log("💬 [SmsThread] Conversation opened, clearing SMS notifications from badge");try{await chrome.runtime.sendMessage({cmd:"CLEAR_SMS_NOTIFICATIONS"}),console.log("💬 [SmsThread] SMS notifications cleared from badge")}catch(o){console.error("💬 [SmsThread] Failed to clear SMS notifications:",o)}this.scrollToBottom(),setTimeout(()=>this.scrollToBottom(),300),console.log("💬 [SmsThread] Loaded conversation from API:",{conversationId:this.conversationId,deviceIden:this.deviceIden,messageCount:this.thread?.messages?.length||0})}else console.error("💬 [SmsThread] Failed to load thread from API:",t.error)}catch(e){console.error("💬 [SmsThread] Failed to load thread from API:",e)}finally{this.isLoading=!1}}async loadOlderMessages(){if(!(!this.conversationId||this.isLoadingOlder||!this.hasMoreMessages)){this.isLoadingOlder=!0;try{const e=await chrome.runtime.sendMessage({cmd:"GET_SMS_THREAD_PAGED",conversationId:this.conversationId,cursor:this.messageCursor});if(e.success&&this.thread){const t=e.messages||[];this.thread={...this.thread,messages:[...t,...this.thread.messages]},this.messageCursor=e.cursor||null,this.hasMoreMessages=e.hasMore||!1,await this.saveStoredCursor()}}catch(e){console.error("Failed to load older messages:",e)}finally{this.isLoadingOlder=!1}}}scrollToBottom(){console.log("🔄 [SmsThread] scrollToBottom called"),this.updateComplete.then(()=>{const e=this.shadowRoot?.querySelector(".messages-container");if(console.log("🔄 [SmsThread] Container found:",!!e),e){const t=e;console.log("🔄 [SmsThread] Container dimensions:",{scrollHeight:t.scrollHeight,clientHeight:t.clientHeight,scrollTop:t.scrollTop,offsetHeight:t.offsetHeight});const o=e.querySelectorAll("img"),s=Array.from(o).map(i=>i.complete?Promise.resolve():new Promise(r=>{i.onload=r,i.onerror=r}));Promise.all(s).then(()=>{if(t.scrollHeight<=t.clientHeight){console.log("🔄 [SmsThread] No scrollable content - scrollHeight <= clientHeight");return}requestAnimationFrame(()=>{console.log("🔄 [SmsThread] Scrolling to bottom...");const i=t.scrollHeight-t.clientHeight;t.scrollTop=i,setTimeout(()=>{const r=t.scrollTop,a=t.scrollHeight-t.clientHeight;Math.abs(r-a)>5?(console.log(`🔄 [SmsThread] Final scroll adjustment - current: ${r}, target: ${a}`),t.scrollTop=a):console.log("🔄 [SmsThread] Successfully scrolled to bottom")},100)})})}})}handleScrollTop(){const e=this.shadowRoot?.querySelector(".messages-container");e&&e.scrollTop===0&&this.hasMoreMessages&&this.loadOlderMessages()}async loadStoredCursor(){try{const e=await chrome.storage.local.get(this.smsCursorStorageKey);e[this.smsCursorStorageKey]&&(this.messageCursor=e[this.smsCursorStorageKey],console.log(`📱 [SMS Thread] Loaded stored cursor for ${this.conversationId}:`,this.messageCursor))}catch(e){console.error("Failed to load stored SMS cursor:",e)}}async saveStoredCursor(){try{await chrome.storage.local.set({[this.smsCursorStorageKey]:this.messageCursor}),console.log(`📱 [SMS Thread] Saved cursor for ${this.conversationId}:`,this.messageCursor)}catch(e){console.error("Failed to save SMS cursor:",e)}}handleInputChange(e){const t=e.target;this.messageText=t.value,t.style.height="auto",t.style.height=Math.min(t.scrollHeight,120)+"px"}handleKeyDown(e){e.key==="Enter"&&(e.ctrlKey||e.metaKey)&&(e.preventDefault(),this.sendMessage())}handleRecipientInputChange(e){const t=e.target;this.newRecipientNumber=t.value}handleRecipientInputKeyDown(e){e.key==="Enter"&&(e.preventDefault(),this.addRecipient())}addRecipient(){const e=this.newRecipientNumber.trim();if(e&&/^\+?[\d\s\-()]+$/.test(e)){if(this.recipients.some(t=>t.number===e)){this.newRecipientNumber="";return}this.recipients=[...this.recipients,{number:e,name:e}],this.newRecipientNumber="",this.updateGroupConversationId()}}removeRecipient(e){this.recipients=this.recipients.filter(t=>t.number!==e),this.updateGroupConversationId()}updateGroupConversationId(){this.recipients.length>1?(this.conversationId=this.recipients.map(e=>e.number).join(","),this.isGroupConversation=!0):this.recipients.length===1?(this.conversationId=this.recipients[0].number,this.isGroupConversation=!1):(this.conversationId="",this.isGroupConversation=!1)}handleFileSelect(e){const o=e.target.files?.[0];if(o){if(o.size>25*1024*1024){console.error("File too large. Maximum size is 25MB.");return}if(!o.type.startsWith("image/")){console.error("Only image files are supported for MMS.");return}this.selectedFile=o}}removeSelectedFile(){this.selectedFile=null;const e=this.shadowRoot?.querySelector(".file-input");e&&(e.value="")}formatFileSize(e){if(e===0)return"0 Bytes";const t=1024,o=["Bytes","KB","MB"],s=Math.floor(Math.log(e)/Math.log(t));return parseFloat((e/Math.pow(t,s)).toFixed(1))+" "+o[s]}async sendMessage(){if(console.log("💬 [SmsThread] sendMessage called",{messageText:this.messageText,selectedFile:!!this.selectedFile,conversationId:this.conversationId,deviceIden:this.deviceIden,isSending:this.isSending}),!this.messageText.trim()&&!this.selectedFile||!this.conversationId||!this.deviceIden||this.isSending){console.log("💬 [SmsThread] sendMessage early return - conditions not met");return}this.isSending=!0;try{let e;if(this.selectedFile){const o=await this.selectedFile.arrayBuffer(),s={name:this.selectedFile.name,type:this.selectedFile.type,size:this.selectedFile.size,lastModified:this.selectedFile.lastModified,buffer:Array.from(new Uint8Array(o))},i=await chrome.runtime.sendMessage({cmd:"UPLOAD_FILE_FOR_SMS",payload:{fileData:s,targetDeviceIden:this.deviceIden}});if(!i.success){console.error("Failed to upload file:",i.error);return}e=[{content_type:this.selectedFile.type,name:this.selectedFile.name,url:i.fileUrl}]}const t=await chrome.runtime.sendMessage({cmd:"SEND_SMS",payload:{conversationId:this.conversationId,message:this.messageText,deviceIden:this.deviceIden,attachments:e}});t.success?(this.messageText="",this.selectedFile=null,this.requestUpdate(),console.log("💬 [SmsThread] Message sent successfully, reloading thread to show new message"),await this.loadThread(),this.dispatchEvent(new CustomEvent("message-sent",{detail:{conversationId:this.conversationId},bubbles:!0}))):(console.error("Failed to send SMS:",t.error),t.error&&t.error.includes("CONVERSATION_NOT_FOUND:")&&(this.conversationNotFound=!0,console.log("💬 [SmsThread] Conversation not found, showing reload option")))}catch(e){console.error("Failed to send message:",e)}finally{this.isSending=!1}}formatTime(e){return new Date(e).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}async reloadThread(){if(!(!this.conversationId||!this.deviceIden||this.isReloading)){console.log("💬 [SmsThread] Reloading thread:",this.conversationId),this.isReloading=!0,this.conversationNotFound=!1;try{const e=await chrome.runtime.sendMessage({cmd:"RELOAD_SMS_THREAD",deviceIden:this.deviceIden,threadId:this.conversationId});e.success&&e.thread?(console.log("💬 [SmsThread] Thread reloaded successfully"),this.thread=e.thread,this.conversationNotFound=!1,this.dispatchEvent(new CustomEvent("thread-reloaded",{detail:{conversationId:this.conversationId},bubbles:!0}))):console.error("💬 [SmsThread] Failed to reload thread:",e.error)}catch(e){console.error("💬 [SmsThread] Error reloading thread:",e)}finally{this.isReloading=!1}}}openImage(e){chrome.tabs.create({url:e})}render(){return this.isLoading?n`
         <div class="loading">
           <div class="spinner"></div>
           Loading conversation...
         </div>
-      `:this.thread?this.conversationNotFound?a`
+      `:this.thread?this.conversationNotFound?n`
         <div class="error-state">
           <svg class="error-icon" viewBox="0 0 24 24">
             <path
@@ -1835,14 +2286,14 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             @click="${this.reloadThread}"
             ?disabled="${this.isReloading}"
           >
-            ${this.isReloading?a`<div class="spinner-small"></div>
+            ${this.isReloading?n`<div class="spinner-small"></div>
                   Reloading...`:"Reload Conversation"}
           </button>
         </div>
-      `:a`
+      `:n`
       <div class="thread-header">
         <div class="contact-name">${this.thread.name}</div>
-        ${this.thread.unreadCount>0?a` <div class="unread-badge">${this.thread.unreadCount}</div> `:""}
+        ${this.thread.unreadCount>0?n` <div class="unread-badge">${this.thread.unreadCount}</div> `:""}
       </div>
 
       <div
@@ -1851,13 +2302,13 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
         aria-label="Message history"
         @scroll="${this.handleScrollTop}"
       >
-        ${this.hasMoreMessages?a`
+        ${this.hasMoreMessages?n`
               <button
                 class="load-older-btn"
                 @click=${this.loadOlderMessages}
                 ?disabled=${this.isLoadingOlder}
               >
-                ${this.isLoadingOlder?a`
+                ${this.isLoadingOlder?n`
                       <div
                         class="spinner"
                         style="width: 14px; height: 14px; margin-right: 6px;"
@@ -1866,11 +2317,11 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                     `:"Load older messages"}
               </button>
             `:""}
-        ${this.thread.messages.map(e=>a`
+        ${this.thread.messages.map(e=>n`
             <div class="message ${e.inbound?"inbound":"outbound"}">
               <div class="message-bubble">
                 <div>${e.text}</div>
-                ${e.image_url?a`
+                ${e.image_url?n`
                       <img
                         class="message-image"
                         src="${e.image_url}"
@@ -1887,13 +2338,13 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       </div>
 
       <div class="input-container">
-        ${this.isGroupConversation||this.recipients.length===0?a`
+        ${this.isGroupConversation||this.recipients.length===0?n`
               <div class="recipients-container">
                 <div class="recipients-label">Recipients:</div>
 
-                ${this.recipients.length>0?a`
+                ${this.recipients.length>0?n`
                       <div class="recipients-list">
-                        ${this.recipients.map(e=>a`
+                        ${this.recipients.map(e=>n`
                             <div class="recipient-chip">
                               <span>${e.name}</span>
                               <button
@@ -1944,7 +2395,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             </button>
           </div>
 
-          ${this.selectedFile?a`
+          ${this.selectedFile?n`
                 <div class="selected-file">
                   <svg class="file-icon" viewBox="0 0 24 24">
                     <path
@@ -1993,7 +2444,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
           </button>
         </div>
       </div>
-    `:a`
+    `:n`
         <div class="empty-state">
           <svg class="empty-icon" viewBox="0 0 24 24">
             <path
@@ -2003,7 +2454,8 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
           </svg>
           <p>Select a conversation to start messaging</p>
         </div>
-      `}};g.styles=T`
+      `}};m.styles=P`
+    /* === Light mode base === */
     :host {
       display: flex;
       flex-direction: column;
@@ -2575,12 +3027,168 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
         height: 18px;
       }
     }
-  `;m([S({type:String})],g.prototype,"conversationId",2);m([S({type:String})],g.prototype,"deviceIden",2);m([S({type:Boolean})],g.prototype,"isGroupConversation",2);m([l()],g.prototype,"thread",2);m([l()],g.prototype,"messageText",2);m([l()],g.prototype,"isLoading",2);m([l()],g.prototype,"isSending",2);m([l()],g.prototype,"selectedFile",2);m([l()],g.prototype,"recipients",2);m([l()],g.prototype,"newRecipientNumber",2);m([l()],g.prototype,"isLoadingOlder",2);m([l()],g.prototype,"hasMoreMessages",2);m([l()],g.prototype,"messageCursor",2);m([l()],g.prototype,"conversationNotFound",2);m([l()],g.prototype,"isReloading",2);g=m([P("pb-sms-thread")],g);var pt=Object.defineProperty,ht=Object.getOwnPropertyDescriptor,U=(e,t,s,i)=>{for(var o=i>1?void 0:i?ht(t,s):t,r=e.length-1,n;r>=0;r--)(n=e[r])&&(o=(i?n(t,s,o):n(o))||o);return i&&o&&pt(t,s,o),o};let z=class extends v{constructor(){super(...arguments),this.selectedConversationId="",this.conversations=[],this.searchQuery="",this.isLoading=!1,this.filteredConversations=[]}connectedCallback(){super.connectedCallback(),this.loadConversations()}async loadConversations(){this.isLoading=!0;try{console.log("[ConversationList] Starting to load conversations from API");const e=await chrome.runtime.sendMessage({cmd:"GET_SMS_CONVERSATIONS_FROM_API"});if(console.log("[ConversationList] Received response:",e),console.log("[ConversationList] Response type:",typeof e),console.log("[ConversationList] Response success:",e?.success),!e){console.error("[ConversationList] No response from background script"),this.conversations=[],this.filterConversations();return}if(e.success)console.log(`[ConversationList] Successfully loaded ${e.conversations?.length||0} conversations from API`),this.conversations=e.conversations||[],this.filterConversations();else{const t=e.error||"Unknown error occurred";console.error("[ConversationList] Failed to load conversations from API:",t),console.error("[ConversationList] Full error response:",e),this.conversations=[],this.filterConversations()}}catch(e){console.error("[ConversationList] Exception while loading conversations from API:",e),this.conversations=[],this.filterConversations()}finally{console.log("[ConversationList] Loading complete, setting isLoading=false"),this.isLoading=!1}}filterConversations(){if(!this.searchQuery.trim())this.filteredConversations=this.conversations;else{const e=this.searchQuery.toLowerCase();this.filteredConversations=this.conversations.filter(t=>t.name.toLowerCase().includes(e)||t.id.toLowerCase().includes(e))}}handleSearchInput(e){const t=e.target;this.searchQuery=t.value,this.filterConversations()}selectConversation(e){this.selectedConversationId=e;const t=this.conversations.find(i=>i.id===e),s=t?.name||t?.recipients?.map(i=>i.name).join(", ")||"Unknown";this.dispatchEvent(new CustomEvent("conversation-selected",{detail:{conversationId:e,conversationName:s},bubbles:!0,composed:!0})),chrome.runtime.sendMessage({cmd:"MARK_CONVERSATION_READ",conversationId:e})}getInitials(e){return e.split(" ").map(t=>t.charAt(0)).join("").toUpperCase().slice(0,2)}formatTime(e){const t=new Date(e),i=new Date().getTime()-t.getTime(),o=Math.floor(i/(1e3*60*60*24));return o===0?t.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):o===1?"Yesterday":o<7?t.toLocaleDateString([],{weekday:"short"}):t.toLocaleDateString([],{month:"short",day:"numeric"})}getLastMessage(e){const t=e.messages[e.messages.length-1];return t?t.image_url?t.inbound?"📷 Image":"📷 You sent an image":t.text||"No text":"No messages"}render(){return this.isLoading?a`
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      background: #212529;
+      color: #dee2e6;
+    }
+
+    /* Header */
+    :host-context(html[data-theme='dark']) .thread-header {
+      background: #343a40;
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .contact-name {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .unread-badge {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    /* Messages */
+    :host-context(html[data-theme='dark']) .message.inbound .message-bubble {
+      background: #343a40;
+      color: #dee2e6;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .message.outbound .message-bubble {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .message-time {
+      color: #868e96;
+    }
+
+    /* Input area */
+    :host-context(html[data-theme='dark']) .input-container {
+      background: #343a40;
+      border-top-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .recipients-label,
+    :host-context(html[data-theme='dark']) .device-info {
+      color: #adb5bd;
+    }
+
+    /* Recipient chips */
+    :host-context(html[data-theme='dark']) .recipient-chip {
+      background: #031633; /* primary-bg-subtle */
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .recipient-chip .remove-btn {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .recipient-chip .remove-btn:hover {
+      color: #ea868f;
+    }
+
+    /* Text inputs */
+    :host-context(html[data-theme='dark']) .recipient-input,
+    :host-context(html[data-theme='dark']) .message-input {
+      background: #2b3035;
+      border-color: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .recipient-input:focus,
+    :host-context(html[data-theme='dark']) .message-input:focus {
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+      outline: 0;
+    }
+
+    /* Buttons */
+    :host-context(html[data-theme='dark']) .add-recipient-btn,
+    :host-context(html[data-theme='dark']) .send-button,
+    :host-context(html[data-theme='dark']) .reload-button {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .add-recipient-btn:hover:not(:disabled),
+    :host-context(html[data-theme='dark']) .send-button:hover:not(:disabled),
+    :host-context(html[data-theme='dark']) .reload-button:hover:not(:disabled) {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .add-recipient-btn:disabled,
+    :host-context(html[data-theme='dark']) .send-button:disabled,
+    :host-context(html[data-theme='dark']) .reload-button:disabled {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    /* File select and selected file */
+    :host-context(html[data-theme='dark']) .file-select-btn,
+    :host-context(html[data-theme='dark']) .selected-file {
+      background: #2b3035;
+      border-color: #495057;
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .file-select-btn:hover {
+      background: #343a40;
+    }
+
+    :host-context(html[data-theme='dark']) .file-icon {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .file-info {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .file-size {
+      color: #868e96;
+    }
+
+    /* Load older */
+    :host-context(html[data-theme='dark']) .load-older-btn {
+      background: #2b3035;
+      border-color: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .load-older-btn:hover:not(:disabled) {
+      background: #343a40;
+    }
+
+    /* States */
+    :host-context(html[data-theme='dark']) .empty-state,
+    :host-context(html[data-theme='dark']) .error-state,
+    :host-context(html[data-theme='dark']) .loading {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .error-icon {
+      color: #ea868f;
+    }
+
+    /* Spinners */
+    :host-context(html[data-theme='dark']) .spinner {
+      border-color: #343a40;
+      border-top-color: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .spinner-small {
+      color: #6ea8fe;
+    }
+  `;g([S({type:String})],m.prototype,"conversationId",2);g([S({type:String})],m.prototype,"deviceIden",2);g([S({type:Boolean})],m.prototype,"isGroupConversation",2);g([d()],m.prototype,"thread",2);g([d()],m.prototype,"messageText",2);g([d()],m.prototype,"isLoading",2);g([d()],m.prototype,"isSending",2);g([d()],m.prototype,"selectedFile",2);g([d()],m.prototype,"recipients",2);g([d()],m.prototype,"newRecipientNumber",2);g([d()],m.prototype,"isLoadingOlder",2);g([d()],m.prototype,"hasMoreMessages",2);g([d()],m.prototype,"messageCursor",2);g([d()],m.prototype,"conversationNotFound",2);g([d()],m.prototype,"isReloading",2);m=g([A("pb-sms-thread")],m);var vt=Object.defineProperty,yt=Object.getOwnPropertyDescriptor,B=(e,t,o,s)=>{for(var i=s>1?void 0:s?yt(t,o):t,r=e.length-1,a;r>=0;r--)(a=e[r])&&(i=(s?a(t,o,i):a(i))||i);return s&&i&&vt(t,o,i),i};let T=class extends v{constructor(){super(...arguments),this.selectedConversationId="",this.conversations=[],this.searchQuery="",this.isLoading=!1,this.filteredConversations=[]}connectedCallback(){super.connectedCallback(),this.loadConversations()}async loadConversations(){this.isLoading=!0;try{console.log("[ConversationList] Starting to load conversations from API");const e=await chrome.runtime.sendMessage({cmd:"GET_SMS_CONVERSATIONS_FROM_API"});if(console.log("[ConversationList] Received response:",e),console.log("[ConversationList] Response type:",typeof e),console.log("[ConversationList] Response success:",e?.success),!e){console.error("[ConversationList] No response from background script"),this.conversations=[],this.filterConversations();return}if(e.success)console.log(`[ConversationList] Successfully loaded ${e.conversations?.length||0} conversations from API`),this.conversations=e.conversations||[],this.filterConversations();else{const t=e.error||"Unknown error occurred";console.error("[ConversationList] Failed to load conversations from API:",t),console.error("[ConversationList] Full error response:",e),this.conversations=[],this.filterConversations()}}catch(e){console.error("[ConversationList] Exception while loading conversations from API:",e),this.conversations=[],this.filterConversations()}finally{console.log("[ConversationList] Loading complete, setting isLoading=false"),this.isLoading=!1}}filterConversations(){if(!this.searchQuery.trim())this.filteredConversations=this.conversations;else{const e=this.searchQuery.toLowerCase();this.filteredConversations=this.conversations.filter(t=>t.name.toLowerCase().includes(e)||t.id.toLowerCase().includes(e))}}handleSearchInput(e){const t=e.target;this.searchQuery=t.value,this.filterConversations()}selectConversation(e){this.selectedConversationId=e;const t=this.conversations.find(s=>s.id===e),o=t?.name||t?.recipients?.map(s=>s.name).join(", ")||"Unknown";this.dispatchEvent(new CustomEvent("conversation-selected",{detail:{conversationId:e,conversationName:o},bubbles:!0,composed:!0})),chrome.runtime.sendMessage({cmd:"MARK_CONVERSATION_READ",conversationId:e})}getInitials(e){return e.split(" ").map(t=>t.charAt(0)).join("").toUpperCase().slice(0,2)}formatTime(e){const t=new Date(e),s=new Date().getTime()-t.getTime(),i=Math.floor(s/(1e3*60*60*24));return i===0?t.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):i===1?"Yesterday":i<7?t.toLocaleDateString([],{weekday:"short"}):t.toLocaleDateString([],{month:"short",day:"numeric"})}getLastMessage(e){const t=e.messages[e.messages.length-1];return t?t.image_url?t.inbound?"📷 Image":"📷 You sent an image":t.text||"No text":"No messages"}render(){return this.isLoading?n`
         <div class="loading">
           <div class="spinner"></div>
           Loading conversations...
         </div>
-      `:this.conversations.length===0?a`
+      `:this.conversations.length===0?n`
         <div class="empty-state">
           <svg class="empty-icon" viewBox="0 0 24 24">
             <path
@@ -2593,7 +3201,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             SMS conversations will appear here
           </p>
         </div>
-      `:a`
+      `:n`
       <div class="header">
         <h2 class="title">Messages</h2>
         <div class="search-container">
@@ -2614,12 +3222,12 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       </div>
 
       <div class="conversations-container">
-        ${this.filteredConversations.length===0&&this.searchQuery?a`
+        ${this.filteredConversations.length===0&&this.searchQuery?n`
               <div class="no-results">
                 <p>No conversations found for "${this.searchQuery}"</p>
               </div>
             `:""}
-        ${this.filteredConversations.map(e=>a`
+        ${this.filteredConversations.map(e=>n`
             <div
               class="conversation-item ${e.id===this.selectedConversationId?"selected":""}"
               @click="${()=>this.selectConversation(e.id)}"
@@ -2637,7 +3245,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                 <div class="timestamp">
                   ${this.formatTime(e.lastMessageTime)}
                 </div>
-                ${e.unreadCount>0?a`
+                ${e.unreadCount>0?n`
                       <div class="unread-badge">
                         ${e.unreadCount}
                       </div>
@@ -2646,7 +3254,8 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             </div>
           `)}
       </div>
-    `}};z.styles=T`
+    `}};T.styles=P`
+    /* === Light mode base === */
     :host {
       display: flex;
       flex-direction: column;
@@ -2833,17 +3442,98 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       text-align: center;
       color: #666;
     }
-  `;U([S({type:String})],z.prototype,"selectedConversationId",2);U([l()],z.prototype,"conversations",2);U([l()],z.prototype,"searchQuery",2);U([l()],z.prototype,"isLoading",2);U([l()],z.prototype,"filteredConversations",2);z=U([P("pb-conversation-list")],z);var ut=Object.defineProperty,gt=Object.getOwnPropertyDescriptor,$=(e,t,s,i)=>{for(var o=i>1?void 0:i?gt(t,s):t,r=e.length-1,n;r>=0;r--)(n=e[r])&&(o=(i?n(t,s,o):n(o))||o);return i&&o&&ut(t,s,o),o};let x=class extends v{constructor(){super(...arguments),this.subscriptions=[],this.searchQuery="",this.searchResults=[],this.isLoading=!1,this.isSearching=!1,this.errorMessage="",this.successMessage="",this.activeSubtab="discover",this.subscriptionPosts=[],this.isLoadingPosts=!1,this.searchTimeout=null}connectedCallback(){super.connectedCallback(),this.loadSubscriptions()}async loadSubscriptions(){try{this.isLoading=!0;const e=await chrome.runtime.sendMessage({cmd:"GET_CHANNEL_SUBSCRIPTIONS",forceRefresh:!1});e.success?this.subscriptions=e.subscriptions:this.errorMessage=e.error||"Failed to load subscriptions"}catch(e){this.errorMessage="Failed to load subscriptions",console.error("Failed to load subscriptions:",e)}finally{this.isLoading=!1}}onSearchInput(e){const t=e.target;if(this.searchQuery=t.value.trim(),this.searchTimeout&&clearTimeout(this.searchTimeout),!this.searchQuery){this.searchResults=[],this.isSearching=!1;return}this.searchTimeout=window.setTimeout(()=>{this.searchChannels()},250)}async searchChannels(){if(this.searchQuery)try{this.isSearching=!0,this.errorMessage="";const e=await chrome.runtime.sendMessage({cmd:"GET_CHANNEL_INFO",channelTag:this.searchQuery});e.success?this.searchResults=[e.channelInfo]:e.error==="Channel not found"?this.searchResults=[]:(this.errorMessage=e.error||"Failed to search channels",this.searchResults=[])}catch(e){this.errorMessage="Failed to search channels",this.searchResults=[],console.error("Failed to search channels:",e)}finally{this.isSearching=!1}}async subscribeToChannel(e){try{this.errorMessage="",this.successMessage="";const t=await chrome.runtime.sendMessage({cmd:"SUBSCRIBE_TO_CHANNEL",channelTag:e});t.success?(this.successMessage=`Successfully subscribed to ${e}`,await this.loadSubscriptions(),this.searchResults=[],this.searchQuery=""):this.errorMessage=t.error||"Failed to subscribe to channel"}catch(t){this.errorMessage="Failed to subscribe to channel",console.error("Failed to subscribe to channel:",t)}}async unsubscribeFromChannel(e){try{this.errorMessage="",this.successMessage="";const t=await chrome.runtime.sendMessage({cmd:"UNSUBSCRIBE_FROM_CHANNEL",subscriptionIden:e});t.success?(this.successMessage="Successfully unsubscribed from channel",await this.loadSubscriptions()):this.errorMessage=t.error||"Failed to unsubscribe from channel"}catch(t){this.errorMessage="Failed to unsubscribe from channel",console.error("Failed to unsubscribe from channel:",t)}}isSubscribedToChannel(e){return this.subscriptions.some(t=>t.channel?.tag===e&&t.active)}handleSubtabChange(e){this.activeSubtab=e,e==="recent"&&this.loadSubscriptionPosts()}async loadSubscriptionPosts(){try{this.isLoadingPosts=!0,this.errorMessage="";const e=await chrome.runtime.sendMessage({cmd:"GET_SUBSCRIPTION_POSTS"});e.success?this.subscriptionPosts=e.posts:this.errorMessage=e.error||"Failed to load subscription posts"}catch(e){this.errorMessage="Failed to load subscription posts",console.error("Failed to load subscription posts:",e)}finally{this.isLoadingPosts=!1}}async refreshSubscriptions(){try{this.isLoading=!0,this.errorMessage="";const e=await chrome.runtime.sendMessage({cmd:"REFRESH_CHANNEL_DATA"});e.success?(this.successMessage="Subscriptions refreshed successfully",await this.loadSubscriptions(),setTimeout(()=>{this.successMessage=""},3e3)):this.errorMessage=e.error||"Failed to refresh subscriptions"}catch(e){this.errorMessage="Failed to refresh subscriptions",console.error("Failed to refresh subscriptions:",e)}finally{this.isLoading=!1}}renderChannelIcon(e){return e?e.image_url?a`<img
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      background: #212529;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .header {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .title {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .search-input {
+      background: #343a40;
+      border-color: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .search-input:focus {
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    :host-context(html[data-theme='dark']) .search-icon {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .conversation-item {
+      border-bottom-color: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .conversation-item:hover {
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .conversation-item.selected {
+      background: #031633;
+      border-left-color: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .avatar {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .contact-name {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .last-message {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .timestamp {
+      color: #868e96;
+    }
+
+    :host-context(html[data-theme='dark']) .unread-badge {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .empty-state {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .loading {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .spinner {
+      border-color: #343a40;
+      border-top-color: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .no-results {
+      color: #adb5bd;
+    }
+  `;B([S({type:String})],T.prototype,"selectedConversationId",2);B([d()],T.prototype,"conversations",2);B([d()],T.prototype,"searchQuery",2);B([d()],T.prototype,"isLoading",2);B([d()],T.prototype,"filteredConversations",2);T=B([A("pb-conversation-list")],T);var kt=Object.defineProperty,wt=Object.getOwnPropertyDescriptor,w=(e,t,o,s)=>{for(var i=s>1?void 0:s?wt(t,o):t,r=e.length-1,a;r>=0;r--)(a=e[r])&&(i=(s?a(t,o,i):a(i))||i);return s&&i&&kt(t,o,i),i};let x=class extends v{constructor(){super(...arguments),this.subscriptions=[],this.searchQuery="",this.searchResults=[],this.isLoading=!1,this.isSearching=!1,this.errorMessage="",this.successMessage="",this.activeSubtab="discover",this.subscriptionPosts=[],this.isLoadingPosts=!1,this.searchTimeout=null}connectedCallback(){super.connectedCallback(),this.loadSubscriptions()}async loadSubscriptions(){try{this.isLoading=!0;const e=await chrome.runtime.sendMessage({cmd:"GET_CHANNEL_SUBSCRIPTIONS",forceRefresh:!1});e.success?this.subscriptions=e.subscriptions:this.errorMessage=e.error||"Failed to load subscriptions"}catch(e){this.errorMessage="Failed to load subscriptions",console.error("Failed to load subscriptions:",e)}finally{this.isLoading=!1}}onSearchInput(e){const t=e.target;if(this.searchQuery=t.value.trim(),this.searchTimeout&&clearTimeout(this.searchTimeout),!this.searchQuery){this.searchResults=[],this.isSearching=!1;return}this.searchTimeout=window.setTimeout(()=>{this.searchChannels()},250)}async searchChannels(){if(this.searchQuery)try{this.isSearching=!0,this.errorMessage="";const e=await chrome.runtime.sendMessage({cmd:"GET_CHANNEL_INFO",channelTag:this.searchQuery});e.success?this.searchResults=[e.channelInfo]:e.error==="Channel not found"?this.searchResults=[]:(this.errorMessage=e.error||"Failed to search channels",this.searchResults=[])}catch(e){this.errorMessage="Failed to search channels",this.searchResults=[],console.error("Failed to search channels:",e)}finally{this.isSearching=!1}}async subscribeToChannel(e){try{this.errorMessage="",this.successMessage="";const t=await chrome.runtime.sendMessage({cmd:"SUBSCRIBE_TO_CHANNEL",channelTag:e});t.success?(this.successMessage=`Successfully subscribed to ${e}`,await this.loadSubscriptions(),this.searchResults=[],this.searchQuery=""):this.errorMessage=t.error||"Failed to subscribe to channel"}catch(t){this.errorMessage="Failed to subscribe to channel",console.error("Failed to subscribe to channel:",t)}}async unsubscribeFromChannel(e){try{this.errorMessage="",this.successMessage="";const t=await chrome.runtime.sendMessage({cmd:"UNSUBSCRIBE_FROM_CHANNEL",subscriptionIden:e});t.success?(this.successMessage="Successfully unsubscribed from channel",await this.loadSubscriptions()):this.errorMessage=t.error||"Failed to unsubscribe from channel"}catch(t){this.errorMessage="Failed to unsubscribe from channel",console.error("Failed to unsubscribe from channel:",t)}}isSubscribedToChannel(e){return this.subscriptions.some(t=>t.channel?.tag===e&&t.active)}handleSubtabChange(e){this.activeSubtab=e,e==="recent"&&this.loadSubscriptionPosts()}async loadSubscriptionPosts(){try{this.isLoadingPosts=!0,this.errorMessage="";const e=await chrome.runtime.sendMessage({cmd:"GET_SUBSCRIPTION_POSTS"});e.success?this.subscriptionPosts=e.posts:this.errorMessage=e.error||"Failed to load subscription posts"}catch(e){this.errorMessage="Failed to load subscription posts",console.error("Failed to load subscription posts:",e)}finally{this.isLoadingPosts=!1}}async refreshSubscriptions(){try{this.isLoading=!0,this.errorMessage="";const e=await chrome.runtime.sendMessage({cmd:"REFRESH_CHANNEL_DATA"});e.success?(this.successMessage="Subscriptions refreshed successfully",await this.loadSubscriptions(),setTimeout(()=>{this.successMessage=""},3e3)):this.errorMessage=e.error||"Failed to refresh subscriptions"}catch(e){this.errorMessage="Failed to refresh subscriptions",console.error("Failed to refresh subscriptions:",e)}finally{this.isLoading=!1}}renderChannelIcon(e){return e?e.image_url?n`<img
         src="${e.image_url}"
         alt="${e.name||"Channel"}"
         class="channel-icon"
-      />`:a`<div class="channel-icon">
+      />`:n`<div class="channel-icon">
       ${e.name?e.name.charAt(0).toUpperCase():"?"}
-    </div>`:a`<div class="channel-icon">?</div>`}renderSearchResults(){return this.isSearching?a`<div class="loading">Searching...</div>`:this.searchResults.length===0&&this.searchQuery?a`<div class="empty-state">
+    </div>`:n`<div class="channel-icon">?</div>`}renderSearchResults(){return this.isSearching?n`<div class="loading">Searching...</div>`:this.searchResults.length===0&&this.searchQuery?n`<div class="empty-state">
         No channels found for "${this.searchQuery}"
-      </div>`:a`
+      </div>`:n`
       <div class="search-results">
-        ${this.searchResults.map(e=>{const t=this.isSubscribedToChannel(e?.tag||"");return a`
+        ${this.searchResults.map(e=>{const t=this.isSubscribedToChannel(e?.tag||"");return n`
             <div class="channel-card">
               ${this.renderChannelIcon(e)}
               <div class="channel-info">
@@ -2855,7 +3545,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                 </div>
                 <div class="channel-tag">@${e?.tag||"unknown"}</div>
               </div>
-              ${t?a`<div class="subscribed-badge">Subscribed</div>`:a`<button
+              ${t?n`<div class="subscribed-badge">Subscribed</div>`:n`<button
                     class="subscribe-button"
                     @click=${()=>this.subscribeToChannel(e?.tag||"")}
                   >
@@ -2864,7 +3554,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             </div>
           `})}
       </div>
-    `}renderSubscriptions(){return this.isLoading?a`<div class="loading">Loading subscriptions...</div>`:this.subscriptions.length===0?a`<div class="empty-state">No channel subscriptions yet</div>`:a`
+    `}renderSubscriptions(){return this.isLoading?n`<div class="loading">Loading subscriptions...</div>`:this.subscriptions.length===0?n`<div class="empty-state">No channel subscriptions yet</div>`:n`
       <div class="subscriptions-section">
         <div class="section-header">
           <h3 class="section-title">Your Subscriptions</h3>
@@ -2877,7 +3567,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             🔄 Refresh
           </button>
         </div>
-        ${this.subscriptions.map(e=>a`
+        ${this.subscriptions.map(e=>n`
             <div class="subscription-item">
               ${this.renderChannelIcon(e.channel)}
               <div class="channel-info">
@@ -2900,13 +3590,13 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
             </div>
           `)}
       </div>
-    `}renderRecentChannelPushes(){return a`
+    `}renderRecentChannelPushes(){return n`
       <div class="recent-pushes-section">
         <h3 class="section-title">Recent Subscription Posts</h3>
-        ${this.isLoadingPosts?a`
+        ${this.isLoadingPosts?n`
               <div class="loading-indicator">Loading subscription posts...</div>
             `:""}
-        ${this.subscriptionPosts.length===0&&!this.isLoadingPosts?a`
+        ${this.subscriptionPosts.length===0&&!this.isLoadingPosts?n`
               <div class="recent-pushes-content">
                 <p>No recent subscription posts found.</p>
                 <p>
@@ -2914,9 +3604,9 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                 </p>
               </div>
             `:""}
-        ${this.subscriptionPosts.length>0?a`
+        ${this.subscriptionPosts.length>0?n`
               <div class="subscription-posts">
-                ${this.subscriptionPosts.map(e=>a`
+                ${this.subscriptionPosts.map(e=>n`
                     <div class="post-card">
                       <div class="post-header">
                         <span class="channel-name">${e.channel_tag}</span>
@@ -2925,9 +3615,9 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                         >
                       </div>
                       <div class="post-content">
-                        ${e.title?a`<h4 class="post-title">${e.title}</h4>`:""}
-                        ${e.body?a`<p class="post-body">${e.body}</p>`:""}
-                        ${e.url?a`<a
+                        ${e.title?n`<h4 class="post-title">${e.title}</h4>`:""}
+                        ${e.body?n`<p class="post-body">${e.body}</p>`:""}
+                        ${e.url?n`<a
                               href="${e.url}"
                               target="_blank"
                               class="post-link"
@@ -2939,10 +3629,10 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
               </div>
             `:""}
       </div>
-    `}render(){return a`
+    `}render(){return n`
       <div class="channels-container">
-        ${this.errorMessage?a`<div class="error-message">${this.errorMessage}</div>`:""}
-        ${this.successMessage?a`<div class="success-message">${this.successMessage}</div>`:""}
+        ${this.errorMessage?n`<div class="error-message">${this.errorMessage}</div>`:""}
+        ${this.successMessage?n`<div class="success-message">${this.successMessage}</div>`:""}
 
         <div class="subtab-navigation">
           <button
@@ -2959,7 +3649,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
           </button>
         </div>
 
-        ${this.activeSubtab==="discover"?a`
+        ${this.activeSubtab==="discover"?n`
               <div class="search-section">
                 <h3 class="section-title">Discover New Subscriptions</h3>
                 <input
@@ -2975,7 +3665,8 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
               ${this.renderSubscriptions()}
             `:this.renderRecentChannelPushes()}
       </div>
-    `}};x.styles=T`
+    `}};x.styles=P`
+    /* === Light mode base === */
     :host {
       display: block;
       padding: 16px;
@@ -2990,13 +3681,11 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       flex-direction: column;
       gap: 16px;
     }
-
     .search-section {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
-
     .search-input {
       padding: 8px 12px;
       border: 1px solid #ddd;
@@ -3005,17 +3694,14 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       outline: none;
       transition: border-color 0.2s;
     }
-
     .search-input:focus {
       border-color: #007bff;
     }
-
     .subtab-navigation {
       display: flex;
       margin-bottom: 16px;
       border-bottom: 1px solid #eee;
     }
-
     .subtab-button {
       background: none;
       border: none;
@@ -3026,21 +3712,17 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       border-bottom: 2px solid transparent;
       transition: all 0.2s;
     }
-
     .subtab-button.active {
       color: #007bff;
       border-bottom-color: #007bff;
     }
-
     .subtab-button:hover:not(.active) {
       color: #333;
       background: #f8f9fa;
     }
-
     .recent-pushes-section {
       padding: 16px 0;
     }
-
     .recent-pushes-content {
       padding: 20px;
       text-align: center;
@@ -3048,20 +3730,17 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       background: #f8f9fa;
       border-radius: 6px;
     }
-
     .loading-indicator {
       text-align: center;
       padding: 20px;
       color: #666;
       font-style: italic;
     }
-
     .subscription-posts {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
-
     .post-card {
       background: white;
       border: 1px solid #e9ecef;
@@ -3069,12 +3748,10 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       padding: 16px;
       transition: all 0.2s;
     }
-
     .post-card:hover {
       border-color: #007bff;
       box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
     }
-
     .post-header {
       display: flex;
       justify-content: space-between;
@@ -3082,7 +3759,6 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       margin-bottom: 12px;
       font-size: 12px;
     }
-
     .post-header .channel-name {
       background: #007bff;
       color: white;
@@ -3090,42 +3766,35 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       border-radius: 4px;
       font-weight: 600;
     }
-
     .post-date {
       color: #666;
     }
-
     .post-content {
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
-
     .post-title {
       margin: 0;
       font-size: 14px;
       font-weight: 600;
       color: #333;
     }
-
     .post-body {
       margin: 0;
       font-size: 13px;
       color: #555;
       line-height: 1.4;
     }
-
     .post-link {
       color: #007bff;
       text-decoration: none;
       font-size: 13px;
       font-weight: 500;
     }
-
     .post-link:hover {
       text-decoration: underline;
     }
-
     .search-results {
       display: flex;
       flex-direction: column;
@@ -3135,7 +3804,6 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       -webkit-overflow-scrolling: touch;
       scroll-behavior: smooth;
     }
-
     .channel-card {
       display: flex;
       align-items: center;
@@ -3146,12 +3814,10 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       background: white;
       transition: all 0.2s;
     }
-
     .channel-card:hover {
       border-color: #007bff;
       box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
     }
-
     .channel-icon {
       width: 40px;
       height: 40px;
@@ -3164,12 +3830,10 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       font-size: 16px;
       color: #6c757d;
     }
-
     .channel-info {
       flex: 1;
       min-width: 0;
     }
-
     .channel-name {
       font-weight: 600;
       font-size: 14px;
@@ -3179,7 +3843,6 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       overflow: hidden;
       text-overflow: ellipsis;
     }
-
     .channel-description {
       font-size: 12px;
       color: #666;
@@ -3189,7 +3852,6 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
-
     .channel-tag {
       font-size: 11px;
       color: #999;
@@ -3200,7 +3862,6 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       margin-top: 4px;
       display: inline-block;
     }
-
     .subscribe-button {
       padding: 6px 12px;
       background: #007bff;
@@ -3212,16 +3873,13 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       transition: background-color 0.2s;
       white-space: nowrap;
     }
-
     .subscribe-button:hover {
       background: #0056b3;
     }
-
     .subscribe-button:disabled {
       background: #6c757d;
       cursor: not-allowed;
     }
-
     .subscribed-badge {
       padding: 6px 12px;
       background: #28a745;
@@ -3230,27 +3888,23 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       font-size: 12px;
       white-space: nowrap;
     }
-
     .subscriptions-section {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
-
     .section-title {
       font-size: 16px;
       font-weight: 600;
       color: #333;
       margin: 0;
     }
-
     .section-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 12px;
     }
-
     .refresh-button {
       padding: 6px 12px;
       background: #6c757d;
@@ -3264,16 +3918,13 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       align-items: center;
       gap: 4px;
     }
-
     .refresh-button:hover:not(:disabled) {
       background: #5a6268;
     }
-
     .refresh-button:disabled {
       background: #adb5bd;
       cursor: not-allowed;
     }
-
     .subscription-item {
       display: flex;
       align-items: center;
@@ -3283,7 +3934,6 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       border-radius: 8px;
       background: white;
     }
-
     .unsubscribe-button {
       padding: 6px 12px;
       background: #dc3545;
@@ -3294,18 +3944,15 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       cursor: pointer;
       transition: background-color 0.2s;
     }
-
     .unsubscribe-button:hover {
       background: #c82333;
     }
-
     .loading {
       text-align: center;
       color: #666;
       font-size: 14px;
       padding: 20px;
     }
-
     .error-message {
       color: #dc3545;
       font-size: 14px;
@@ -3315,7 +3962,6 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       border-radius: 4px;
       margin-bottom: 12px;
     }
-
     .success-message {
       color: #155724;
       font-size: 14px;
@@ -3325,14 +3971,309 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       border-radius: 4px;
       margin-bottom: 12px;
     }
-
     .empty-state {
       text-align: center;
       color: #666;
       font-size: 14px;
       padding: 40px 20px;
     }
-  `;$([S({type:Array})],x.prototype,"subscriptions",2);$([l()],x.prototype,"searchQuery",2);$([l()],x.prototype,"searchResults",2);$([l()],x.prototype,"isLoading",2);$([l()],x.prototype,"isSearching",2);$([l()],x.prototype,"errorMessage",2);$([l()],x.prototype,"successMessage",2);$([l()],x.prototype,"activeSubtab",2);$([l()],x.prototype,"subscriptionPosts",2);$([l()],x.prototype,"isLoadingPosts",2);x=$([P("pb-channels")],x);console.log("Pushbridge popup loaded");document.addEventListener("DOMContentLoaded",async()=>{console.log("🪟 [Popup] Popup opened, sending POPUP_OPEN message");try{await chrome.runtime.sendMessage({cmd:"POPUP_OPEN"}),console.log("🪟 [Popup] POPUP_OPEN message sent successfully")}catch(e){console.error("🪟 [Popup] Failed to send POPUP_OPEN message:",e)}await ke()});async function ke(){const e=document.querySelector(".container");if(!e){console.error("Container element not found");return}try{if(await Ce("pb_token")){const s=await ze(),i=s?await ve():null;e.innerHTML=`
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+      background: #212529;
+    }
+
+    :host-context(html[data-theme='dark']) .search-input {
+      background: #343a40;
+      border-color: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .search-input::placeholder {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-navigation {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button {
+      color: rgba(222, 226, 230, 0.75);
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button.active {
+      color: #6ea8fe;
+      border-bottom-color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button:hover:not(.active) {
+      color: #dee2e6;
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .post-card {
+      background: #343a40;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .post-card:hover {
+      border-color: #6ea8fe;
+      box-shadow: 0 2px 8px rgba(13, 110, 253, 0.15);
+    }
+
+    :host-context(html[data-theme='dark']) .post-title {
+      color: #e9ecef;
+    }
+
+    :host-context(html[data-theme='dark']) .post-body {
+      color: #ced4da;
+    }
+
+    :host-context(html[data-theme='dark']) .post-date {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .post-link {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .post-link:hover {
+      color: #9ec5fe;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-card {
+      background: #343a40;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-card:hover {
+      border-color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-icon {
+      background: #2b3035;
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-name {
+      color: #e9ecef;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-description {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-tag {
+      background: #2b3035;
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .subscribe-button {
+      background: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .subscribe-button:hover {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button {
+      background: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .refresh-button:hover:not(:disabled) {
+      background: #5c636a;
+    }
+
+    :host-context(html[data-theme='dark']) .unsubscribe-button {
+      background: #dc3545;
+    }
+
+    :host-context(html[data-theme='dark']) .unsubscribe-button:hover {
+      background: #bb2d3b;
+    }
+
+    :host-context(html[data-theme='dark']) .error-message {
+      background: #2c0b0e;
+      border-color: #842029;
+      color: #ea868f;
+    }
+
+    :host-context(html[data-theme='dark']) .success-message {
+      background: #051b11;
+      border-color: #0f5132;
+      color: #75b798;
+    }
+
+    :host-context(html[data-theme='dark']) .loading,
+    :host-context(html[data-theme='dark']) .empty-state {
+      color: rgba(222, 226, 230, 0.75);
+    }
+
+    :host-context(html[data-theme='dark']) .subscribe-button {
+      padding: 6px 12px;
+      background: rgb(11, 94, 215);
+      color: #e6e1e3;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      white-space: nowrap;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .subscribe-button:hover:not(:disabled) {
+      background: #003366;
+    }
+
+    :host-context(html[data-theme='dark']) .subscribe-button:disabled {
+      background: #55515a;
+      color: #a1a1aa;
+      cursor: not-allowed;
+    }
+
+    :host-context(html[data-theme='dark']) .subscribed-badge {
+      padding: 6px 12px;
+      background: #4ade80; /* success green */
+      color: #052e16;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    :host-context(html[data-theme='dark']) .subscriptions-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    :host-context(html[data-theme='dark']) .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #e6e1e3;
+      margin: 0;
+    }
+
+    :host-context(html[data-theme='dark']) .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    /* Container */
+    :host-context(html[data-theme='dark']) .subscriptions-section {
+      gap: 12px;
+    }
+
+    /* Card */
+    :host-context(html[data-theme='dark']) .subscription-item {
+      background: rgb(52, 58, 64); /* #343a40 */
+      color: #e6e1e3;
+      border: 1px solid #495057;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    }
+
+    :host-context(html[data-theme='dark']) .subscription-item:hover {
+      background: #2b3035;
+      border-color: #5a5f66;
+    }
+
+    /* Channel icon */
+    :host-context(html[data-theme='dark']) .channel-icon {
+      background: #2b3035;
+      color: #adb5bd;
+      border: 1px solid #495057;
+      border-radius: 8px;
+    }
+
+    /* Text hierarchy */
+    :host-context(html[data-theme='dark']) .channel-info h1,
+    :host-context(html[data-theme='dark']) .channel-info h2,
+    :host-context(html[data-theme='dark']) .channel-info h3,
+    :host-context(html[data-theme='dark']) .channel-info h4,
+    :host-context(html[data-theme='dark']) .channel-info .channel-name,
+    :host-context(html[data-theme='dark']) .channel-info .title {
+      color: #e6e1e3;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-info .channel-description,
+    :host-context(html[data-theme='dark']) .channel-info .desc {
+      color: #adb5bd;
+    }
+
+    /* Handle pill (e.g., @jessetautulli) */
+    :host-context(html[data-theme='dark']) .channel-handle,
+    :host-context(html[data-theme='dark']) .handle {
+      display: inline-block;
+      background: #1f2326;
+      color: #e6e1e3;
+      border: 1px solid #495057;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 12px;
+    }
+
+    /* Unsubscribe button */
+    :host-context(html[data-theme='dark']) .unsubscribe-button {
+      background: #dc3545;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition:
+        background-color 0.15s ease,
+        box-shadow 0.15s ease;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .unsubscribe-button:hover:not(:disabled) {
+      background: #bb2d3b;
+    }
+
+    :host-context(html[data-theme='dark']) .unsubscribe-button:focus-visible {
+      outline: 0;
+      box-shadow: 0 0 0 3px rgba(159, 134, 255, 0.35);
+    }
+
+    :host-context(html[data-theme='dark']) .unsubscribe-button:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+    }
+
+    /* Refresh button in header (from your screenshot) */
+    :host-context(html[data-theme='dark']) .refresh-button {
+      background: #2b3035;
+      color: #e6e1e3;
+      border: 1px solid #495057;
+      border-radius: 8px;
+      padding: 6px 10px;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .refresh-button:hover:not(:disabled) {
+      background: #343a40;
+    }
+
+    /* Optional: layout helpers inside the card */
+    :host-context(html[data-theme='dark']) .subscription-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-info {
+      flex: 1;
+      min-width: 0;
+    }
+  `;w([S({type:Array})],x.prototype,"subscriptions",2);w([d()],x.prototype,"searchQuery",2);w([d()],x.prototype,"searchResults",2);w([d()],x.prototype,"isLoading",2);w([d()],x.prototype,"isSearching",2);w([d()],x.prototype,"errorMessage",2);w([d()],x.prototype,"successMessage",2);w([d()],x.prototype,"activeSubtab",2);w([d()],x.prototype,"subscriptionPosts",2);w([d()],x.prototype,"isLoadingPosts",2);x=w([A("pb-channels")],x);console.log("Pushbridge popup loaded");Re();document.addEventListener("DOMContentLoaded",async()=>{console.log("🪟 [Popup] Popup opened, sending POPUP_OPEN message");try{await chrome.runtime.sendMessage({cmd:"POPUP_OPEN"}),console.log("🪟 [Popup] POPUP_OPEN message sent successfully")}catch(e){console.error("🪟 [Popup] Failed to send POPUP_OPEN message:",e)}await Ee()});async function Ee(){const e=document.querySelector(".container");if(!e){console.error("Container element not found");return}try{if(await Se("pb_token")){const o=await Fe(),s=o?await _e():null;e.innerHTML=`
         <div class="popup-container">
           <div class="popup-header">
             <h2 class="popup-title">Pushbridge</h2>
@@ -3340,9 +4281,8 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
               <button class="tab-button active" data-tab="composer">Send</button>
               <button class="tab-button" data-tab="pushes">Messages</button>
               <button class="tab-button" data-tab="notifications">Notifications Mirroring</button>
-
               <button class="tab-button" data-tab="channels">Subscriptions</button>
-              ${s?'<button class="tab-button" data-tab="messages">SMS/MMS</button>':""}
+              ${o?'<button class="tab-button" data-tab="messages">SMS/MMS</button>':""}
             </div>
           </div>
           <div class="tab-content">
@@ -3359,7 +4299,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
               <div class="tab-pane" data-tab="channels">
                 <pb-channels></pb-channels>
               </div>
-              ${s?`<div class="tab-pane" data-tab="messages">
+              ${o?`<div class="tab-pane" data-tab="messages">
                 <div class="sms-interface">
                   <div class="sms-view conversation-list-view active">
                     <pb-conversation-list id="conversation-list"></pb-conversation-list>
@@ -3369,7 +4309,7 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                       <button class="back-button" id="sms-back-button">← Back</button>
                       <span class="conversation-title" id="conversation-title">Conversation</span>
                     </div>
-                    <pb-sms-thread id="sms-thread" device-iden="${i?.iden||""}"></pb-sms-thread>
+                    <pb-sms-thread id="sms-thread" device-iden="${s?.iden||""}"></pb-sms-thread>
                   </div>
                 </div>
               </div>`:""}
@@ -3379,20 +4319,23 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
                 <span class="copyright">© 2025 Pushbridge</span>
                 <span class="disclaimer">· Unofficial</span>
                 <button class="about-button" id="about-button">About</button>
+                <button id="open-window-btn" class="about-button">
+                  Open in Window
+                </button>
               </div>
             </div>
         </div>
-      `,ft(),s&&mt(),bt()}else{e.innerHTML="<pb-token-setup></pb-token-setup>";const s=document.querySelector("pb-token-setup");s&&s.addEventListener("token-verified",async()=>{console.log("🪟 [Popup] Token verified, refreshing popup..."),await ke()})}}catch(t){console.error("Failed to initialize popup:",t),e.innerHTML=`
+      `,$t(),o&&St(),_t(),Ct()}else{e.innerHTML="<pb-token-setup></pb-token-setup>";const o=document.querySelector("pb-token-setup");o&&o.addEventListener("token-verified",async()=>{console.log("🪟 [Popup] Token verified, refreshing popup..."),await Ee()})}}catch(t){console.error("Failed to initialize popup:",t),e.innerHTML=`
       <div style="padding: 20px; text-align: center; color: #666;">
         <div>Failed to load popup</div>
         <div style="font-size: 12px; margin-top: 8px;">${t instanceof Error?t.message:"Unknown error"}</div>
       </div>
-    `}}function ft(){const e=document.querySelectorAll(".tab-button"),t=document.querySelectorAll(".tab-pane");e.forEach(s=>{s.addEventListener("click",()=>{const i=s.getAttribute("data-tab");e.forEach(o=>o.classList.remove("active")),s.classList.add("active"),t.forEach(o=>{o.classList.remove("active"),o.getAttribute("data-tab")===i&&o.classList.add("active")})})})}async function mt(){try{const e=await ve();if(e){const c=e.nickname||e.model||`Device ${e.iden.slice(0,8)}`,d=document.querySelector('[data-tab="messages"]');d&&(d.innerHTML=`
+    `}}function $t(){const e=document.querySelectorAll(".tab-button"),t=document.querySelectorAll(".tab-pane");e.forEach(o=>{o.addEventListener("click",()=>{const s=o.getAttribute("data-tab");e.forEach(i=>i.classList.remove("active")),o.classList.add("active"),t.forEach(i=>{i.classList.remove("active"),i.getAttribute("data-tab")===s&&i.classList.add("active")})})})}async function St(){try{const e=await _e();if(e){const c=e.nickname||e.model||`Device ${e.iden.slice(0,8)}`,l=document.querySelector('[data-tab="messages"]');l&&(l.innerHTML=`
           <div class="sms-header">
             <span class="sms-title">SMS/MMS</span>
             <span class="device-info">from ${c}</span>
           </div>
-        `)}const t=document.getElementById("conversation-list"),s=document.getElementById("sms-thread"),i=document.getElementById("sms-back-button"),o=document.getElementById("conversation-title"),r=document.querySelector(".conversation-list-view"),n=document.querySelector(".sms-thread-view");t&&s&&i&&o&&r&&n&&(t.addEventListener("conversation-selected",c=>{const{conversationId:d,conversationName:h}=c.detail;s.conversationId=d,o.textContent=h||"Conversation",r.classList.remove("active"),n.classList.add("active"),setTimeout(()=>{s.scrollToBottom&&s.scrollToBottom()},300)}),i.addEventListener("click",()=>{n.classList.remove("active"),r.classList.add("active"),t.selectedConversationId=""}))}catch(e){console.error("Failed to setup SMS interface:",e)}}function bt(){const e=document.getElementById("about-button");e&&e.addEventListener("click",()=>{xt()})}function xt(){const e=document.createElement("div");e.className="about-overlay",e.innerHTML=`
+        `)}const t=document.getElementById("conversation-list"),o=document.getElementById("sms-thread"),s=document.getElementById("sms-back-button"),i=document.getElementById("conversation-title"),r=document.querySelector(".conversation-list-view"),a=document.querySelector(".sms-thread-view");t&&o&&s&&i&&r&&a&&(t.addEventListener("conversation-selected",c=>{const{conversationId:l,conversationName:p}=c.detail;o.conversationId=l,i.textContent=p||"Conversation",r.classList.remove("active"),a.classList.add("active"),setTimeout(()=>{o.scrollToBottom&&o.scrollToBottom()},300)}),s.addEventListener("click",()=>{a.classList.remove("active"),r.classList.add("active"),t.selectedConversationId=""}))}catch(e){console.error("Failed to setup SMS interface:",e)}}function _t(){const e=document.getElementById("about-button");e&&e.addEventListener("click",()=>{Mt()})}function Mt(){const e=document.createElement("div");e.className="about-overlay",e.innerHTML=`
     <div class="about-dialog">
       <div class="about-header">
         <h3>About Pushbridge</h3>
@@ -3412,7 +4355,9 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
         </div>
       </div>
     </div>
-  `,document.body.appendChild(e);const t=e.querySelector("#close-about");t&&t.addEventListener("click",()=>{document.body.removeChild(e)}),e.addEventListener("click",s=>{s.target===e&&document.body.removeChild(e)})}const Me=document.createElement("style");Me.textContent=`
+  `,document.body.appendChild(e);const t=e.querySelector("#close-about");t&&t.addEventListener("click",()=>{document.body.removeChild(e)}),e.addEventListener("click",o=>{o.target===e&&document.body.removeChild(e)})}async function Ct(){const e=document.getElementById("open-window-btn");if(!e)return;if(await chrome.tabs.getCurrent()){e.style.display="none";return}e.addEventListener("click",zt)}async function zt(){const e=chrome.runtime.getURL("popup.html?windowMode=1");try{const o=(await chrome.windows.getAll({populate:!0})).find(s=>s.tabs?.some(i=>i.url?.startsWith(e)));o?await chrome.windows.update(o.id,{focused:!0,drawAttention:!0}):await chrome.windows.create({url:e,type:"popup",width:500,height:700})}finally{window.close()}}const Le=document.createElement("style");Le.textContent=`
+  /* === Light mode base === */
+
   /* Scrollbar styling for consistent appearance */
   * {
     scrollbar-width: thin;
@@ -3860,4 +4805,102 @@ import{g as Ce,o as ze,e as ve}from"./notificationBadge.js";/**
       min-width: 0;
     }
   }
-`;document.head.appendChild(Me);
+
+  /* === Dark mode overrides === */
+  :host-context(html[data-theme='dark']) {
+    --scrollbar-track: #1e1e1e;
+    --scrollbar-thumb: #4b5563;
+    --scrollbar-thumb-hover: #6b7280;
+    --surface: #121212;
+    --surface-alt: #1e1e1e;
+    --border-color: #2d2d2d;
+    --text-primary: #e6e1e3;
+    --text-secondary: #a1a1aa;
+    --accent: #8b5cf6;
+    --accent-hover: #7c3aed;
+  }
+
+  :host-context(html[data-theme='dark']) * {
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  :host-context(html[data-theme='dark']) *::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  :host-context(html[data-theme='dark']) *::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+  }
+
+  :host-context(html[data-theme='dark']) *::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  :host-context(html[data-theme='dark']) .popup-header {
+    background: var(--surface-alt);
+    border-bottom-color: var(--border-color);
+  }
+
+  :host-context(html[data-theme='dark']) .popup-title {
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .tab-navigation {
+    background: var(--surface) !important;
+    border-color: var(--border-color) !important;
+  }
+
+  :host-context(html[data-theme='dark']) .tab-button {
+    color: var(--text-secondary);
+  }
+
+  :host-context(html[data-theme='dark']) .tab-button.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  :host-context(html[data-theme='dark']) .tab-button:hover:not(.active) {
+    background: #1f1f1f;
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .sms-thread-header {
+    background: var(--surface-alt);
+    border-bottom-color: var(--border-color);
+  }
+
+  :host-context(html[data-theme='dark']) .conversation-title {
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .popup-footer {
+    background: var(--surface-alt);
+    border-top-color: var(--border-color);
+    color: var(--text-secondary);
+  }
+
+  :host-context(html[data-theme='dark']) .about-dialog {
+    background: var(--surface-alt);
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .about-header h3 {
+    color: var(--text-primary);
+  }
+
+  :host-context(html[data-theme='dark']) .about-content p {
+    color: var(--text-secondary);
+  }
+
+  :host-context(html[data-theme='dark']) .about-links a {
+    color: var(--accent);
+  }
+
+  :host-context(html[data-theme='dark']) .about-links a:hover {
+    color: var(--accent-hover);
+  }
+
+  :host-context(html[data-theme='dark']) .license-info a {
+    color: var(--accent);
+  }
+`;document.head.appendChild(Le);
