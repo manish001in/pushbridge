@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1] - 2025-08-18
+
+### Added
+- Added drag-and-drop/hide navigation customization
+- Match system theme toggle
+- Open in window link
+
+
 ## [1.3.0] - 2025-08-13
 
 ### Changed

@@ -33,6 +33,7 @@ export class PbFileDrop extends LitElement {
   private maxFileSize = 25 * 1024 * 1024; // 25MB
 
   static styles = css`
+    /* === Light mode base === */
     :host {
       display: block;
       font-family:
@@ -196,6 +197,99 @@ export class PbFileDrop extends LitElement {
       gap: 0.5rem;
       justify-content: center;
       margin-top: 0.5rem;
+    }
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone {
+      border-color: #495057;
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone:hover {
+      border-color: #0d6efd;
+      background: #031633;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone.drag-over {
+      border-color: #0d6efd;
+      background: #031633;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone.error {
+      border-color: #ea868f;
+      background: #2c0b0e;
+    }
+
+    :host-context(html[data-theme='dark']) .file-drop-zone.uploading {
+      border-color: #75b798;
+      background: #051b11;
+    }
+
+    :host-context(html[data-theme='dark']) .drop-icon {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .drop-text {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .drop-hint {
+      color: #868e96;
+    }
+
+    :host-context(html[data-theme='dark']) .file-info {
+      background: #343a40;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .file-name {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .file-size {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .progress-bar {
+      background: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .progress-fill {
+      background: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .progress-text {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .error-message {
+      color: #ea868f;
+    }
+
+    :host-context(html[data-theme='dark']) .upload-button {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .upload-button:hover:not(:disabled) {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .upload-button:disabled {
+      background: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .cancel-button {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .cancel-button:hover {
+      background: #5c636a;
     }
   `;
 

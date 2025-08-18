@@ -1,758 +1,896 @@
-// Popup entry point
-console.log('Pushbridge popup loaded');
+// Options page entry point
+console.log('Pushbridge options page loaded');
 
-// Import components
-import './components/pb-token-setup';
-import './components/pb-composer';
-import './components/pb-recent-pushes';
-import './components/pb-mirror-list';
-import './components/pb-file-drop';
+type OptionKey =
+  | 'Send'
+  | 'Messages'
+  | 'Notifications'
+  | 'Subscriptions'
+  | 'SMS/MMS';
 
-import './components/pb-sms-thread';
-import './components/pb-conversation-list';
-import './components/pb-channels';
-import {
-  hasSmsCapableDevices,
-  getDefaultSmsDevice,
-} from '../background/deviceManager';
-import { getLocal } from '../background/storage';
+interface Settings {
+  soundEnabled: boolean;
+  defaultDevice: string;
+  notificationsEnabled: boolean;
+  autoReconnect: boolean;
+  defaultSmsDevice: string;
+  autoOpenPushLinksAsTab: boolean;
+  systemTheme: boolean;
+  optionOrder: OptionKey[];
+  hiddenTabs: OptionKey[];  
+}
 
-// Initialize popup
-document.addEventListener('DOMContentLoaded', async () => {
-  console.log('🪟 [Popup] Popup opened, sending POPUP_OPEN message');
+const DEFAULT_OPTION_ORDER: OptionKey[] = [
+  'Send',
+  'Messages',
+  'Notifications',
+  'Subscriptions',
+  'SMS/MMS',
+];
 
-  // Send POPUP_OPEN message to clear push notifications from badge
-  try {
-    await chrome.runtime.sendMessage({ cmd: 'POPUP_OPEN' });
-    console.log('🪟 [Popup] POPUP_OPEN message sent successfully');
-  } catch (error) {
-    console.error('🪟 [Popup] Failed to send POPUP_OPEN message:', error);
+class OptionsPage {
+  private settings: Settings = {
+    soundEnabled: true,
+    defaultDevice: 'all',
+    notificationsEnabled: true,
+    autoReconnect: true,
+    defaultSmsDevice: '',
+    autoOpenPushLinksAsTab: false,
+    systemTheme: false,
+    optionOrder: DEFAULT_OPTION_ORDER.slice(),
+    hiddenTabs: [],
+  };
+
+  private devices: Array<{ iden: string; nickname: string; type: string }> = [];
+  private smsDevices: Array<{
+    iden: string;
+    nickname: string;
+    type: string;
+    manufacturer?: string;
+    model?: string;
+  }> = [];
+  private pendingSmsDeviceChange: string | null = null;
+  private themeMql?: MediaQueryList;
+
+  private ensureThemeListener() {
+    if (!this.settings.systemTheme) {
+      // remove if present
+      if (this.themeMql) {
+        this.themeMql.removeEventListener
+          ? this.themeMql.removeEventListener('change', this.onSchemeChange)
+          : this.themeMql.removeListener(this.onSchemeChange as any);
+        this.themeMql = undefined;
+      }
+      return;
+    }
+
+    if (!this.themeMql) {
+      this.themeMql = window.matchMedia('(prefers-color-scheme: dark)');
+      this.themeMql.addEventListener
+        ? this.themeMql.addEventListener('change', this.onSchemeChange)
+        : this.themeMql.addListener(this.onSchemeChange as any); // old API fallback
+    }
   }
 
-  await initializePopup();
-});
+  private onSchemeChange = () => {
+    if (!this.settings.systemTheme) return;
+    const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  };
 
-/**
- * Initialize the popup UI based on token status
- */
-async function initializePopup() {
-  const container = document.querySelector('.container');
-  if (!container) {
-    console.error('Container element not found');
-    return;
+  async init() {
+    await this.loadSettings();
+    await this.loadDevices();
+    await this.loadSmsDevices();
+    this.render();
+    this.setupEventListeners();
+    this.ensureThemeListener();
+    document.documentElement.dataset.theme =
+      this.settings.systemTheme &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
   }
 
-  try {
-    const token = await getLocal<string>('pb_token');
+  private async loadSettings() {
+    try {
+      const stored = await chrome.storage.local.get(['pb_settings']);
+      if (stored.pb_settings) {
+        this.settings = { ...this.settings, ...stored.pb_settings };
+      } else {
+        await chrome.storage.local.set({ pb_settings: this.settings });
+      }
 
-    if (!token) {
-      // Show token setup UI
-      container.innerHTML = '<pb-token-setup></pb-token-setup>';
-      
-      // Add event listener for token verification
-      const tokenSetup = document.querySelector('pb-token-setup');
-      if (tokenSetup) {
-        tokenSetup.addEventListener('token-verified', async () => {
-          console.log('🪟 [Popup] Token verified, refreshing popup...');
-          // Re-initialize popup to show main UI
-          await initializePopup();
+      // Load auto open push links setting from separate storage
+      if (stored.pb_settings?.autoOpenPushLinksAsTab !== undefined) {
+        this.settings.autoOpenPushLinksAsTab =
+          stored.pb_settings.autoOpenPushLinksAsTab;
+      } else {
+        await chrome.storage.local.set({
+          pb_settings: {
+            ...this.settings,
+            autoOpenPushLinksAsTab: this.settings.autoOpenPushLinksAsTab,
+          },
         });
       }
-    } else {
-      // Check if user has SMS-capable devices
-      const hasSms = await hasSmsCapableDevices();
-      const defaultSmsDevice = hasSms ? await getDefaultSmsDevice() : null;
 
-      // Show main UI with tabs
-      container.innerHTML = `
-        <div class="popup-container">
-          <div class="popup-header">
-            <h2 class="popup-title">Pushbridge</h2>
-            <div class="tab-navigation">
-              <button class="tab-button active" data-tab="composer">Send</button>
-              <button class="tab-button" data-tab="pushes">Messages</button>
-              <button class="tab-button" data-tab="notifications">Notifications Mirroring</button>
-
-              <button class="tab-button" data-tab="channels">Subscriptions</button>
-              ${hasSms ? '<button class="tab-button" data-tab="messages">SMS/MMS</button>' : ''}
-            </div>
-          </div>
-          <div class="tab-content">
-              <div class="tab-pane active" data-tab="composer">
-                <pb-composer></pb-composer>
-              </div>
-              <div class="tab-pane" data-tab="pushes">
-                <pb-recent-pushes></pb-recent-pushes>
-              </div>
-              <div class="tab-pane" data-tab="notifications">
-                <pb-mirror-list></pb-mirror-list>
-              </div>
-
-              <div class="tab-pane" data-tab="channels">
-                <pb-channels></pb-channels>
-              </div>
-              ${
-                hasSms
-                  ? `<div class="tab-pane" data-tab="messages">
-                <div class="sms-interface">
-                  <div class="sms-view conversation-list-view active">
-                    <pb-conversation-list id="conversation-list"></pb-conversation-list>
-                  </div>
-                  <div class="sms-view sms-thread-view">
-                    <div class="sms-thread-header">
-                      <button class="back-button" id="sms-back-button">← Back</button>
-                      <span class="conversation-title" id="conversation-title">Conversation</span>
-                    </div>
-                    <pb-sms-thread id="sms-thread" device-iden="${defaultSmsDevice?.iden || ''}"></pb-sms-thread>
-                  </div>
-                </div>
-              </div>`
-                  : ''
-              }
-            </div>
-            <div class="popup-footer">
-              <div class="footer-content">
-                <span class="copyright">© 2025 Pushbridge</span>
-                <span class="disclaimer">· Unofficial</span>
-                <button class="about-button" id="about-button">About</button>
-              </div>
-            </div>
-        </div>
-      `;
-
-      // Initialize tab switching
-      setupTabNavigation();
-
-      // Setup SMS interface if available
-      if (hasSms) {
-        setupSmsInterface();
+      // Load default SMS device from separate storage
+      const defaultSmsDevice =
+        await chrome.storage.local.get('defaultSmsDevice');
+      if (defaultSmsDevice.defaultSmsDevice) {
+        this.settings.defaultSmsDevice = defaultSmsDevice.defaultSmsDevice;
       }
 
-      // Setup About dialog
-      setupAboutDialog();
+      const allowedKeys = new Set<OptionKey>(DEFAULT_OPTION_ORDER);
+
+      const normalizeOptionOrder = (order: unknown): OptionKey[] => {
+        const seen = new Set<OptionKey>();
+        const out: OptionKey[] = [];
+        if (Array.isArray(order)) {
+          for (const v of order) {
+            if (
+              typeof v === 'string' &&
+              allowedKeys.has(v as OptionKey) &&
+              !seen.has(v as OptionKey)
+            ) {
+              const k = v as OptionKey;
+              seen.add(k);
+              out.push(k);
+            }
+          }
+        }
+        for (const k of DEFAULT_OPTION_ORDER) if (!seen.has(k)) out.push(k);
+        return out;
+      };
+
+      const normalizeHiddenTabs = (list: unknown): OptionKey[] => {
+        if (!Array.isArray(list)) return [];
+        const seen = new Set<OptionKey>();
+        for (const v of list) {
+          if (typeof v === 'string' && allowedKeys.has(v as OptionKey)) {
+            seen.add(v as OptionKey);
+          }
+        }
+        return Array.from(seen);
+      };
+
+      const storedOrder =
+        stored.pb_settings?.optionOrder ?? this.settings.optionOrder;
+      const storedHidden =
+        stored.pb_settings?.hiddenTabs ?? this.settings.hiddenTabs ?? [];
+
+      const normalizedOrder = normalizeOptionOrder(storedOrder);
+      const normalizedHidden = normalizeHiddenTabs(storedHidden);
+
+      const orderChanged =
+        JSON.stringify(storedOrder) !== JSON.stringify(normalizedOrder);
+      const hiddenChanged =
+        JSON.stringify(storedHidden) !== JSON.stringify(normalizedHidden);
+
+      this.settings.optionOrder = normalizedOrder;
+      this.settings.hiddenTabs = normalizedHidden;
+
+      if (orderChanged || hiddenChanged) {
+        await this.saveSettings();
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error);
     }
-  } catch (error) {
-    console.error('Failed to initialize popup:', error);
+  }
+
+  private async setOptionOrder(newOrder: OptionKey[]) {
+    const allowed = new Set<OptionKey>(DEFAULT_OPTION_ORDER);
+    const clean = newOrder.filter(
+      (k, i, a): k is OptionKey =>
+        typeof k === 'string' &&
+        allowed.has(k as OptionKey) &&
+        a.indexOf(k) === i
+    ) as OptionKey[];
+    for (const k of DEFAULT_OPTION_ORDER) if (!clean.includes(k)) clean.push(k);
+    this.settings.optionOrder = clean;
+    await this.saveSettings();
+  }
+
+  private async loadDevices() {
+    try {
+      const response = await chrome.runtime.sendMessage({ cmd: 'getDevices' });
+      if (response.ok) {
+        this.devices = response.devices || [];
+      }
+    } catch (error) {
+      console.error('Failed to load devices:', error);
+    }
+  }
+
+  private async loadSmsDevices() {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        cmd: 'GET_SMS_CAPABLE_DEVICES',
+      });
+      if (response.success) {
+        this.smsDevices = response.devices || [];
+      }
+    } catch (error) {
+      console.error('Failed to load SMS devices:', error);
+    }
+  }
+
+  private getDeviceDisplayName(device: {
+    nickname: string;
+    manufacturer?: string;
+    model?: string;
+  }): string {
+    if (device.nickname) {
+      return device.nickname;
+    }
+
+    if (device.manufacturer && device.model) {
+      return `${device.manufacturer} ${device.model}`;
+    }
+
+    if (device.model) {
+      return device.model;
+    }
+
+    return 'Unknown Device';
+  }
+
+  private async saveSettings() {
+    try {
+      await chrome.storage.local.set({
+        pb_settings: this.settings,
+      });
+      if (this.settings.systemTheme) {
+        if (!this.themeMql) {
+          this.themeMql = window.matchMedia('(prefers-color-scheme: dark)');
+          this.themeMql.addEventListener
+            ? this.themeMql.addEventListener('change', this.onSchemeChange)
+            : this.themeMql.addListener(this.onSchemeChange);
+        }
+      } else if (this.themeMql) {
+        this.themeMql.removeEventListener
+          ? this.themeMql.removeEventListener('change', this.onSchemeChange)
+          : this.themeMql.removeListener(this.onSchemeChange);
+        this.themeMql = undefined;
+      }
+      this.ensureThemeListener();
+      const dark = this.settings.systemTheme
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : false;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      this.showMessage('Settings saved successfully!', 'success');
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      this.showMessage('Failed to save settings', 'error');
+    }
+  }
+
+  private async updateSmsDevice() {
+    if (!this.pendingSmsDeviceChange) {
+      return;
+    }
+
+    try {
+      // Show loading state
+      const updateBtn = document.getElementById(
+        'update-sms-device'
+      ) as HTMLButtonElement;
+      if (updateBtn) {
+        updateBtn.disabled = true;
+        updateBtn.textContent = 'Updating...';
+      }
+
+      // Call the background handler to update SMS device
+      const response = await chrome.runtime.sendMessage({
+        cmd: 'SET_DEFAULT_SMS_DEVICE',
+        deviceIden: this.pendingSmsDeviceChange,
+      });
+
+      if (response.success) {
+        // Update the settings
+        this.settings.defaultSmsDevice = this.pendingSmsDeviceChange;
+        this.pendingSmsDeviceChange = null;
+
+        // Save the setting
+        await chrome.storage.local.set({
+          defaultSmsDevice: this.settings.defaultSmsDevice,
+        });
+
+        this.showMessage('SMS device updated successfully!', 'success');
+
+        // Re-render to update UI state
+        this.render();
+        this.setupEventListeners();
+      } else {
+        this.showMessage(
+          `Failed to update SMS device: ${response.error}`,
+          'error'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to update SMS device:', error);
+      this.showMessage('Failed to update SMS device', 'error');
+    } finally {
+      // Reset button state
+      const updateBtn = document.getElementById(
+        'update-sms-device'
+      ) as HTMLButtonElement;
+      if (updateBtn) {
+        updateBtn.disabled = false;
+        updateBtn.textContent = 'Update';
+      }
+    }
+  }
+
+  private async testWebSocket() {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        cmd: 'testWebSocket',
+      });
+      if (response.ok) {
+        this.showMessage(
+          `WebSocket test successful! Last heartbeat: ${response.lastHeartbeat}`,
+          'success'
+        );
+      } else {
+        this.showMessage(`WebSocket test failed: ${response.error}`, 'error');
+      }
+    } catch {
+      this.showMessage('WebSocket test failed', 'error');
+    }
+  }
+
+  private async exportDebugLog() {
+    try {
+      const response = await chrome.runtime.sendMessage({ cmd: 'getDebugLog' });
+      if (response.ok) {
+        const blob = new Blob([response.log], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pushbridge-debug-${new Date().toISOString().split('T')[0]}.log`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.showMessage('Debug log exported successfully!', 'success');
+      } else {
+        this.showMessage('Failed to export debug log', 'error');
+      }
+    } catch {
+      this.showMessage('Failed to export debug log', 'error');
+    }
+  }
+
+  private showMessage(message: string, type: 'success' | 'error' | 'info') {
+    const messageEl = document.getElementById('message');
+    if (messageEl) {
+      messageEl.textContent = message;
+      messageEl.className = `message ${type}`;
+      messageEl.style.display = 'block';
+      setTimeout(() => {
+        messageEl.style.display = 'none';
+      }, 3000);
+    }
+  }
+
+  private setupEventListeners() {
+    // Sound toggle
+    const soundToggle = document.getElementById(
+      'sound-toggle'
+    ) as HTMLInputElement;
+    if (soundToggle) {
+      soundToggle.checked = this.settings.soundEnabled;
+      soundToggle.addEventListener('change', e => {
+        this.settings.soundEnabled = (e.target as HTMLInputElement).checked;
+        this.saveSettings();
+      });
+    }
+
+    // Notifications toggle
+    const notificationsToggle = document.getElementById(
+      'notifications-toggle'
+    ) as HTMLInputElement;
+    if (notificationsToggle) {
+      notificationsToggle.checked = this.settings.notificationsEnabled;
+      notificationsToggle.addEventListener('change', e => {
+        this.settings.notificationsEnabled = (
+          e.target as HTMLInputElement
+        ).checked;
+        this.saveSettings();
+      });
+    }
+
+  // System theme (auto) toggle
+    const systemThemeToggle = document.getElementById(
+      'system-theme-toggle'
+    ) as HTMLInputElement;
+    if (systemThemeToggle) {
+      systemThemeToggle.checked = !!this.settings.systemTheme;
+      systemThemeToggle.addEventListener('change', e => {
+        this.settings.systemTheme = (e.target as HTMLInputElement).checked;
+        this.saveSettings();
+      });
+    }
+
+    // Navigation order
+    const ul = document.getElementById(
+      'option-order'
+    ) as HTMLUListElement | null;
+    if (ul) {
+      const renderOrder = () => {
+        // Only include SMS/MMS if we have devices
+        const eligible = this.settings.optionOrder.filter(
+          k => k !== 'SMS/MMS' || this.smsDevices.length > 0
+        );
+        ul.innerHTML = eligible
+          .map(k => {
+            const isHidden = this.settings.hiddenTabs?.includes(k);
+
+            return `
+              <li draggable="true" data-key="${k}" class="dnd-item">
+                <span class="handle" aria-hidden="true">⋮⋮</span>
+                <span class="label">${k}</span>
+                <button type="button"
+                        class="toggle-visibility"
+                        data-key="${k}"
+                        data-state="${isHidden ? 'show' : 'hide'}">
+                  ${isHidden ? '<span class="material-symbols-outlined" style="font-size: 14px;">visibility</span>' : '<span class="material-symbols-outlined" style="font-size: 14px;">visibility_off</span>'}
+                </button>
+              </li>
+            `;
+          })
+          .join('');
+      };
+      renderOrder();
+
+      ul.addEventListener('click', async e => {
+        const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(
+          '.toggle-visibility'
+        );
+        if (!btn) return;
+        e.preventDefault();
+
+        const key = btn.dataset.key as OptionKey | undefined;
+        if (!key) return;
+
+        // ensure array exists
+        this.settings.hiddenTabs = Array.isArray(this.settings.hiddenTabs)
+          ? this.settings.hiddenTabs
+          : [];
+
+        const hidden = new Set<OptionKey>(this.settings.hiddenTabs);
+        const isCurrentlyHidden = hidden.has(key);
+
+        // Build the "effective" option order — skip SMS/MMS if no devices
+        const effectiveOrder = DEFAULT_OPTION_ORDER.filter(k =>
+          k === 'SMS/MMS' ? this.smsDevices.length > 0 : true
+        );
+
+        // If user is trying to hide this key, ensure at least one remains visible
+        if (!isCurrentlyHidden) {
+          const visibleCount = effectiveOrder.filter(
+            k => !hidden.has(k)
+          ).length;
+          if (visibleCount <= 1) {
+            this.showMessage('At least one tab must remain visible.', 'error');
+            return;
+          }
+          hidden.add(key); // hide it
+        } else {
+          hidden.delete(key); // show it
+        }
+
+        // persist
+        this.settings.hiddenTabs = Array.from(hidden);
+        await this.saveSettings();
+
+        // re-render list (updates button label/color via your renderOrder)
+        renderOrder();
+      });
+
+      let draggingEl: HTMLElement | null = null;
+
+      ul.addEventListener('dragstart', e => {
+        if ((e.target as HTMLElement).closest('.toggle-visibility')) {
+          e.preventDefault(); // don't drag when clicking the button
+          return;
+        }
+        const li = (e.target as HTMLElement)?.closest(
+          'li'
+        ) as HTMLElement | null;
+        if (!li) return;
+        draggingEl = li;
+        li.classList.add('dragging');
+        e.dataTransfer?.setData('text/plain', li.dataset.key || '');
+        e.dataTransfer?.setDragImage(li, 10, 10);
+      });
+
+      ul.addEventListener('dragover', e => {
+        e.preventDefault();
+        const after = getAfterElement(ul, e.clientY);
+        if (!draggingEl) return;
+        if (!after) ul.appendChild(draggingEl);
+        else ul.insertBefore(draggingEl, after);
+      });
+
+      ul.addEventListener('dragend', async () => {
+        if (draggingEl) draggingEl.classList.remove('dragging');
+        draggingEl = null;
+        const order = Array.from(ul.querySelectorAll('li')).map(
+          li => li.getAttribute('data-key') as OptionKey
+        );
+        await this.setOptionOrder(order);
+        renderOrder(); // rehydrate DOM to avoid any ghost states
+      });
+
+      // Option order
+      function getAfterElement(
+        container: HTMLElement,
+        y: number
+      ): HTMLElement | null {
+        const els = Array.from(
+          container.querySelectorAll<HTMLElement>('li:not(.dragging)')
+        );
+
+        let closestOffset = Number.NEGATIVE_INFINITY;
+        let closestEl: HTMLElement | null = null;
+
+        for (const el of els) {
+          const box = el.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closestOffset) {
+            closestOffset = offset;
+            closestEl = el;
+          }
+        }
+        return closestEl;
+      }
+    }
+
+    // Auto reconnect toggle
+    const autoReconnectToggle = document.getElementById(
+      'auto-reconnect-toggle'
+    ) as HTMLInputElement;
+    if (autoReconnectToggle) {
+      autoReconnectToggle.checked = this.settings.autoReconnect;
+      autoReconnectToggle.addEventListener('change', e => {
+        this.settings.autoReconnect = (e.target as HTMLInputElement).checked;
+        this.saveSettings();
+      });
+    }
+
+    // Auto open links toggle
+    const autoOpenLinksToggle = document.getElementById(
+      'auto-open-links-toggle'
+    ) as HTMLInputElement;
+    if (autoOpenLinksToggle) {
+      autoOpenLinksToggle.checked = this.settings.autoOpenPushLinksAsTab;
+      autoOpenLinksToggle.addEventListener('change', e => {
+        this.settings.autoOpenPushLinksAsTab = (
+          e.target as HTMLInputElement
+        ).checked;
+        this.saveSettings();
+      });
+    }
+
+    // Default device selection
+    const defaultDeviceSelect = document.getElementById(
+      'default-device'
+    ) as HTMLSelectElement;
+    if (defaultDeviceSelect) {
+      defaultDeviceSelect.value = this.settings.defaultDevice;
+      defaultDeviceSelect.addEventListener('change', e => {
+        this.settings.defaultDevice = (e.target as HTMLSelectElement).value;
+        this.saveSettings();
+      });
+    }
+
+    // SMS device selection
+    const smsDeviceSelect = document.getElementById(
+      'default-sms-device'
+    ) as HTMLSelectElement;
+    if (smsDeviceSelect) {
+      smsDeviceSelect.value = this.settings.defaultSmsDevice;
+      smsDeviceSelect.addEventListener('change', e => {
+        const newValue = (e.target as HTMLSelectElement).value;
+        this.pendingSmsDeviceChange =
+          newValue !== this.settings.defaultSmsDevice ? newValue : null;
+        this.updateSmsDeviceButtonState();
+      });
+    }
+
+    // Test WebSocket button
+    const testWebSocketBtn = document.getElementById('test-websocket');
+    if (testWebSocketBtn) {
+      testWebSocketBtn.addEventListener('click', () => this.testWebSocket());
+    }
+
+    // Export debug log button
+    const exportLogBtn = document.getElementById('export-log');
+    if (exportLogBtn) {
+      exportLogBtn.addEventListener('click', () => this.exportDebugLog());
+    }
+
+    // Reset settings button
+    const resetBtn = document.getElementById('reset-settings');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => this.resetSettings());
+    }
+
+    // Reset all data button
+    const resetAllBtn = document.getElementById('reset-all-data');
+    if (resetAllBtn) {
+      resetAllBtn.addEventListener('click', () => this.resetAllData());
+    }
+
+    // SMS device update button
+    const updateSmsDeviceBtn = document.getElementById('update-sms-device');
+    if (updateSmsDeviceBtn) {
+      updateSmsDeviceBtn.addEventListener('click', () =>
+        this.updateSmsDevice()
+      );
+    }
+  }
+
+  private updateSmsDeviceButtonState() {
+    const updateBtn = document.getElementById(
+      'update-sms-device'
+    ) as HTMLButtonElement;
+    if (updateBtn) {
+      updateBtn.disabled = !this.pendingSmsDeviceChange;
+      updateBtn.textContent = this.pendingSmsDeviceChange
+        ? 'Update SMS Device'
+        : 'Update SMS Device';
+    }
+  }
+
+  private async resetSettings() {
+    if (confirm('Are you sure you want to reset all settings to defaults?')) {
+      this.settings = {
+        soundEnabled: true,
+        defaultDevice: 'all',
+        notificationsEnabled: true,
+        autoReconnect: true,
+        defaultSmsDevice: '',
+        autoOpenPushLinksAsTab: false,
+        systemTheme: false,
+        optionOrder: DEFAULT_OPTION_ORDER.slice(),
+        hiddenTabs: [],
+      };
+      this.pendingSmsDeviceChange = null;
+      await this.saveSettings();
+      await chrome.storage.local.set({ defaultSmsDevice: '' });
+      this.render();
+      this.setupEventListeners();
+    }
+  }
+
+  private async resetAllData() {
+    if (
+      confirm(
+        'Are you sure you want to reset ALL data? This will clear all cached data, cursors, and settings. You will need to re-authenticate.'
+      )
+    ) {
+      try {
+        // Clear all data including cursors
+        await chrome.runtime.sendMessage({ cmd: 'clearAllData' });
+        this.showMessage(
+          'All data cleared successfully. Please refresh the page.',
+          'success'
+        );
+
+        // Reset settings to defaults
+        this.settings = {
+          soundEnabled: true,
+          defaultDevice: 'all',
+          notificationsEnabled: true,
+          autoReconnect: true,
+          defaultSmsDevice: '',
+          autoOpenPushLinksAsTab: false,
+          systemTheme: false,
+          optionOrder: DEFAULT_OPTION_ORDER.slice(),
+          hiddenTabs: [],
+        };
+        this.pendingSmsDeviceChange = null;
+        await this.saveSettings();
+        await chrome.storage.local.set({ defaultSmsDevice: '' });
+        this.render();
+        this.setupEventListeners();
+      } catch (error) {
+        console.error('Failed to reset all data:', error);
+        this.showMessage(
+          'Failed to reset all data. Please try again.',
+          'error'
+        );
+      }
+    }
+  }
+
+  private render() {
+    const container = document.querySelector('.container');
+    if (!container) return;
+
     container.innerHTML = `
-      <div style="padding: 20px; text-align: center; color: #666;">
-        <div>Failed to load popup</div>
-        <div style="font-size: 12px; margin-top: 8px;">${error instanceof Error ? error.message : 'Unknown error'}</div>
+      <div class="options-header">
+        <h1>Pushbridge Settings</h1>
+        <p class="subtitle">Configure your Pushbridge extension preferences</p>
+      </div>
+
+      <div id="message" class="message" style="display: none;"></div>
+
+      <div class="settings-section">
+        <h2>Notifications</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="notifications-toggle">Enable notifications</label>
+            <p>Show Chrome notifications for incoming pushes and mirrored notifications</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="notifications-toggle" class="toggle">
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="sound-toggle">Play notification sound</label>
+            <p>Play a sound when receiving notifications</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="sound-toggle" class="toggle">
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Customization</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Navigation order</label>
+            <p>Drag to rearrange and click the eye icon to toggle visibility</p>
+          </div>
+          <div class="setting-control">
+            <ul id="option-order" class="dnd-list"></ul>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="system-theme-toggle">Match system theme</label>
+            <p>Automatically switch between light and dark mode based on your system settings</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="system-theme-toggle" class="toggle" checked="${this.settings.systemTheme}">
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Default Settings</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="default-device">Default target device</label>
+            <p>Choose which device receives pushes by default</p>
+          </div>
+          <div class="setting-control">
+            <select id="default-device" class="select">
+              <option value="all">All devices</option>
+              ${this.devices
+                .map(
+                  device =>
+                    `<option value="${device.iden}">${this.getDeviceDisplayName(device)} (${device.type})</option>`
+                )
+                .join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="default-sms-device">Default SMS device</label>
+            <p>Choose which device to use for SMS functionality</p>
+          </div>
+          <div class="setting-control sms-device-control">
+            <select id="default-sms-device" class="select">
+              <option value="">No SMS device selected</option>
+              ${this.smsDevices
+                .map(
+                  device =>
+                    `<option value="${device.iden}">${this.getDeviceDisplayName(device)} (${device.type})</option>`
+                )
+                .join('')}
+            </select>
+            <button id="update-sms-device" class="button secondary" disabled>
+              Update SMS Device
+            </button>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="auto-open-links-toggle">Auto Open Push Links as Tabs</label>
+            <p>Automatically open link pushes in new browser tabs when received</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="auto-open-links-toggle" class="toggle">
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Connection</h2>
+        
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="auto-reconnect-toggle">Auto-reconnect</label>
+            <p>Automatically reconnect to Pushbullet when connection is lost</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="auto-reconnect-toggle" class="toggle">
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Diagnostics</h2>
+        
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>WebSocket connection</label>
+            <p>Test the connection to Pushbullet's real-time stream</p>
+          </div>
+          <div class="setting-control">
+            <button id="test-websocket" class="button secondary">Test Connection</button>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Debug log</label>
+            <p>Export debug information for troubleshooting</p>
+          </div>
+          <div class="setting-control">
+            <button id="export-log" class="button secondary">Export Log</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2>Advanced</h2>
+        
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Reset settings</label>
+            <p>Reset all settings to their default values</p>
+          </div>
+          <div class="setting-control">
+            <button id="reset-settings" class="button danger">Reset All Settings</button>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Reset all data</label>
+            <p>Clear all cached data, cursors, and settings. You will need to re-authenticate.</p>
+          </div>
+          <div class="setting-control">
+            <button id="reset-all-data" class="button danger">Reset All Data</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>Pushbridge v1.3.1 · <a href="https://github.com/manish001in/pushbridge" target="_blank">GitHub</a> · <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a></p>
+        <p class="disclaimer">This is an unofficial extension and is not affiliated with Pushbullet Inc.</p>
       </div>
     `;
   }
 }
 
-function setupTabNavigation() {
-  const tabButtons = document.querySelectorAll('.tab-button');
-  const tabPanes = document.querySelectorAll('.tab-pane');
-
-  tabButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      const targetTab = button.getAttribute('data-tab');
-
-      // Update active tab button
-      tabButtons.forEach(btn => btn.classList.remove('active'));
-      button.classList.add('active');
-
-      // Update active tab pane
-      tabPanes.forEach(pane => {
-        pane.classList.remove('active');
-        if (pane.getAttribute('data-tab') === targetTab) {
-          pane.classList.add('active');
-        }
-      });
-    });
-  });
-}
-
-/**
- * Setup SMS interface with device information
- */
-async function setupSmsInterface(): Promise<void> {
-  try {
-    const defaultDevice = await getDefaultSmsDevice();
-    if (defaultDevice) {
-      const deviceName =
-        defaultDevice.nickname ||
-        defaultDevice.model ||
-        `Device ${defaultDevice.iden.slice(0, 8)}`;
-
-      // Update SMS tab header
-      const smsTab = document.querySelector('[data-tab="messages"]');
-      if (smsTab) {
-        smsTab.innerHTML = `
-          <div class="sms-header">
-            <span class="sms-title">SMS/MMS</span>
-            <span class="device-info">from ${deviceName}</span>
-          </div>
-        `;
-      }
-    }
-
-    // Setup conversation list and thread components
-    const conversationList = document.getElementById(
-      'conversation-list'
-    ) as any;
-    const smsThread = document.getElementById('sms-thread') as any;
-    const backButton = document.getElementById(
-      'sms-back-button'
-    ) as HTMLButtonElement;
-    const conversationTitle = document.getElementById(
-      'conversation-title'
-    ) as HTMLSpanElement;
-    const conversationListView = document.querySelector(
-      '.conversation-list-view'
-    ) as HTMLElement;
-    const smsThreadView = document.querySelector(
-      '.sms-thread-view'
-    ) as HTMLElement;
-
-    if (
-      conversationList &&
-      smsThread &&
-      backButton &&
-      conversationTitle &&
-      conversationListView &&
-      smsThreadView
-    ) {
-      // Listen for conversation selection
-      conversationList.addEventListener(
-        'conversation-selected',
-        (e: CustomEvent) => {
-          const { conversationId, conversationName } = e.detail;
-          smsThread.conversationId = conversationId;
-          conversationTitle.textContent = conversationName || 'Conversation';
-
-          // Switch to SMS thread view
-          conversationListView.classList.remove('active');
-          smsThreadView.classList.add('active');
-
-          // Scroll to bottom after view switch
-          setTimeout(() => {
-            if (smsThread.scrollToBottom) {
-              smsThread.scrollToBottom();
-            }
-          }, 300);
-        }
-      );
-
-      // Listen for back button click
-      backButton.addEventListener('click', () => {
-        // Switch back to conversation list view
-        smsThreadView.classList.remove('active');
-        conversationListView.classList.add('active');
-
-        // Clear the conversation selection
-        conversationList.selectedConversationId = '';
-      });
-    }
-  } catch (error) {
-    console.error('Failed to setup SMS interface:', error);
-  }
-}
-
-function setupAboutDialog() {
-  const aboutButton = document.getElementById('about-button');
-  if (aboutButton) {
-    aboutButton.addEventListener('click', () => {
-      showAboutDialog();
-    });
-  }
-}
-
-function showAboutDialog() {
-  // Create modal overlay
-  const overlay = document.createElement('div');
-  overlay.className = 'about-overlay';
-  overlay.innerHTML = `
-    <div class="about-dialog">
-      <div class="about-header">
-        <h3>About Pushbridge</h3>
-        <button class="close-button" id="close-about">&times;</button>
-      </div>
-      <div class="about-content">
-        <p><strong>Pushbridge</strong> is an unofficial Chrome extension that replicates core Pushbullet functionality via the official Pushbullet REST & WebSocket APIs.</p>
-        <p>This extension is not affiliated with or endorsed by Pushbullet.</p>
-        <div class="about-links">
-          <a href="https://github.com/manish001in/pushbridge" target="_blank" rel="noopener">GitHub Repository</a>
-          <a href="https://docs.pushbullet.com/" target="_blank" rel="noopener">Pushbullet API Docs</a>
-        </div>
-        <div class="license-info">
-          <p><strong>License:</strong> MIT License</p>
-          <p>Copyright (c) 2024 Pushbridge Contributors</p>
-          <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">View MIT License</a>
-        </div>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-
-  // Handle close button
-  const closeButton = overlay.querySelector('#close-about');
-  if (closeButton) {
-    closeButton.addEventListener('click', () => {
-      document.body.removeChild(overlay);
-    });
-  }
-
-  // Handle overlay click to close
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) {
-      document.body.removeChild(overlay);
-    }
-  });
-}
-
-// Add styles for the popup
-const style = document.createElement('style');
-style.textContent = `
-  /* Scrollbar styling for consistent appearance */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: #cbd5e0 #f7fafc;
-  }
-
-  *::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  *::-webkit-scrollbar-track {
-    background: #f7fafc;
-    border-radius: 3px;
-  }
-
-  *::-webkit-scrollbar-thumb {
-    background: #cbd5e0;
-    border-radius: 3px;
-    transition: background 0.2s;
-  }
-
-  *::-webkit-scrollbar-thumb:hover {
-    background: #a0aec0;
-  }
-
-  /* Smooth scrolling for all scrollable elements */
-  * {
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .popup-container {
-    width: 100%;
-    min-width: 450px;
-    max-width: 650px;
-    min-height: 500px;
-    max-height: 750px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .popup-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid #eee;
-    background: #f8f9fa;
-    flex-shrink: 0;
-  }
-
-  .popup-title {
-    margin: 0 0 16px 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: #333;
-    text-align: center;
-  }
-
-  .tab-navigation {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    padding: 2px;
-    background: white;
-    border-radius: 8px;
-    border: 1px solid #ddd;
-    width: 100%;
-  }
-
-  .tab-navigation .tab-button:nth-child(4),
-  .tab-navigation .tab-button:nth-child(5) {
-    grid-column: span 1.5;
-  }
-
-  .tab-button {
-    padding: 6px;
-    border: none;
-    background: none;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    color: #666;
-    border-radius: 6px;
-    transition: all 0.2s;
-    white-space: nowrap;
-    text-align: center;
-  }
-
-  .sms-header {
-    white-space: normal;
-    word-break: break-word;
-  }
-
-  .tab-button.active {
-    background: #007bff;
-    color: white;
-    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
-  }
-
-  .tab-button:hover:not(.active) {
-    background: #f8f9fa;
-    color: #333;
-  }
-
-  .tab-content {
-    position: relative;
-    flex: 1;
-    overflow: visible;
-    min-height: 0;
-  }
-
-  .tab-pane {
-    display: none;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .tab-pane.active {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .sms-interface {
-    display: flex;
-    height: 100%;
-    min-height: 400px;
-    overflow: hidden;
-  }
-
-  .sms-view {
-    display: none;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-  }
-
-  .sms-view.active {
-    display: flex;
-  }
-
-  .conversation-list-view.active {
-    display: flex;
-    min-height: 0;
-  }
-
-  .sms-thread-view {
-    display: none;
-  }
-
-  .sms-thread-view.active {
-    display: flex;
-    min-height: 0;
-  }
-
-  .sms-thread-header {
-    display: flex;
-    align-items: center;
-    padding: 12px 16px;
-    background: white;
-    border-bottom: 1px solid #e9ecef;
-    flex-shrink: 0;
-  }
-
-  .back-button {
-    background: none;
-    border: none;
-    color: #007bff;
-    cursor: pointer;
-    font-size: 14px;
-    padding: 8px 12px;
-    border-radius: 6px;
-    margin-right: 12px;
-    transition: background-color 0.2s;
-  }
-
-  .back-button:hover {
-    background: #f8f9fa;
-  }
-
-  .conversation-title {
-    font-weight: 600;
-    font-size: 16px;
-    color: #333;
-    flex: 1;
-  }
-
-  .sms-interface pb-conversation-list {
-    flex: 1;
-    min-width: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-  }
-
-  .sms-interface pb-sms-thread {
-    flex: 1;
-    min-width: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-  }
-
-  .popup-footer {
-    padding: 12px 20px;
-    border-top: 1px solid #eee;
-    background: #f8f9fa;
-    font-size: 12px;
-    color: #666;
-    flex-shrink: 0;
-  }
-
-  .footer-content {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .copyright {
-    font-weight: 500;
-  }
-
-  .disclaimer {
-    color: #999;
-  }
-
-  .about-button {
-    background: none;
-    border: none;
-    color: #007bff;
-    cursor: pointer;
-    font-size: 11px;
-    text-decoration: underline;
-    padding: 0;
-  }
-
-  .about-button:hover {
-    color: #0056b3;
-  }
-
-  .about-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-  }
-
-  .about-dialog {
-    background: white;
-    border-radius: 8px;
-    max-width: 400px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  }
-
-  .about-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 20px;
-    border-bottom: 1px solid #eee;
-  }
-
-  .about-header h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #333;
-  }
-
-  .close-button {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: #666;
-    padding: 0;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .close-button:hover {
-    color: #333;
-  }
-
-  .about-content {
-    padding: 20px;
-  }
-
-  .about-content p {
-    margin: 0 0 12px 0;
-    line-height: 1.5;
-    color: #333;
-  }
-
-  .about-links {
-    margin: 16px 0;
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .about-links a {
-    color: #007bff;
-    text-decoration: none;
-    font-size: 14px;
-  }
-
-  .about-links a:hover {
-    text-decoration: underline;
-  }
-
-  .license-info {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid #eee;
-  }
-
-  .license-info p {
-    margin: 0 0 8px 0;
-    font-size: 13px;
-  }
-
-  .license-info a {
-    color: #007bff;
-    text-decoration: none;
-    font-size: 13px;
-  }
-
-  .license-info a:hover {
-    text-decoration: underline;
-  }
-
-  /* Responsive design for smaller screens */
-  @media (max-width: 500px) {
-    .popup-container {
-      min-height: 450px;
-      max-height: 650px;
-    }
-
-    .popup-title {
-      font-size: 18px;
-      margin-bottom: 12px;
-    }
-
-    .tab-navigation {
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      padding: 2px;
-    }
-
-    .tab-button {
-      min-width: 80px;
-      padding: 6px;
-      font-size: 12px;
-    }
-
-    .footer-content {
-      flex-direction: column;
-      text-align: center;
-      gap: 6px;
-    }
-
-    .sms-interface {
-      flex-direction: column;
-      min-height: 350px;
-    }
-
-    .sms-interface pb-conversation-list {
-      flex: 1;
-      min-width: 0;
-      border-right: none;
-      border-bottom: 1px solid #e9ecef;
-    }
-
-    .sms-interface pb-sms-thread {
-      flex: 1;
-      min-height: 170px;
-    }
-
-    .about-links {
-      flex-direction: column;
-      gap: 8px;
-    }
-  }
-
-  @media (min-width: 500px) {
-    .popup-container {
-      max-width: 500px;
-    }
-
-    .popup-header {
-      padding: 18px 22px;
-    }
-
-    .popup-title {
-      font-size: 21px;
-      margin-bottom: 18px;
-    }
-
-    .tab-button {
-      padding: 6px;
-      font-size: 13px;
-    }
-
-    .popup-footer {
-      padding: 14px 22px;
-      font-size: 12px;
-    }
-
-    .about-button {
-      font-size: 11px;
-    }
-  }
-
-  @media (min-width: 600px) {
-    .popup-container {
-      max-width: 600px;
-    }
-
-    .popup-title {
-      font-size: 22px;
-    }
-
-    .tab-button {
-      padding: 6px;
-      font-size: 14px;
-    }
-
-    .sms-interface pb-conversation-list {
-      flex: 1;
-      min-width: 0;
-    }
-  }
-`;
-document.head.appendChild(style);
+// Initialize options page
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('Options DOM ready');
+  const optionsPage = new OptionsPage();
+  optionsPage.init();
+});

@@ -38,6 +38,7 @@ export class PbChannels extends LitElement {
   private searchTimeout: number | null = null;
 
   static styles = css`
+    /* === Light mode base === */
     :host {
       display: block;
       padding: 16px;
@@ -52,13 +53,11 @@ export class PbChannels extends LitElement {
       flex-direction: column;
       gap: 16px;
     }
-
     .search-section {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
-
     .search-input {
       padding: 8px 12px;
       border: 1px solid #ddd;
@@ -67,17 +66,14 @@ export class PbChannels extends LitElement {
       outline: none;
       transition: border-color 0.2s;
     }
-
     .search-input:focus {
       border-color: #007bff;
     }
-
     .subtab-navigation {
       display: flex;
       margin-bottom: 16px;
       border-bottom: 1px solid #eee;
     }
-
     .subtab-button {
       background: none;
       border: none;
@@ -88,21 +84,17 @@ export class PbChannels extends LitElement {
       border-bottom: 2px solid transparent;
       transition: all 0.2s;
     }
-
     .subtab-button.active {
       color: #007bff;
       border-bottom-color: #007bff;
     }
-
     .subtab-button:hover:not(.active) {
       color: #333;
       background: #f8f9fa;
     }
-
     .recent-pushes-section {
       padding: 16px 0;
     }
-
     .recent-pushes-content {
       padding: 20px;
       text-align: center;
@@ -110,20 +102,17 @@ export class PbChannels extends LitElement {
       background: #f8f9fa;
       border-radius: 6px;
     }
-
     .loading-indicator {
       text-align: center;
       padding: 20px;
       color: #666;
       font-style: italic;
     }
-
     .subscription-posts {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
-
     .post-card {
       background: white;
       border: 1px solid #e9ecef;
@@ -131,12 +120,10 @@ export class PbChannels extends LitElement {
       padding: 16px;
       transition: all 0.2s;
     }
-
     .post-card:hover {
       border-color: #007bff;
       box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
     }
-
     .post-header {
       display: flex;
       justify-content: space-between;
@@ -144,7 +131,6 @@ export class PbChannels extends LitElement {
       margin-bottom: 12px;
       font-size: 12px;
     }
-
     .post-header .channel-name {
       background: #007bff;
       color: white;
@@ -152,42 +138,35 @@ export class PbChannels extends LitElement {
       border-radius: 4px;
       font-weight: 600;
     }
-
     .post-date {
       color: #666;
     }
-
     .post-content {
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
-
     .post-title {
       margin: 0;
       font-size: 14px;
       font-weight: 600;
       color: #333;
     }
-
     .post-body {
       margin: 0;
       font-size: 13px;
       color: #555;
       line-height: 1.4;
     }
-
     .post-link {
       color: #007bff;
       text-decoration: none;
       font-size: 13px;
       font-weight: 500;
     }
-
     .post-link:hover {
       text-decoration: underline;
     }
-
     .search-results {
       display: flex;
       flex-direction: column;
@@ -197,7 +176,6 @@ export class PbChannels extends LitElement {
       -webkit-overflow-scrolling: touch;
       scroll-behavior: smooth;
     }
-
     .channel-card {
       display: flex;
       align-items: center;
@@ -208,12 +186,10 @@ export class PbChannels extends LitElement {
       background: white;
       transition: all 0.2s;
     }
-
     .channel-card:hover {
       border-color: #007bff;
       box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
     }
-
     .channel-icon {
       width: 40px;
       height: 40px;
@@ -226,12 +202,10 @@ export class PbChannels extends LitElement {
       font-size: 16px;
       color: #6c757d;
     }
-
     .channel-info {
       flex: 1;
       min-width: 0;
     }
-
     .channel-name {
       font-weight: 600;
       font-size: 14px;
@@ -241,7 +215,6 @@ export class PbChannels extends LitElement {
       overflow: hidden;
       text-overflow: ellipsis;
     }
-
     .channel-description {
       font-size: 12px;
       color: #666;
@@ -251,7 +224,6 @@ export class PbChannels extends LitElement {
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
-
     .channel-tag {
       font-size: 11px;
       color: #999;
@@ -262,7 +234,6 @@ export class PbChannels extends LitElement {
       margin-top: 4px;
       display: inline-block;
     }
-
     .subscribe-button {
       padding: 6px 12px;
       background: #007bff;
@@ -274,16 +245,13 @@ export class PbChannels extends LitElement {
       transition: background-color 0.2s;
       white-space: nowrap;
     }
-
     .subscribe-button:hover {
       background: #0056b3;
     }
-
     .subscribe-button:disabled {
       background: #6c757d;
       cursor: not-allowed;
     }
-
     .subscribed-badge {
       padding: 6px 12px;
       background: #28a745;
@@ -292,27 +260,23 @@ export class PbChannels extends LitElement {
       font-size: 12px;
       white-space: nowrap;
     }
-
     .subscriptions-section {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
-
     .section-title {
       font-size: 16px;
       font-weight: 600;
       color: #333;
       margin: 0;
     }
-
     .section-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 12px;
     }
-
     .refresh-button {
       padding: 6px 12px;
       background: #6c757d;
@@ -326,16 +290,13 @@ export class PbChannels extends LitElement {
       align-items: center;
       gap: 4px;
     }
-
     .refresh-button:hover:not(:disabled) {
       background: #5a6268;
     }
-
     .refresh-button:disabled {
       background: #adb5bd;
       cursor: not-allowed;
     }
-
     .subscription-item {
       display: flex;
       align-items: center;
@@ -345,7 +306,6 @@ export class PbChannels extends LitElement {
       border-radius: 8px;
       background: white;
     }
-
     .unsubscribe-button {
       padding: 6px 12px;
       background: #dc3545;
@@ -356,18 +316,15 @@ export class PbChannels extends LitElement {
       cursor: pointer;
       transition: background-color 0.2s;
     }
-
     .unsubscribe-button:hover {
       background: #c82333;
     }
-
     .loading {
       text-align: center;
       color: #666;
       font-size: 14px;
       padding: 20px;
     }
-
     .error-message {
       color: #dc3545;
       font-size: 14px;
@@ -377,7 +334,6 @@ export class PbChannels extends LitElement {
       border-radius: 4px;
       margin-bottom: 12px;
     }
-
     .success-message {
       color: #155724;
       font-size: 14px;
@@ -387,12 +343,307 @@ export class PbChannels extends LitElement {
       border-radius: 4px;
       margin-bottom: 12px;
     }
-
     .empty-state {
       text-align: center;
       color: #666;
       font-size: 14px;
       padding: 40px 20px;
+    }
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+      background: #212529;
+    }
+
+    :host-context(html[data-theme='dark']) .search-input {
+      background: #343a40;
+      border-color: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .search-input::placeholder {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-navigation {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button {
+      color: rgba(222, 226, 230, 0.75);
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button.active {
+      color: #6ea8fe;
+      border-bottom-color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button:hover:not(.active) {
+      color: #dee2e6;
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .post-card {
+      background: #343a40;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .post-card:hover {
+      border-color: #6ea8fe;
+      box-shadow: 0 2px 8px rgba(13, 110, 253, 0.15);
+    }
+
+    :host-context(html[data-theme='dark']) .post-title {
+      color: #e9ecef;
+    }
+
+    :host-context(html[data-theme='dark']) .post-body {
+      color: #ced4da;
+    }
+
+    :host-context(html[data-theme='dark']) .post-date {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .post-link {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .post-link:hover {
+      color: #9ec5fe;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-card {
+      background: #343a40;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-card:hover {
+      border-color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-icon {
+      background: #2b3035;
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-name {
+      color: #e9ecef;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-description {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-tag {
+      background: #2b3035;
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .subscribe-button {
+      background: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .subscribe-button:hover {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button {
+      background: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .refresh-button:hover:not(:disabled) {
+      background: #5c636a;
+    }
+
+    :host-context(html[data-theme='dark']) .unsubscribe-button {
+      background: #dc3545;
+    }
+
+    :host-context(html[data-theme='dark']) .unsubscribe-button:hover {
+      background: #bb2d3b;
+    }
+
+    :host-context(html[data-theme='dark']) .error-message {
+      background: #2c0b0e;
+      border-color: #842029;
+      color: #ea868f;
+    }
+
+    :host-context(html[data-theme='dark']) .success-message {
+      background: #051b11;
+      border-color: #0f5132;
+      color: #75b798;
+    }
+
+    :host-context(html[data-theme='dark']) .loading,
+    :host-context(html[data-theme='dark']) .empty-state {
+      color: rgba(222, 226, 230, 0.75);
+    }
+
+    :host-context(html[data-theme='dark']) .subscribe-button {
+      padding: 6px 12px;
+      background: rgb(11, 94, 215);
+      color: #e6e1e3;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      white-space: nowrap;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .subscribe-button:hover:not(:disabled) {
+      background: #003366;
+    }
+
+    :host-context(html[data-theme='dark']) .subscribe-button:disabled {
+      background: #55515a;
+      color: #a1a1aa;
+      cursor: not-allowed;
+    }
+
+    :host-context(html[data-theme='dark']) .subscribed-badge {
+      padding: 6px 12px;
+      background: #4ade80; /* success green */
+      color: #052e16;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    :host-context(html[data-theme='dark']) .subscriptions-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    :host-context(html[data-theme='dark']) .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #e6e1e3;
+      margin: 0;
+    }
+
+    :host-context(html[data-theme='dark']) .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    /* Container */
+    :host-context(html[data-theme='dark']) .subscriptions-section {
+      gap: 12px;
+    }
+
+    /* Card */
+    :host-context(html[data-theme='dark']) .subscription-item {
+      background: rgb(52, 58, 64); /* #343a40 */
+      color: #e6e1e3;
+      border: 1px solid #495057;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    }
+
+    :host-context(html[data-theme='dark']) .subscription-item:hover {
+      background: #2b3035;
+      border-color: #5a5f66;
+    }
+
+    /* Channel icon */
+    :host-context(html[data-theme='dark']) .channel-icon {
+      background: #2b3035;
+      color: #adb5bd;
+      border: 1px solid #495057;
+      border-radius: 8px;
+    }
+
+    /* Text hierarchy */
+    :host-context(html[data-theme='dark']) .channel-info h1,
+    :host-context(html[data-theme='dark']) .channel-info h2,
+    :host-context(html[data-theme='dark']) .channel-info h3,
+    :host-context(html[data-theme='dark']) .channel-info h4,
+    :host-context(html[data-theme='dark']) .channel-info .channel-name,
+    :host-context(html[data-theme='dark']) .channel-info .title {
+      color: #e6e1e3;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-info .channel-description,
+    :host-context(html[data-theme='dark']) .channel-info .desc {
+      color: #adb5bd;
+    }
+
+    /* Handle pill (e.g., @jessetautulli) */
+    :host-context(html[data-theme='dark']) .channel-handle,
+    :host-context(html[data-theme='dark']) .handle {
+      display: inline-block;
+      background: #1f2326;
+      color: #e6e1e3;
+      border: 1px solid #495057;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 12px;
+    }
+
+    /* Unsubscribe button */
+    :host-context(html[data-theme='dark']) .unsubscribe-button {
+      background: #dc3545;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition:
+        background-color 0.15s ease,
+        box-shadow 0.15s ease;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .unsubscribe-button:hover:not(:disabled) {
+      background: #bb2d3b;
+    }
+
+    :host-context(html[data-theme='dark']) .unsubscribe-button:focus-visible {
+      outline: 0;
+      box-shadow: 0 0 0 3px rgba(159, 134, 255, 0.35);
+    }
+
+    :host-context(html[data-theme='dark']) .unsubscribe-button:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+    }
+
+    /* Refresh button in header (from your screenshot) */
+    :host-context(html[data-theme='dark']) .refresh-button {
+      background: #2b3035;
+      color: #e6e1e3;
+      border: 1px solid #495057;
+      border-radius: 8px;
+      padding: 6px 10px;
+    }
+
+    :host-context(html[data-theme='dark'])
+      .refresh-button:hover:not(:disabled) {
+      background: #343a40;
+    }
+
+    /* Optional: layout helpers inside the card */
+    :host-context(html[data-theme='dark']) .subscription-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-info {
+      flex: 1;
+      min-width: 0;
     }
   `;
 

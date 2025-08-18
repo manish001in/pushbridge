@@ -26,6 +26,7 @@ export class PbConversationList extends LitElement {
   private filteredConversations: SmsThread[] = [];
 
   static styles = css`
+    /* === Light mode base === */
     :host {
       display: flex;
       flex-direction: column;
@@ -211,6 +212,87 @@ export class PbConversationList extends LitElement {
       padding: 32px 16px;
       text-align: center;
       color: #666;
+    }
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      background: #212529;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .header {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .title {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .search-input {
+      background: #343a40;
+      border-color: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .search-input:focus {
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+
+    :host-context(html[data-theme='dark']) .search-icon {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .conversation-item {
+      border-bottom-color: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .conversation-item:hover {
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .conversation-item.selected {
+      background: #031633;
+      border-left-color: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .avatar {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .contact-name {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .last-message {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .timestamp {
+      color: #868e96;
+    }
+
+    :host-context(html[data-theme='dark']) .unread-badge {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .empty-state {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .loading {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .spinner {
+      border-color: #343a40;
+      border-top-color: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .no-results {
+      color: #adb5bd;
     }
   `;
 
