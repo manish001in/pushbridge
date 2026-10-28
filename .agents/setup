@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+# Match the Node major used by CI without replacing the orb's system Node.
+node_prefix="$HOME/.local/share/pushbridge-node24"
+node_bin="$node_prefix/node_modules/node/bin"
+echo 'Preparing Node.js 24'
+if [[ ! -x "$node_bin/node" ]] || [[ "$("$node_bin/node" -p 'process.versions.node.split(".")[0]')" != 24 ]]; then
+  time npm install --prefix "$node_prefix" --no-save --package-lock=false --no-audit --no-fund node@24
+fi
+export PATH="$node_bin:$PATH"
+
+# Amp and supervised services use new login shells, not this setup shell.
+profile_marker='# Pushbridge orb Node.js 24'
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<EOF
+
+$profile_marker
+if [[ "\$PWD/" == "$repo_root/"* ]]; then
+  export PATH="$node_bin:\$PATH"
+fi
+EOF
+fi
+
+node --version
+npm --version
+echo 'Installing locked dependencies (including development tools)'
+time npm ci --include=dev --prefer-offline --no-audit --no-fund
+echo 'Pushbridge orb dependencies are ready'

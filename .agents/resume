@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# No credentials or backing services need refreshing. Never reinstall on wake.
+if [[ "$(node -p 'process.versions.node.split(".")[0]')" != 24 ]] || [[ ! -x node_modules/.bin/tsc ]]; then
+  echo 'Orb toolchain or dependencies are missing; run .agents/setup.' >&2
+  exit 1
+fi
+echo 'Pushbridge orb ready (Node.js 24 and dependencies present)'
