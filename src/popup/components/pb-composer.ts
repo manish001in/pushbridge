@@ -44,17 +44,20 @@ export class PushComposer extends LitElement {
   static styles = css`
     /* === Light mode base === */
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
       font-family:
         -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       color: #333;
       height: 100%;
+      min-height: 0;
       overflow: hidden;
     }
 
     .composer-container {
       padding: 16px 16px 32px 16px;
-      height: 100%;
+      flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       overflow-y: auto;

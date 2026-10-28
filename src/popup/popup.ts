@@ -1,10 +1,6 @@
 // Popup entry point
 console.log('Pushbridge popup loaded');
 
-// Import theme component
-import { bootTheme } from './components/pb-theme';
-bootTheme();
-
 // Import components
 import './components/pb-token-setup';
 import './components/pb-composer';
@@ -18,8 +14,11 @@ import {
   hasSmsCapableDevices,
   getDefaultSmsDevice,
 } from '../background/deviceManager';
-
 import { getLocal } from '../background/storage';
+
+import { bootTheme } from './components/pb-theme';
+
+bootTheme();
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
@@ -440,7 +439,7 @@ style.textContent = `
     color: #666;
     border-radius: 6px;
     transition: all 0.2s;
-    white-space: nowrap;
+    white-space: normal;
     text-align: center;
   }
 
@@ -805,7 +804,7 @@ style.textContent = `
   }
 
   /* === Dark mode overrides === */
-  :host-context(html[data-theme='dark']) {
+  html[data-theme='dark'] {
     --scrollbar-track: #1e1e1e;
     --scrollbar-thumb: #4b5563;
     --scrollbar-thumb-hover: #6b7280;
@@ -818,87 +817,91 @@ style.textContent = `
     --accent-hover: #7c3aed;
   }
 
-  :host-context(html[data-theme='dark']) * {
+  html[data-theme='dark'] * {
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   }
 
-  :host-context(html[data-theme='dark']) *::-webkit-scrollbar-track {
+  html[data-theme='dark'] *::-webkit-scrollbar-track {
     background: var(--scrollbar-track);
   }
 
-  :host-context(html[data-theme='dark']) *::-webkit-scrollbar-thumb {
+  html[data-theme='dark'] *::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
   }
 
-  :host-context(html[data-theme='dark']) *::-webkit-scrollbar-thumb:hover {
+  html[data-theme='dark'] *::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-thumb-hover);
   }
 
-  :host-context(html[data-theme='dark']) .popup-header {
+  html[data-theme='dark'] .popup-header {
     background: var(--surface-alt);
     border-bottom-color: var(--border-color);
   }
 
-  :host-context(html[data-theme='dark']) .popup-title {
+  html[data-theme='dark'] .popup-title {
     color: var(--text-primary);
   }
 
-  :host-context(html[data-theme='dark']) .tab-navigation {
+  html[data-theme='dark'] .tab-navigation {
     background: var(--surface) !important;
     border-color: var(--border-color) !important;
   }
 
-  :host-context(html[data-theme='dark']) .tab-button {
+  html[data-theme='dark'] .tab-button {
     color: var(--text-secondary);
   }
 
-  :host-context(html[data-theme='dark']) .tab-button.active {
+  html[data-theme='dark'] .tab-button.active {
     background: var(--accent);
     color: white;
   }
 
-  :host-context(html[data-theme='dark']) .tab-button:hover:not(.active) {
+  html[data-theme='dark'] .tab-button:hover:not(.active) {
     background: #1f1f1f;
     color: var(--text-primary);
   }
 
-  :host-context(html[data-theme='dark']) .sms-thread-header {
+  html[data-theme='dark'] .sms-thread-header {
     background: var(--surface-alt);
     border-bottom-color: var(--border-color);
   }
 
-  :host-context(html[data-theme='dark']) .conversation-title {
+  html[data-theme='dark'] .conversation-title {
     color: var(--text-primary);
   }
 
-  :host-context(html[data-theme='dark']) .popup-footer {
+  html[data-theme='dark'] .back-button:hover {
+    background: var(--pb-hover);
+  }
+
+  html[data-theme='dark'] .popup-footer {
     background: var(--surface-alt);
     border-top-color: var(--border-color);
     color: var(--text-secondary);
   }
 
-  :host-context(html[data-theme='dark']) .about-dialog {
+  html[data-theme='dark'] .about-dialog {
     background: var(--surface-alt);
     color: var(--text-primary);
   }
 
-  :host-context(html[data-theme='dark']) .about-header h3 {
+  html[data-theme='dark'] .about-header h3 {
     color: var(--text-primary);
   }
 
-  :host-context(html[data-theme='dark']) .about-content p {
+  html[data-theme='dark'] .about-content p {
     color: var(--text-secondary);
   }
 
-  :host-context(html[data-theme='dark']) .about-links a {
+  html[data-theme='dark'] .about-links a {
     color: var(--accent);
   }
 
-  :host-context(html[data-theme='dark']) .about-links a:hover {
+  html[data-theme='dark'] .about-links a:hover {
     color: var(--accent-hover);
   }
 
-  :host-context(html[data-theme='dark']) .license-info a {
+  html[data-theme='dark'] .license-info a {
     color: var(--accent);
   }
 `;

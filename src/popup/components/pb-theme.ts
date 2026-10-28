@@ -47,6 +47,18 @@ async function applyFromStorage() {
   wireOsListener();
 }
 
+function onStorageChange(
+  changes: Record<string, chrome.storage.StorageChange>,
+  area: string
+) {
+  if (area !== 'local' || !changes.pb_settings) return;
+  followSystem = !!changes.pb_settings.newValue?.systemTheme;
+  applyTheme(
+    followSystem && window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+  wireOsListener();
+}
+
 /**
  * Boot theme handling. Call this at the very top of popup.ts, before other imports run if possible.
  * Safe to call multiple times; subsequent calls are no-ops.
@@ -70,22 +82,12 @@ export function bootTheme(): void {
   applyFromStorage();
 
   // React to settings changes from elsewhere
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    const next = changes.pb_settings?.newValue as any;
-    if (!next) return;
-    followSystem = !!next.systemTheme;
-    applyTheme(
-      followSystem
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches
-        : false
-    );
-    wireOsListener();
-  });
+  chrome.storage.onChanged.addListener(onStorageChange);
 }
 
 // Optional: explicit cleanup if popup reuses the same context (rare)
 export function teardownTheme(): void {
+  chrome.storage.onChanged.removeListener(onStorageChange);
   if (mql) {
     mql.removeEventListener
       ? mql.removeEventListener('change', onSchemeChange)

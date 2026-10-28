@@ -14,6 +14,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:e2e": "node tests/e2e/smoke-test.js",
+    "test:e2e:theme-window": "node tests/e2e/theme-window-test.js",
     "version:patch": "node scripts/version-bump.js patch",
     "version:minor": "node scripts/version-bump.js minor",
     "version:major": "node scripts/version-bump.js major"
