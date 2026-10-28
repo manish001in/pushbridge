@@ -1,6 +1,13 @@
 // Options page entry point
 console.log('Pushbridge options page loaded');
 
+import {
+  DEFAULT_ORDER as DEFAULT_OPTION_ORDER,
+  normalizeOrder,
+  normalizeHidden,
+  type OptionKey,
+} from '../popup/components/pb-nav';
+
 interface Settings {
   soundEnabled: boolean;
   defaultDevice: string;
@@ -8,6 +15,8 @@ interface Settings {
   autoReconnect: boolean;
   defaultSmsDevice: string;
   autoOpenPushLinksAsTab: boolean;
+  optionOrder: OptionKey[];
+  hiddenTabs: OptionKey[];
 }
 
 class OptionsPage {
@@ -18,10 +27,18 @@ class OptionsPage {
     autoReconnect: true,
     defaultSmsDevice: '',
     autoOpenPushLinksAsTab: false,
+    optionOrder: DEFAULT_OPTION_ORDER.slice(),
+    hiddenTabs: [],
   };
 
   private devices: Array<{ iden: string; nickname: string; type: string }> = [];
-  private smsDevices: Array<{ iden: string; nickname: string; type: string; manufacturer?: string; model?: string }> = [];
+  private smsDevices: Array<{
+    iden: string;
+    nickname: string;
+    type: string;
+    manufacturer?: string;
+    model?: string;
+  }> = [];
   private pendingSmsDeviceChange: string | null = null;
 
   async init() {
@@ -40,22 +57,54 @@ class OptionsPage {
       } else {
         await chrome.storage.local.set({ pb_settings: this.settings });
       }
-      
+
       // Load auto open push links setting from separate storage
-      if (stored.pb_settings.autoOpenPushLinksAsTab !== undefined) {
-        this.settings.autoOpenPushLinksAsTab = stored.pb_settings.autoOpenPushLinksAsTab;
+      if (stored.pb_settings?.autoOpenPushLinksAsTab !== undefined) {
+        this.settings.autoOpenPushLinksAsTab =
+          stored.pb_settings.autoOpenPushLinksAsTab;
       } else {
-        await chrome.storage.local.set({ pb_settings: { ...this.settings, autoOpenPushLinksAsTab: this.settings.autoOpenPushLinksAsTab } });
+        await chrome.storage.local.set({
+          pb_settings: {
+            ...this.settings,
+            autoOpenPushLinksAsTab: this.settings.autoOpenPushLinksAsTab,
+          },
+        });
       }
-      
+
       // Load default SMS device from separate storage
-      const defaultSmsDevice = await chrome.storage.local.get('defaultSmsDevice');
+      const defaultSmsDevice =
+        await chrome.storage.local.get('defaultSmsDevice');
       if (defaultSmsDevice.defaultSmsDevice) {
         this.settings.defaultSmsDevice = defaultSmsDevice.defaultSmsDevice;
+      }
+
+      const storedOrder =
+        stored.pb_settings?.optionOrder ?? this.settings.optionOrder;
+      const storedHidden =
+        stored.pb_settings?.hiddenTabs ?? this.settings.hiddenTabs ?? [];
+
+      const normalizedOrder = normalizeOrder(storedOrder);
+      const normalizedHidden = normalizeHidden(storedHidden);
+
+      const orderChanged =
+        JSON.stringify(storedOrder) !== JSON.stringify(normalizedOrder);
+      const hiddenChanged =
+        JSON.stringify(storedHidden) !== JSON.stringify(normalizedHidden);
+
+      this.settings.optionOrder = normalizedOrder;
+      this.settings.hiddenTabs = normalizedHidden;
+
+      if (orderChanged || hiddenChanged) {
+        await this.saveSettings();
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
+  }
+
+  private async setOptionOrder(newOrder: OptionKey[]) {
+    this.settings.optionOrder = normalizeOrder(newOrder);
+    await this.saveSettings();
   }
 
   private async loadDevices() {
@@ -71,7 +120,9 @@ class OptionsPage {
 
   private async loadSmsDevices() {
     try {
-      const response = await chrome.runtime.sendMessage({ cmd: 'GET_SMS_CAPABLE_DEVICES' });
+      const response = await chrome.runtime.sendMessage({
+        cmd: 'GET_SMS_CAPABLE_DEVICES',
+      });
       if (response.success) {
         this.smsDevices = response.devices || [];
       }
@@ -80,25 +131,29 @@ class OptionsPage {
     }
   }
 
-  private getDeviceDisplayName(device: { nickname: string; manufacturer?: string; model?: string }): string {
+  private getDeviceDisplayName(device: {
+    nickname: string;
+    manufacturer?: string;
+    model?: string;
+  }): string {
     if (device.nickname) {
       return device.nickname;
     }
-    
+
     if (device.manufacturer && device.model) {
       return `${device.manufacturer} ${device.model}`;
     }
-    
+
     if (device.model) {
       return device.model;
     }
-    
+
     return 'Unknown Device';
   }
 
   private async saveSettings() {
     try {
-      await chrome.storage.local.set({ 
+      await chrome.storage.local.set({
         pb_settings: this.settings,
       });
       this.showMessage('Settings saved successfully!', 'success');
@@ -115,7 +170,9 @@ class OptionsPage {
 
     try {
       // Show loading state
-      const updateBtn = document.getElementById('update-sms-device') as HTMLButtonElement;
+      const updateBtn = document.getElementById(
+        'update-sms-device'
+      ) as HTMLButtonElement;
       if (updateBtn) {
         updateBtn.disabled = true;
         updateBtn.textContent = 'Updating...';
@@ -124,31 +181,38 @@ class OptionsPage {
       // Call the background handler to update SMS device
       const response = await chrome.runtime.sendMessage({
         cmd: 'SET_DEFAULT_SMS_DEVICE',
-        deviceIden: this.pendingSmsDeviceChange
+        deviceIden: this.pendingSmsDeviceChange,
       });
 
       if (response.success) {
         // Update the settings
         this.settings.defaultSmsDevice = this.pendingSmsDeviceChange;
         this.pendingSmsDeviceChange = null;
-        
+
         // Save the setting
-        await chrome.storage.local.set({ defaultSmsDevice: this.settings.defaultSmsDevice });
-        
+        await chrome.storage.local.set({
+          defaultSmsDevice: this.settings.defaultSmsDevice,
+        });
+
         this.showMessage('SMS device updated successfully!', 'success');
-        
+
         // Re-render to update UI state
         this.render();
         this.setupEventListeners();
       } else {
-        this.showMessage(`Failed to update SMS device: ${response.error}`, 'error');
+        this.showMessage(
+          `Failed to update SMS device: ${response.error}`,
+          'error'
+        );
       }
     } catch (error) {
       console.error('Failed to update SMS device:', error);
       this.showMessage('Failed to update SMS device', 'error');
     } finally {
       // Reset button state
-      const updateBtn = document.getElementById('update-sms-device') as HTMLButtonElement;
+      const updateBtn = document.getElementById(
+        'update-sms-device'
+      ) as HTMLButtonElement;
       if (updateBtn) {
         updateBtn.disabled = false;
         updateBtn.textContent = 'Update';
@@ -233,6 +297,142 @@ class OptionsPage {
       });
     }
 
+    // Navigation order
+    const ul = document.getElementById(
+      'option-order'
+    ) as HTMLUListElement | null;
+    if (ul) {
+      const renderOrder = () => {
+        // Only include SMS/MMS if we have devices
+        const eligible = this.settings.optionOrder.filter(
+          k => k !== 'SMS/MMS' || this.smsDevices.length > 0
+        );
+        ul.innerHTML = eligible
+          .map(k => {
+            const isHidden = this.settings.hiddenTabs?.includes(k);
+
+            return `
+              <li draggable="true" data-key="${k}" class="dnd-item">
+                <span class="handle" aria-hidden="true">⋮⋮</span>
+                <span class="label">${k}</span>
+                <button type="button"
+                        class="toggle-visibility"
+                        data-key="${k}"
+                        aria-label="${isHidden ? 'Show' : 'Hide'} ${k}"
+                        data-state="${isHidden ? 'show' : 'hide'}">
+                  ${isHidden ? 'Show' : 'Hide'}
+                </button>
+              </li>
+            `;
+          })
+          .join('');
+      };
+      renderOrder();
+
+      ul.addEventListener('click', async e => {
+        const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(
+          '.toggle-visibility'
+        );
+        if (!btn) return;
+        e.preventDefault();
+
+        const key = btn.dataset.key as OptionKey | undefined;
+        if (!key) return;
+
+        // ensure array exists
+        this.settings.hiddenTabs = Array.isArray(this.settings.hiddenTabs)
+          ? this.settings.hiddenTabs
+          : [];
+
+        const hidden = new Set<OptionKey>(this.settings.hiddenTabs);
+        const isCurrentlyHidden = hidden.has(key);
+
+        // Build the "effective" option order — skip SMS/MMS if no devices
+        const effectiveOrder = DEFAULT_OPTION_ORDER.filter(k =>
+          k === 'SMS/MMS' ? this.smsDevices.length > 0 : true
+        );
+
+        // If user is trying to hide this key, ensure at least one remains visible
+        if (!isCurrentlyHidden) {
+          const visibleCount = effectiveOrder.filter(
+            k => !hidden.has(k)
+          ).length;
+          if (visibleCount <= 1) {
+            this.showMessage('At least one tab must remain visible.', 'error');
+            return;
+          }
+          hidden.add(key); // hide it
+        } else {
+          hidden.delete(key); // show it
+        }
+
+        // persist
+        this.settings.hiddenTabs = Array.from(hidden);
+        await this.saveSettings();
+
+        // re-render list (updates button label/color via your renderOrder)
+        renderOrder();
+      });
+
+      let draggingEl: HTMLElement | null = null;
+
+      ul.addEventListener('dragstart', e => {
+        if ((e.target as HTMLElement).closest('.toggle-visibility')) {
+          e.preventDefault(); // don't drag when clicking the button
+          return;
+        }
+        const li = (e.target as HTMLElement)?.closest(
+          'li'
+        ) as HTMLElement | null;
+        if (!li) return;
+        draggingEl = li;
+        li.classList.add('dragging');
+        e.dataTransfer?.setData('text/plain', li.dataset.key || '');
+        e.dataTransfer?.setDragImage(li, 10, 10);
+      });
+
+      ul.addEventListener('dragover', e => {
+        e.preventDefault();
+        const after = getAfterElement(ul, e.clientY);
+        if (!draggingEl) return;
+        if (!after) ul.appendChild(draggingEl);
+        else ul.insertBefore(draggingEl, after);
+      });
+
+      ul.addEventListener('dragend', async () => {
+        if (draggingEl) draggingEl.classList.remove('dragging');
+        draggingEl = null;
+        const order = Array.from(ul.querySelectorAll('li')).map(
+          li => li.getAttribute('data-key') as OptionKey
+        );
+        await this.setOptionOrder(order);
+        renderOrder(); // rehydrate DOM to avoid any ghost states
+      });
+
+      // Option order
+      const getAfterElement = (
+        container: HTMLElement,
+        y: number
+      ): HTMLElement | null => {
+        const els = Array.from(
+          container.querySelectorAll<HTMLElement>('li:not(.dragging)')
+        );
+
+        let closestOffset = Number.NEGATIVE_INFINITY;
+        let closestEl: HTMLElement | null = null;
+
+        for (const el of els) {
+          const box = el.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closestOffset) {
+            closestOffset = offset;
+            closestEl = el;
+          }
+        }
+        return closestEl;
+      };
+    }
+
     // Auto reconnect toggle
     const autoReconnectToggle = document.getElementById(
       'auto-reconnect-toggle'
@@ -252,7 +452,9 @@ class OptionsPage {
     if (autoOpenLinksToggle) {
       autoOpenLinksToggle.checked = this.settings.autoOpenPushLinksAsTab;
       autoOpenLinksToggle.addEventListener('change', e => {
-        this.settings.autoOpenPushLinksAsTab = (e.target as HTMLInputElement).checked;
+        this.settings.autoOpenPushLinksAsTab = (
+          e.target as HTMLInputElement
+        ).checked;
         this.saveSettings();
       });
     }
@@ -277,7 +479,8 @@ class OptionsPage {
       smsDeviceSelect.value = this.settings.defaultSmsDevice;
       smsDeviceSelect.addEventListener('change', e => {
         const newValue = (e.target as HTMLSelectElement).value;
-        this.pendingSmsDeviceChange = newValue !== this.settings.defaultSmsDevice ? newValue : null;
+        this.pendingSmsDeviceChange =
+          newValue !== this.settings.defaultSmsDevice ? newValue : null;
         this.updateSmsDeviceButtonState();
       });
     }
@@ -309,15 +512,21 @@ class OptionsPage {
     // SMS device update button
     const updateSmsDeviceBtn = document.getElementById('update-sms-device');
     if (updateSmsDeviceBtn) {
-      updateSmsDeviceBtn.addEventListener('click', () => this.updateSmsDevice());
+      updateSmsDeviceBtn.addEventListener('click', () =>
+        this.updateSmsDevice()
+      );
     }
   }
 
   private updateSmsDeviceButtonState() {
-    const updateBtn = document.getElementById('update-sms-device') as HTMLButtonElement;
+    const updateBtn = document.getElementById(
+      'update-sms-device'
+    ) as HTMLButtonElement;
     if (updateBtn) {
       updateBtn.disabled = !this.pendingSmsDeviceChange;
-      updateBtn.textContent = this.pendingSmsDeviceChange ? 'Update SMS Device' : 'Update SMS Device';
+      updateBtn.textContent = this.pendingSmsDeviceChange
+        ? 'Update SMS Device'
+        : 'Update SMS Device';
     }
   }
 
@@ -330,6 +539,8 @@ class OptionsPage {
         autoReconnect: true,
         defaultSmsDevice: '',
         autoOpenPushLinksAsTab: false,
+        optionOrder: DEFAULT_OPTION_ORDER.slice(),
+        hiddenTabs: [],
       };
       this.pendingSmsDeviceChange = null;
       await this.saveSettings();
@@ -361,6 +572,8 @@ class OptionsPage {
           autoReconnect: true,
           defaultSmsDevice: '',
           autoOpenPushLinksAsTab: false,
+          optionOrder: DEFAULT_OPTION_ORDER.slice(),
+          hiddenTabs: [],
         };
         this.pendingSmsDeviceChange = null;
         await this.saveSettings();
@@ -414,8 +627,23 @@ class OptionsPage {
       </div>
 
       <div class="settings-section">
+        <h2>Customization</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Navigation order</label>
+            <p>Drag to rearrange tabs. Use Show or Hide to change visibility.</p>
+          </div>
+          <div class="setting-control">
+            <ul id="option-order" class="dnd-list"></ul>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="settings-section">
         <h2>Default Settings</h2>
-        
+
         <div class="setting-item">
           <div class="setting-info">
             <label for="default-device">Default target device</label>
