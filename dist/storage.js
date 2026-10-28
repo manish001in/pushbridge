@@ -1,0 +1,1 @@
+async function n(e){return new Promise(o=>{chrome.storage.local.get(e,r=>{o(r[e])})})}async function s(e,o){return new Promise(r=>{chrome.storage.local.set({[e]:o},r)})}async function a(e){return new Promise(o=>{chrome.storage.local.remove(e,o)})}async function t(){return new Promise(e=>{chrome.storage.local.getBytesInUse(null,e)})}export{t as a,n as g,a as r,s};
