@@ -1,3 +1,4 @@
+import { httpClient } from '../../src/background/httpClient';
 import { createPush } from '../../src/background/pushManager';
 import { enqueue, processQueue } from '../../src/background/queue';
 import { getLocal, setLocal } from '../../src/background/storage';
@@ -34,7 +35,9 @@ describe('outgoing operation queue', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     ops = [];
-    (getLocal as jest.Mock).mockImplementation(async () => [...ops]);
+    (getLocal as jest.Mock).mockImplementation(async (key: string) =>
+      key === 'pb_pending_ops' ? [...ops] : undefined
+    );
     (setLocal as jest.Mock).mockImplementation(async (_key, value) => {
       ops = value;
     });
@@ -106,12 +109,96 @@ describe('outgoing operation queue', () => {
       expect(ops).toHaveLength(1);
     });
 
-    test('a push interrupted mid-send by a worker restart is not sent again', async () => {
-      ops = [{ ...op('interrupted'), attemptStartedAt: Date.now() - 1000 }];
+    describe('interrupted by a worker restart', () => {
+      const interrupted = (guid?: string) => ({
+        ...op('interrupted'),
+        payload: guid ? { guid } : {},
+        attemptStartedAt: Date.now() - 1000,
+      });
+      const history = (pushes: any[]) =>
+        (httpClient.fetch as jest.Mock).mockResolvedValue({
+          ok: true,
+          json: async () => ({ pushes }),
+        });
+
+      test('is not sent again when it did get through', async () => {
+        ops = [interrupted('g1')];
+        history([{ guid: 'g1' }]);
+        await processQueue();
+        expect(createPush).not.toHaveBeenCalled();
+        expect(ops).toEqual([]);
+        expect(reportError).not.toHaveBeenCalled();
+      });
+
+      test('is sent once when it never left, say during a backoff', async () => {
+        ops = [interrupted('g2')];
+        history([{ guid: 'someone-else' }]);
+        await processQueue();
+        expect(createPush).toHaveBeenCalledTimes(1);
+        expect(ops).toEqual([]);
+      });
+
+      test('waits when it cannot find out', async () => {
+        ops = [interrupted('g3')];
+        (httpClient.fetch as jest.Mock).mockRejectedValue(new TypeError('offline'));
+        await processQueue();
+        expect(createPush).not.toHaveBeenCalled();
+        expect(ops).toHaveLength(1);
+      });
+
+      test('with no send ID it can only be reported', async () => {
+        ops = [interrupted()];
+        await processQueue();
+        expect(createPush).not.toHaveBeenCalled();
+        expect(ops).toEqual([]);
+        expect(reportError).toHaveBeenCalled();
+      });
+    });
+
+    describe('telling the caller what happened', () => {
+      test('sent', async () => {
+        await expect(
+          enqueue({ type: 'pushSend', payload: { type: 'note' } } as any)
+        ).resolves.toEqual({ status: 'sent' });
+      });
+
+      test('a send ID is added for later checks', async () => {
+        await enqueue({ type: 'pushSend', payload: { type: 'note' } } as any);
+        expect((createPush as jest.Mock).mock.calls[0][0].guid).toEqual(
+          expect.any(String)
+        );
+      });
+
+      test('an existing send ID is kept', async () => {
+        await enqueue({
+          type: 'pushSend',
+          payload: { type: 'note', guid: 'mine' },
+        } as any);
+        expect((createPush as jest.Mock).mock.calls[0][0].guid).toBe('mine');
+      });
+
+      test('rejected by the server', async () => {
+        (createPush as jest.Mock).mockRejectedValueOnce(
+          Object.assign(new Error('Nope'), { status: 400 })
+        );
+        await expect(
+          enqueue({ type: 'pushSend', payload: { type: 'note' } } as any)
+        ).resolves.toEqual({ status: 'rejected', error: 'Nope' });
+      });
+
+      test('still waiting after a network failure', async () => {
+        (createPush as jest.Mock).mockRejectedValueOnce(new TypeError('offline'));
+        await expect(
+          enqueue({ type: 'pushSend', payload: { type: 'note' } } as any)
+        ).resolves.toEqual({ status: 'queued' });
+      });
+    });
+
+    test('there is no delay after the last operation', async () => {
+      ops = [op('only')];
+      const started = Date.now();
       await processQueue();
-      expect(createPush).not.toHaveBeenCalled();
-      expect(ops).toEqual([]);
-      expect(reportError).toHaveBeenCalled();
+      expect(Date.now() - started).toBeLessThan(1000);
     });
 
     test('the in-flight mark is saved before the request goes out', async () => {

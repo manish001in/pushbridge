@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
+import { serializeFile } from '../fileTransport';
 import { determinePushType } from '../pushType';
 
 @customElement('pb-composer')
@@ -583,6 +584,30 @@ export class PushComposer extends LitElement {
     this.sendTo = select.value;
   }
 
+  /** Set when a send failed, in case the server got it and only the answer was lost. */
+  private failedAttempt: { key: string; guid: string } | null = null;
+
+  /**
+   * One ID per message. Sending the unchanged message again reuses it, so the worker
+   * can check whether the first attempt got through. Any change makes a new message.
+   */
+  private identifyAttempt(targetId: string | undefined) {
+    const file = this.selectedFile;
+    const key = JSON.stringify([
+      targetId,
+      this.pushTitle,
+      this.body,
+      file?.name,
+      file?.size,
+      file?.lastModified,
+    ]);
+    const isRetry = this.failedAttempt?.key === key;
+    if (!isRetry) {
+      this.failedAttempt = { key, guid: crypto.randomUUID() };
+    }
+    return { guid: this.failedAttempt!.guid, isRetry };
+  }
+
   private async handleSend() {
     // The keyboard shortcut reaches here even while the button is disabled.
     if (this.isSending) {
@@ -636,14 +661,8 @@ export class PushComposer extends LitElement {
       // Handle file upload if present
       if (this.selectedFile && actualPushType === 'file') {
         // Convert File to ArrayBuffer to preserve data through message passing
-        const fileBuffer = await this.selectedFile.arrayBuffer();
-        const fileData = {
-          name: this.selectedFile.name,
-          type: this.selectedFile.type,
-          size: this.selectedFile.size,
-          lastModified: this.selectedFile.lastModified,
-          buffer: Array.from(new Uint8Array(fileBuffer)), // Convert to regular array for serialization
-        };
+        const fileData = await serializeFile(this.selectedFile);
+        const attempt = this.identifyAttempt(selectedTarget?.id);
 
         const uploadResponse = await chrome.runtime.sendMessage({
           cmd: 'UPLOAD_FILE',
@@ -662,10 +681,12 @@ export class PushComposer extends LitElement {
               selectedTarget?.type === 'channel'
                 ? selectedTarget.id
                 : undefined,
+            ...attempt,
           },
         });
 
         if (uploadResponse.success) {
+          this.failedAttempt = null;
           this.setMessageWithTimeout('File sent successfully!');
           this.resetForm();
         } else {
@@ -681,11 +702,16 @@ export class PushComposer extends LitElement {
       // Send regular push
       const response = await chrome.runtime.sendMessage({
         cmd: 'createPush',
-        payload,
+        payload: { ...payload, ...this.identifyAttempt(selectedTarget?.id) },
       });
 
       if (response.ok) {
-        this.setMessageWithTimeout('Push sent successfully!');
+        this.failedAttempt = null;
+        this.setMessageWithTimeout(
+          response.queued
+            ? "No connection right now. It's saved and will send automatically."
+            : 'Push sent successfully!'
+        );
         this.resetForm();
       } else {
         this.setMessageWithTimeout(

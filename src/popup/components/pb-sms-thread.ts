@@ -8,6 +8,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
 import { SmsThread } from '../../types/pushbullet';
+import { serializeFile } from '../fileTransport';
 import { openLink } from '../linkHandling';
 
 interface Recipient {
@@ -20,7 +21,7 @@ export class PbSmsThread extends LitElement {
   @property({ type: String })
   conversationId: string = '';
 
-  @property({ type: String })
+  @property({ type: String, attribute: 'device-iden' })
   deviceIden: string = '';
 
   @property({ type: Boolean })
@@ -816,7 +817,10 @@ export class PbSmsThread extends LitElement {
   `;
 
   private readonly drafts = new Map<string, string>();
-  private pendingSend: { key: string; guid: string } | null = null;
+  private pendingSends = new Map<
+    string,
+    { text: string; file: File | null; guid: string }
+  >();
 
   /** Only if the user is still in the conversation it's about. */
   private showSendError(conversationId: string, message: string) {
@@ -886,7 +890,12 @@ export class PbSmsThread extends LitElement {
       this.switchDraft(changedProperties.get('conversationId') as string);
     }
 
-    if (changedProperties.has('conversationId') && this.conversationId) {
+    // The same conversation ID can exist on two phones.
+    if (
+      (changedProperties.has('conversationId') ||
+        changedProperties.has('deviceIden')) &&
+      this.conversationId
+    ) {
       // The old messages must not stay on screen above the new reply box.
       this.thread = null;
       this.messageCursor = null;
@@ -1320,12 +1329,19 @@ export class PbSmsThread extends LitElement {
     const selectedFile = this.selectedFile;
 
     // Retrying the same message keeps its ID, so the API can recognize a text whose
-    // earlier attempt went through even though the response was lost.
-    const retryKey = `${conversationId}|${messageText}|${selectedFile?.name ?? ''}`;
-    if (this.pendingSend?.key !== retryKey) {
-      this.pendingSend = { key: retryKey, guid: crypto.randomUUID() };
-    }
-    const guid = this.pendingSend.guid;
+    // earlier attempt went through even though the response was lost. A different
+    // file is a different message, even with the same name.
+    const sendKey = `${deviceIden}|${conversationId}`;
+    const earlier = this.pendingSends.get(sendKey);
+    const guid =
+      earlier?.text === messageText && earlier.file === selectedFile
+        ? earlier.guid
+        : crypto.randomUUID();
+    this.pendingSends.set(sendKey, {
+      text: messageText,
+      file: selectedFile,
+      guid,
+    });
 
     this.sendError = '';
     this.isSending = true;
@@ -1337,14 +1353,7 @@ export class PbSmsThread extends LitElement {
       // Handle file attachment if present
       if (selectedFile) {
         // Convert File to ArrayBuffer to preserve data through message passing
-        const fileBuffer = await selectedFile.arrayBuffer();
-        const fileData = {
-          name: selectedFile.name,
-          type: selectedFile.type,
-          size: selectedFile.size,
-          lastModified: selectedFile.lastModified,
-          buffer: Array.from(new Uint8Array(fileBuffer)), // Convert to regular array for serialization
-        };
+        const fileData = await serializeFile(selectedFile);
 
         // Upload file for SMS/MMS (without creating a push notification)
         const uploadResponse = await chrome.runtime.sendMessage({
@@ -1387,7 +1396,7 @@ export class PbSmsThread extends LitElement {
       });
 
       if (response.success) {
-        this.pendingSend = null;
+        this.pendingSends.delete(sendKey);
 
         // Clear the message and file, unless the user has moved on to another
         // conversation, whose draft isn't this one.
@@ -1597,6 +1606,11 @@ export class PbSmsThread extends LitElement {
                         class="message-image"
                         src="${msg.image_url}"
                         alt="Message attachment"
+                        role="link"
+                        tabindex="0"
+                        @keydown=${(e: KeyboardEvent) => {
+                          if (e.key === 'Enter') this.openImage(msg.image_url!);
+                        }}
                         @click=${(e: MouseEvent) => this.openImage(msg.image_url!, e)}
                         @auxclick=${(e: MouseEvent) =>
                           this.openImage(msg.image_url!, e)}

@@ -18,6 +18,7 @@
     "test:e2e:popup-links": "node tests/e2e/popup-links-test.js",
     "test:e2e:tabs": "node tests/e2e/tabs-cached-test.js",
     "test:e2e:send-safety": "node tests/e2e/send-safety-test.js",
+    "test:e2e:fake-api": "node tests/e2e/fake-api-test.js",
     "version:patch": "node scripts/version-bump.js patch",
     "version:minor": "node scripts/version-bump.js minor",
     "version:major": "node scripts/version-bump.js major"

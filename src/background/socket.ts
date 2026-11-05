@@ -47,6 +47,7 @@ const wsState: WebSocketState = {
 // Constants
 const MAX_RETRY_COUNT = 10;
 const STREAM_STARTED_KEY = 'pb_stream_started';
+const ENCRYPTION_WARNED_KEY = 'pb_encryption_warned';
 // Limit tabs opened at once when catching up after sleep; the rest stay in Messages.
 const MAX_CATCH_UP_TABS = 10;
 // Enough for a long absence without paging through a whole account's history.
@@ -281,13 +282,22 @@ async function switchToPollingMode(): Promise<void> {
 }
 
 let pushSyncChain: Promise<void> = Promise.resolve();
+let syncWaiting = false;
 
 /**
  * Run one history scan at a time. Overlapping scans would both see the same push
  * as new before either marks it processed, and open its link twice.
  */
 function schedulePushSync(catchUp = false): Promise<void> {
-  pushSyncChain = pushSyncChain.then(() => handlePushTickle(catchUp));
+  // One waiting scan will see everything the skipped ones would have.
+  if (syncWaiting) {
+    return pushSyncChain;
+  }
+  syncWaiting = true;
+  pushSyncChain = pushSyncChain.then(() => {
+    syncWaiting = false;
+    return handlePushTickle(catchUp);
+  });
   return pushSyncChain;
 }
 
@@ -300,7 +310,7 @@ async function fetchPushesToProcess(catchUp: boolean): Promise<any[]> {
   const pushes: any[] = [];
   let cursor: string | undefined = '';
 
-  for (let page = 0; page < (catchUp ? MAX_CATCH_UP_PAGES : 1); page++) {
+  for (let page = 0; page < MAX_CATCH_UP_PAGES; page++) {
     const history: { pushes?: any[]; cursor?: string } = await getPushHistory(
       50,
       0,
@@ -314,7 +324,12 @@ async function fetchPushesToProcess(catchUp: boolean): Promise<any[]> {
     if (
       !cursor ||
       !oldest ||
-      !(await unifiedNotificationTracker.isNewerThanLastSeen(oldest.modified))
+      !(await unifiedNotificationTracker.isNewerThanLastSeen(oldest.modified)) ||
+      // A live scan has caught up once it reaches one it has already handled.
+      (!catchUp &&
+        batch.some(push =>
+          unifiedNotificationTracker.wasProcessed('push', push.iden)
+        ))
     ) {
       break;
     }
@@ -407,8 +422,15 @@ async function handlePushTickle(catchUp = false): Promise<void> {
                 if (isPushForThisBrowser(push, deviceIden)) {
                   notificationsHeldBack++;
                 }
-              } else if (await showPushNotification(push)) {
-                notificationsShown++;
+              } else {
+                try {
+                  if (await showPushNotification(push)) {
+                    notificationsShown++;
+                  }
+                } catch {
+                  // Not shown. Leave it unprocessed so the next scan retries.
+                  continue;
+                }
               }
             }
 
@@ -488,12 +510,33 @@ async function handleContactTickle(): Promise<void> {
   }
 }
 
+/** Encrypted mirrors can't be read here. Say so once, instead of them just not appearing. */
+async function warnEncryptionUnsupported(): Promise<void> {
+  if (await getSession<boolean>(ENCRYPTION_WARNED_KEY)) {
+    return;
+  }
+  await setSession(ENCRYPTION_WARNED_KEY, true);
+  await chrome.notifications.create('pb_encryption_unsupported', {
+    type: 'basic',
+    iconUrl: 'icons/48.png',
+    title: "Mirrored notifications can't be shown",
+    message:
+      "End-to-end encryption is on for your Pushbullet account, and Pushbridge can't read encrypted notifications yet.",
+  });
+}
+
 /**
  * Handle push messages for mirror and dismissal
  */
 async function handlePushMessage(message: WebSocketMessage): Promise<void> {
   try {
     const push = message.push;
+
+    if ((push as any)?.encrypted) {
+      await warnEncryptionUnsupported();
+      return;
+    }
+
     if (!push || !push.type) {
       console.log('Invalid push message format');
       return;

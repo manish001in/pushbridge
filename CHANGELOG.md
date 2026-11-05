@@ -13,7 +13,15 @@
 - Choosing a device when sending had no effect: every push went to all your devices. Pushes now go only to the chosen device
 - Posts to a channel went to all your own devices instead of the channel
 - Pressing Cmd/Ctrl+Enter twice sent a push twice
-- A queued push could send twice after a worker restart or a failed storage write. One interrupted mid-send is now reported instead of being resent
+- Retrying a push or file after a lost response no longer sends it twice
+- A push that can't send right now says it's saved, instead of "sent". One the server rejects now shows as failed
+- Files near the 25 MB limit could fail to reach the worker. Files now move in a smaller format, and arrive byte for byte
+- A failed "file sent" notification no longer makes a delivered file look failed
+- Choosing a conversation now always uses its phone, so two phones with the same conversation ID don't get mixed up
+- Retrying a picture message keeps its ID only if it's the same file
+- A sent SMS stays visible until the phone reports it, instead of vanishing when a newer message arrives
+- A rate limited push is now sent once the limit passes
+- A queued push could send twice after a worker restart or a failed storage write. One interrupted mid-send now checks whether it got through, then sends only if it didn't
 - A queued push is never sent from a different account, and a retry first checks whether the earlier attempt went through
 - SMS failures now show in the conversation, and a failed queue save is reported instead of showing as queued
 - Queued pushes are no longer dropped after repeated network failures
@@ -21,7 +29,15 @@
 - Refreshing devices, contacts or channels could lose everything on earlier pages
 - The SMS tab could go missing because a device lookup before sign-in was cached as an empty list
 - Device names can no longer inject markup into the settings page
-- SMS notifications: fewer duplicates, and a reply from your phone no longer hides a new incoming message
+- SMS notifications: fewer duplicates, a reply from your phone no longer hides a new incoming message, and the same words sent twice notify twice
+- A notification that fails to show is tried again, instead of the push counting as handled
+- Clicking an SMS or backlog notification opens the extension, with a window on Chrome versions that can't open the popup
+- Live pushes aren't missed in a burst of more than one page
+- Deleted pushes and subscriptions no longer appear as empty rows, and loading more history keeps its place
+- Settings no longer fail on a device with no type
+- The connection test and diagnostics report the real state and version
+- Mirrored notifications and images in the popup can be used from the keyboard
+- End-to-end encrypted mirrors now explain once why they can't be shown
 - Open SMS conversations update when a sync finishes, and the 6-hour SMS sync survives worker restarts
 - Interrupted uploads are reported instead of silently disappearing
 - A rate limit on any request no longer stalls other queued requests

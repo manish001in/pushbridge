@@ -162,6 +162,47 @@ describe('SMS cache', () => {
       ]);
     });
 
+    test('keeps a sent message the phone has not reported, behind newer ones', async () => {
+      const now = Date.now();
+      seedCache(
+        thread('t1', [cachedMsg('sent', now - 20 * 60 * 1000, { inbound: false })])
+      );
+      listThreads('t1');
+      api.getSmsThreadMessages.mockResolvedValue({
+        thread: [apiMsg('newer', now - 60 * 1000)],
+      } as any);
+
+      await smsSync.syncAllSmsData(DEVICE);
+
+      expect(cachedThread('t1').messages.map((m: any) => m.id)).toEqual([
+        'sent',
+        'newer',
+      ]);
+    });
+
+    test('lets go of a sent message once Pushbullet would have given up', async () => {
+      const now = Date.now();
+      seedCache(
+        thread('t1', [cachedMsg('sent', now - 70 * 60 * 1000, { inbound: false })])
+      );
+      listThreads('t1');
+      api.getSmsThreadMessages.mockResolvedValue({
+        thread: [apiMsg('newer', now - 60 * 1000)],
+      } as any);
+
+      await smsSync.syncAllSmsData(DEVICE);
+
+      expect(cachedThread('t1').messages.map((m: any) => m.id)).toEqual(['newer']);
+    });
+
+    test('a retried send the API recognized is not listed twice', async () => {
+      seedCache(thread('t1', [cachedMsg('a', T)]));
+      const sent = cachedMsg('sent', T + 1, { inbound: false, pb_guid: 'g' });
+      await smsSync.updateThreadWithSentMessage(DEVICE, 't1', sent);
+      await smsSync.updateThreadWithSentMessage(DEVICE, 't1', { ...sent, id: 'x' });
+      expect(cachedThread('t1').messages).toHaveLength(2);
+    });
+
     test('drops older messages the phone no longer has', async () => {
       seedCache(
         thread('t1', [cachedMsg('deleted', T), cachedMsg('kept', T + 1000)])

@@ -93,6 +93,11 @@ export async function checkTokenHealth(): Promise<TokenHealthStatus> {
       // Store health status
       await setLocal('pb_token_health', status);
     } else if (response.status === 401) {
+      // The user may have signed in again while this was in flight. Only the token
+      // actually checked can be declared revoked.
+      if ((await getLocal<string>('pb_token')) !== token) {
+        return status;
+      }
       console.error('Token health check failed: Token revoked');
       status.error = 'Token revoked';
 

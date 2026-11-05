@@ -317,7 +317,10 @@ function setupSmsInterface(): void {
       conversationList.addEventListener(
         'conversation-selected',
         (e: CustomEvent) => {
-          const { conversationId, conversationName } = e.detail;
+          const { conversationId, conversationName, deviceIden } = e.detail;
+          // Together: conversation IDs are only unique per phone, so this has to
+          // be the phone the list was showing.
+          if (deviceIden) smsThread.deviceIden = deviceIden;
           smsThread.conversationId = conversationId;
           conversationTitle.textContent = conversationName || 'Conversation';
 

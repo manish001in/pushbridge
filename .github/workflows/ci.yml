@@ -43,6 +43,7 @@ jobs:
           npm run test:e2e
           npm run test:e2e:tabs
           npm run test:e2e:send-safety
+          npm run test:e2e:fake-api
           npm run test:e2e:popup-links
           npm run test:e2e:theme-window
 
@@ -81,6 +82,7 @@ jobs:
           npm run test:e2e
           npm run test:e2e:tabs
           npm run test:e2e:send-safety
+          npm run test:e2e:fake-api
           npm run test:e2e:popup-links
           npm run test:e2e:theme-window
 

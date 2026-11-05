@@ -71,30 +71,6 @@ describe('Push Type Detection Logic', () => {
   });
 
   describe('URL Detection Edge Cases', () => {
-    const determinePushType = (
-      message: string,
-      file?: File
-    ): 'note' | 'link' | 'file' => {
-      if (file) return 'file';
-
-      // Strip whitespace from message
-      const trimmedMessage = message.trim();
-
-      if (!trimmedMessage) return 'note';
-
-      // Extract URLs from message using improved regex
-      const urlRegex = /https?:\/\/[^\s]+/g;
-      const urls = trimmedMessage.match(urlRegex);
-
-      // If exactly one URL and message is just that URL (after trimming), it's a link
-      if (urls?.length === 1 && trimmedMessage === urls[0]) {
-        return 'link';
-      }
-
-      // Otherwise it's a note (including multiple URLs or text with URLs)
-      return 'note';
-    };
-
     it('should handle URLs with query parameters', () => {
       const result = determinePushType(
         'https://example.com?param=value&other=123'

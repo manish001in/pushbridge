@@ -3,6 +3,7 @@
  * Handles Chrome device registration and management with Pushbullet
  */
 
+import { currentAccountEpoch } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { clearSmsCache, syncSmsHistoryFromApi } from './smsBridge';
@@ -43,7 +44,7 @@ interface DeviceApiResponse {
 
 // Cache duration: 24 hours in milliseconds
 const CACHE_DURATION = 24 * 60 * 60 * 1000;
-const MAX_PAGES = 20;
+const MAX_PAGES = 50;
 
 /**
  * Register or get the Chrome device with Pushbullet
@@ -140,7 +141,13 @@ export async function getDevices(
     }
 
     // Fetch fresh data with cursor support
+    const accountEpoch = currentAccountEpoch();
     const devices = await fetchDevicesFromAPI(forceRefresh);
+
+    // Signed out meanwhile: don't refill what the reset cleared.
+    if (accountEpoch !== currentAccountEpoch()) {
+      return [];
+    }
 
     // Cache the result
     const cache: DeviceCache = {
@@ -196,7 +203,7 @@ export async function getPushableDevices(
         device.pushable !== false &&
         device.iden !== chromeDeviceIden
     )
-    .sort((a, b) => a.nickname.localeCompare(b.nickname));
+    .sort((a, b) => (a.nickname ?? '').localeCompare(b.nickname ?? ''));
 }
 
 /**
@@ -260,12 +267,16 @@ async function fetchDevicesFromAPI(
 
   // The caller caches this as the whole list, so it has to be the whole list.
   const devices = data.devices || [];
-  return data.cursor && page < MAX_PAGES
-    ? [
-        ...devices,
-        ...(await fetchDevicesFromAPI(forceRefresh, data.cursor, page + 1)),
-      ]
-    : devices;
+  if (!data.cursor) {
+    return devices;
+  }
+  if (page >= MAX_PAGES) {
+    throw new Error('Too many pages of devices');
+  }
+  return [
+    ...devices,
+    ...(await fetchDevicesFromAPI(forceRefresh, data.cursor, page + 1)),
+  ];
 }
 
 /**

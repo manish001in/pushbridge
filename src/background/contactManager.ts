@@ -5,6 +5,7 @@
 
 import { ContactsApiResponse, PushbulletContact } from '../types/api-interfaces';
 
+import { currentAccountEpoch } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { getLocal, setLocal } from './storage';
@@ -19,7 +20,7 @@ export interface ContactCache {
 
 // Cache duration: 5 minutes
 const CACHE_DURATION = 5 * 60 * 1000;
-const MAX_PAGES = 20;
+const MAX_PAGES = 50;
 
 /**
  * Get all contacts from Pushbullet with caching
@@ -40,7 +41,13 @@ export async function getContacts(
     }
 
     // Fetch fresh data
+    const accountEpoch = currentAccountEpoch();
     const contacts = await fetchContactsFromAPI(forceRefresh);
+
+    // Signed out meanwhile: don't refill what the reset cleared.
+    if (accountEpoch !== currentAccountEpoch()) {
+      return [];
+    }
 
     // Cache the result
     const cache: ContactCache = {
@@ -160,12 +167,16 @@ async function fetchContactsFromAPI(
 
   console.log(`Fetched ${contacts.length} contacts from API`);
   // The caller caches this as the whole list, so it has to be the whole list.
-  return data.cursor && page < MAX_PAGES
-    ? [
-        ...contacts,
-        ...(await fetchContactsFromAPI(forceRefresh, data.cursor, page + 1)),
-      ]
-    : contacts;
+  if (!data.cursor) {
+    return contacts;
+  }
+  if (page >= MAX_PAGES) {
+    throw new Error('Too many pages of contacts');
+  }
+  return [
+    ...contacts,
+    ...(await fetchContactsFromAPI(forceRefresh, data.cursor, page + 1)),
+  ];
 }
 
 /**

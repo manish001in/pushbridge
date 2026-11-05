@@ -427,7 +427,11 @@ export class PbConversationList extends LitElement {
     // Dispatch custom event to parent
     this.dispatchEvent(
       new CustomEvent('conversation-selected', {
-        detail: { conversationId, conversationName },
+        detail: {
+          conversationId,
+          conversationName,
+          deviceIden: conversation?.deviceIden,
+        },
         bubbles: true,
         composed: true,
       })

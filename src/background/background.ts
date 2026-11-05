@@ -2,6 +2,7 @@
 console.log('Pushbridge background service worker started');
 
 // Import modules
+import { base64ToBytes } from '../popup/fileTransport';
 import { TransferRecord } from '../types/pushbullet';
 
 import { bumpAccountEpoch, currentAccountEpoch } from './accountEpoch';
@@ -32,7 +33,7 @@ import {
   resumeInterruptedUploads,
   cleanupOldPendingUploads,
 } from './fileUploader';
-import { httpClient } from './httpClient';
+import { httpClient, RateLimitError } from './httpClient';
 import {
   handleUserDismissal,
   isMirrorNotificationId,
@@ -59,7 +60,14 @@ import {
   handlePushNotificationClick,
   showPushNotification,
 } from './pushNotifications';
-import { initializeQueue, enqueue, getQueueStatus, clearQueue } from './queue';
+import {
+  initializeQueue,
+  enqueue,
+  getQueueStatus,
+  clearQueue,
+  wasGuidDelivered,
+  type EnqueueOutcome,
+} from './queue';
 import { initializeQuotaMonitor, registerQuotaListener } from './quotaMonitor';
 import { rateLimitManager } from './rateLimitManager';
 // SMS imports moved to simple system
@@ -71,6 +79,7 @@ import {
   markConversationRead,
 } from './simpleSmsSync';
 import { sendSms } from './smsBridge';
+import { clearSmsSightings } from './smsNotificationIdentity';
 import {
   initializeWebSocket,
   connectOnWorkerStart,
@@ -178,6 +187,10 @@ async function initializeWorkerRuntime(): Promise<void> {
     // Initialize unified notification tracker
     await unifiedNotificationTracker.initialize();
 
+    // Nothing can still be uploading in a worker that just started, so any record
+    // left over was interrupted.
+    await resumeInterruptedUploads();
+
     // Initialize WebSocket connection
     await connectOnWorkerStart();
   } catch (error) {
@@ -210,8 +223,6 @@ async function initializeStartupServices(): Promise<void> {
     await cleanupExpiredMirrors();
     await reconstructMirrors();
 
-    // Tell the user about uploads a restart interrupted
-    await resumeInterruptedUploads();
 
     // Clean up old pending uploads
     await cleanupOldPendingUploads();
@@ -720,58 +731,68 @@ async function handleClearContactCache(sendResponse: (response: any) => void) {
  * Handle push creation requests from popup
  */
 async function handleCreatePush(
-  payload: PushPayload,
+  payload: PushPayload & { isRetry?: boolean },
   sendResponse: (response: any) => void
 ) {
   // Fixed before the first attempt, so a retry can tell if that one went through.
-  payload.guid = payload.guid ?? crypto.randomUUID();
+  const { isRetry, ...push } = payload;
+  push.guid = push.guid ?? crypto.randomUUID();
+
+  const respondToQueued = (outcome: EnqueueOutcome) => {
+    if (outcome.status === 'rejected') {
+      sendResponse({ ok: false, error: outcome.error });
+    } else {
+      sendResponse({ ok: true, queued: outcome.status === 'queued' });
+    }
+  };
 
   try {
-    // Check if we're online
-    if (!isWebSocketHealthy()) {
-      // Queue the operation for later
-      await enqueue({
-        type: 'pushSend',
-        payload,
-      });
-      sendResponse({
-        ok: true,
-        queued: true,
-        message: 'Push queued for later delivery',
-      });
+    // The user retried after a failure that may have been a lost response.
+    if (isRetry && (await wasGuidDelivered(push.guid))) {
+      sendResponse({ ok: true, queued: false });
       return;
     }
 
-    const push = await createPush(payload);
+    // Check if we're online
+    if (!isWebSocketHealthy()) {
+      respondToQueued(await enqueue({ type: 'pushSend', payload: push }));
+      return;
+    }
+
+    // Failures are reported to the composer that's waiting for this answer.
+    const created = await createPush(push, { silent: true });
 
     // Broadcast to any listening popups that a new push was created
     try {
       chrome.runtime.sendMessage({
         cmd: 'pushCreated',
         source: 'background',
-        push: push,
+        push: created,
       });
     } catch {
       // Ignore if no popup is listening
     }
 
-    sendResponse({ ok: true, push });
+    sendResponse({ ok: true, push: created });
   } catch (error) {
     console.error('Failed to create push:', error);
 
-    // If it's a network error, queue the operation
-    if (error instanceof Error && error.message.includes('network')) {
+    // No answer from the server. It may still have accepted this, so keep it and
+    // let its send ID settle that. Chrome reports this as a TypeError.
+    const noAnswer =
+      error instanceof TypeError ||
+      (error instanceof Error && /network/i.test(error.message));
+    // Refused for now, not for good: the queue sends it once the backoff ends.
+    const rateLimited = error instanceof RateLimitError;
+    if (noAnswer || rateLimited) {
       try {
-        await enqueue({
-          type: 'pushSend',
-          payload,
-          mayHaveBeenSent: true,
-        });
-        sendResponse({
-          ok: true,
-          queued: true,
-          message: 'Push queued due to network error',
-        });
+        respondToQueued(
+          await enqueue({
+            type: 'pushSend',
+            payload: push,
+            mayHaveBeenSent: noAnswer,
+          })
+        );
         return;
       } catch (queueError) {
         console.error('Failed to queue push:', queueError);
@@ -905,7 +926,13 @@ async function handleGetEnhancedPushHistory(
               );
 
               // Show Chrome notification (only if it passes device check)
-              const notificationShown = await showPushNotification(push);
+              let notificationShown: boolean;
+              try {
+                notificationShown = await showPushNotification(push);
+              } catch {
+                // Not shown. Leave it unprocessed so the next check retries it.
+                continue;
+              }
 
               // Only update badge if notification was actually shown or it's a valid push for this device
               if (
@@ -967,7 +994,8 @@ async function handleDismissPush(
 
     // Update notification badge when push is dismissed
     console.log('🔔 [Background] Push dismissed, updating badge');
-    await notificationBadge.addPushNotifications(-1);
+    // The badge isn't touched: opening the popup already cleared what this row
+    // counted for, so a decrement would take away a newer push instead.
 
     sendResponse({ ok: true });
   } catch (error) {
@@ -988,7 +1016,8 @@ async function handleDeletePush(
 
     // Update notification badge when push is deleted
     console.log('🔔 [Background] Push deleted, updating badge');
-    await notificationBadge.addPushNotifications(-1);
+    // The badge isn't touched: opening the popup already cleared what this row
+    // counted for, so a decrement would take away a newer push instead.
 
     sendResponse({ ok: true });
   } catch (error) {
@@ -1076,7 +1105,13 @@ async function handleSyncHistory(sendResponse: (response: any) => void) {
             console.log(
               `🔔 [Background] Processing push: ${push.iden} (type: ${push.type})`
             );
-            const notificationShown = await showPushNotification(push);
+            let notificationShown: boolean;
+            try {
+              notificationShown = await showPushNotification(push);
+            } catch {
+              // Not shown. Leave it unprocessed so the next check retries it.
+              continue;
+            }
 
             // Update badge if notification was shown or it's a valid push for this device
             if (
@@ -1190,21 +1225,31 @@ async function handleUploadFile(
       type: string;
       size: number;
       lastModified: number;
-      buffer: number[];
+      base64: string;
     };
     targetDeviceIden?: string;
     email?: string;
     title?: string;
     body?: string;
     channel_tag?: string;
+    guid?: string;
+    isRetry?: boolean;
   },
   sendResponse: (response: any) => void
 ) {
   try {
-    const { fileData, targetDeviceIden, email, title, body, channel_tag } = payload;
+    const { fileData, targetDeviceIden, email, title, body, channel_tag, isRetry } =
+      payload;
+    const guid = payload.guid ?? crypto.randomUUID();
+
+    // The user retried after a failure that may have been a lost response.
+    if (isRetry && (await wasGuidDelivered(guid))) {
+      sendResponse({ success: true });
+      return;
+    }
 
     // Reconstruct the File object from the ArrayBuffer data
-    const file = new File([new Uint8Array(fileData.buffer)], fileData.name, {
+    const file = new File([base64ToBytes(fileData.base64)], fileData.name, {
       type: fileData.type,
       lastModified: fileData.lastModified,
     });
@@ -1248,7 +1293,8 @@ async function handleUploadFile(
         title,
         body,
         channel_tag,
-        email
+        email,
+        guid
       );
 
       // Add transfer record
@@ -1276,15 +1322,20 @@ async function handleUploadFile(
         // Ignore if no popup is listening
       }
 
-      // Show success notification
-      await chrome.notifications.create({
-        type: 'basic',
-        iconUrl: '/icons/48.png',
-        title: 'File Sent',
-        message: `File "${file.name}" sent successfully`,
-      });
-
+      // The file is delivered: nothing after this may report it as failed, or
+      // the user would send it again.
       sendResponse({ success: true, filePush });
+
+      try {
+        await chrome.notifications.create({
+          type: 'basic',
+          iconUrl: '/icons/48.png',
+          title: 'File Sent',
+          message: `File "${file.name}" sent successfully`,
+        });
+      } catch (error) {
+        console.error('Failed to show file sent notification:', error);
+      }
     } else {
       sendResponse({ success: false, error: uploadResult.error });
     }
@@ -1307,7 +1358,7 @@ async function handleUploadFileForSms(
       type: string;
       size: number;
       lastModified: number;
-      buffer: number[];
+      base64: string;
     };
     targetDeviceIden?: string;
   },
@@ -1317,7 +1368,7 @@ async function handleUploadFileForSms(
     const { fileData } = payload;
 
     // Reconstruct the File object from the ArrayBuffer data
-    const file = new File([new Uint8Array(fileData.buffer)], fileData.name, {
+    const file = new File([base64ToBytes(fileData.base64)], fileData.name, {
       type: fileData.type,
       lastModified: fileData.lastModified,
     });
@@ -2286,6 +2337,7 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
     operationQueue.clearQueue();
     await clearAllChannelCaches();
     contextManager.clearContext();
+    clearSmsSightings();
 
     // Notifications from the old account shouldn't stay on screen.
     const visible = await new Promise<object>(resolve =>
@@ -2354,8 +2406,20 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
 async function handleTestWebSocket(sendResponse: (response: any) => void) {
   try {
     // Get the last heartbeat time from the socket manager
-    const lastHeartbeat = await getLastHeartbeat();
-    sendResponse({ ok: true, lastHeartbeat });
+    const status = getConnectionStatus();
+    if (!isWebSocketHealthy()) {
+      sendResponse({
+        ok: false,
+        error: status.isPolling
+          ? 'Not connected to the stream; checking for pushes periodically'
+          : 'Not connected to the stream',
+      });
+      return;
+    }
+    sendResponse({
+      ok: true,
+      lastHeartbeat: new Date(status.lastHeartbeat).toISOString(),
+    });
   } catch (error) {
     console.error('WebSocket test failed:', error);
     sendResponse({ ok: false, error: 'WebSocket test failed' });
@@ -2427,15 +2491,6 @@ async function handlePopupOpen(sendResponse: (response: any) => void) {
 }
 
 /**
- * Get last WebSocket heartbeat time
- */
-async function getLastHeartbeat(): Promise<string> {
-  // This would need to be implemented in the socket manager
-  // For now, return a placeholder
-  return new Date().toISOString();
-}
-
-/**
  * Handle getting unified tracker state for debugging
  */
 async function handleGetUnifiedTrackerState(
@@ -2459,7 +2514,7 @@ async function collectDebugLog(): Promise<string> {
   // Add basic system info
   logEntries.push(`=== Pushbridge Debug Log ===`);
   logEntries.push(`Generated: ${new Date().toISOString()}`);
-  logEntries.push(`Extension Version: 1.0.0`);
+  logEntries.push(`Extension Version: ${chrome.runtime.getManifest().version}`);
   logEntries.push(`Chrome Version: Chrome Extension`);
   logEntries.push(``);
 
@@ -2497,9 +2552,14 @@ async function collectDebugLog(): Promise<string> {
 
   // Add recent console logs (this would need to be implemented with a log collector)
   logEntries.push(`=== Recent Activity ===`);
-  logEntries.push(`WebSocket status: Connected`); // This would be dynamic
+  const wsStatus = getConnectionStatus();
+  logEntries.push(
+    `WebSocket status: ${wsStatus.isConnected ? 'Connected' : wsStatus.isPolling ? 'Polling' : 'Disconnected'}`
+  );
   logEntries.push(`Last push received: ${new Date().toISOString()}`);
-  logEntries.push(`Queue status: Active`);
+  logEntries.push(
+    `Queue: ${(await getQueueStatus()).pendingCount ?? 'unknown'} pending`
+  );
 
   return logEntries.join('\n');
 }

@@ -23,8 +23,8 @@ interface Settings {
 }
 
 /** Device names are user-controlled text, and this page renders through innerHTML. */
-function escapeHtml(value: string): string {
-  return value.replace(
+function escapeHtml(value: string | undefined): string {
+  return (value ?? '').replace(
     /[&<>"']/g,
     char =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
@@ -823,7 +823,7 @@ class OptionsPage {
               ${this.devices
                 .map(
                   device =>
-                    `<option value="${escapeHtml(device.iden)}">${escapeHtml(this.getDeviceDisplayName(device))} (${escapeHtml(device.type)})</option>`
+                    `<option value="${escapeHtml(device.iden)}">${escapeHtml(this.getDeviceDisplayName(device))} (${escapeHtml(device.type ?? (device as { icon?: string }).icon ?? 'device')})</option>`
                 )
                 .join('')}
             </select>
@@ -841,7 +841,7 @@ class OptionsPage {
               ${this.smsDevices
                 .map(
                   device =>
-                    `<option value="${escapeHtml(device.iden)}">${escapeHtml(this.getDeviceDisplayName(device))} (${escapeHtml(device.type)})</option>`
+                    `<option value="${escapeHtml(device.iden)}">${escapeHtml(this.getDeviceDisplayName(device))} (${escapeHtml(device.type ?? (device as { icon?: string }).icon ?? 'device')})</option>`
                 )
                 .join('')}
             </select>

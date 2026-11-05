@@ -313,6 +313,9 @@ export async function getConversation(
 /**
  * Send SMS using Pushbullet's dedicated SMS API (/v2/texts)
  */
+const localMessageId = () =>
+  `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
 export async function sendSms(
   deviceIden: string,
   conversationId: string,
@@ -407,11 +410,9 @@ export async function sendSms(
 
     // Add sent message to local cache
     const sentMessage: SmsMsg = {
-      id:
-        result.id || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      pb_guid:
-        result.guid ||
-        `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // The API returns `iden`, and the guid inside `data`.
+      id: result.iden || localMessageId(),
+      pb_guid: result.data?.guid || guid || localMessageId(),
       timestamp: Date.now(),
       inbound: false,
       text: message,
@@ -459,10 +460,9 @@ export async function markConversationAsRead(
 export async function getTotalUnreadCount(): Promise<number> {
   try {
     // Try the new simple SMS system first
-    const simpleCount = await getTotalUnreadSmsCount();
-    if (simpleCount > 0) {
-      return simpleCount;
-    }
+    // Zero is an answer, not a reason to fall back: the old cache doesn't learn
+    // about conversations being read, so it would bring the count back.
+    return await getTotalUnreadSmsCount();
   } catch (error) {
     console.warn(
       '[SMSBridge] Simple SMS count failed, falling back to cache:',

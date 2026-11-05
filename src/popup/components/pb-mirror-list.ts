@@ -350,7 +350,15 @@ export class PbMirrorList extends LitElement {
             <div class="shortcut-hint">Dismiss on origin device</div>
             <div
               class="mirror-item"
+              role="button"
+              tabindex="0"
               @click=${() => this.handleMirrorClick(mirror)}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  this.handleMirrorClick(mirror);
+                }
+              }}
               title="Click to focus notification"
             >
               <div class="app-icon">

@@ -198,6 +198,17 @@ class UnifiedNotificationTracker {
     return true;
   }
 
+  /** Undo a claim whose notification couldn't be shown, so it can be retried. */
+  releaseClaim(type: NotificationType, id: string): void {
+    const cache = this.cache[`${type}Ids` as keyof RecentlyProcessedCache] as string[];
+    const index = cache.indexOf(id);
+    if (index !== -1) cache.splice(index, 1);
+  }
+
+  wasProcessed(type: NotificationType, id: string): boolean {
+    return this.isRecentlyProcessed(id, type);
+  }
+
   /** False until the user has opened the popup at least once. */
   async hasBaseline(): Promise<boolean> {
     await this.ensureInitialized();

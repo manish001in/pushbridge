@@ -279,7 +279,8 @@ export async function createFilePush(
   title?: string,
   body?: string,
   channel_tag?: string,
-  email?: string
+  email?: string,
+  guid?: string
 ): Promise<FilePush> {
   try {
     const token = await getLocal<string>('pb_token');
@@ -315,6 +316,10 @@ export async function createFilePush(
 
     if (body) {
       pushData.body = body + ' (File: ' + fileName + ')';
+    }
+
+    if (guid) {
+      pushData.guid = guid;
     }
 
     if (channel_tag) {

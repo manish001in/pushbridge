@@ -126,8 +126,23 @@ export async function showPushNotification(push: any): Promise<boolean> {
 
     return true;
   } catch (error) {
+    // Rethrown so the caller doesn't record this push as handled.
     console.error('Failed to show push notification:', error);
-    return false;
+    throw error;
+  }
+}
+
+/** Newer Chrome can open the popup directly. Otherwise use the standalone window. */
+async function openExtensionUi(): Promise<void> {
+  try {
+    await chrome.action.openPopup();
+  } catch {
+    await chrome.windows.create({
+      url: chrome.runtime.getURL('popup.html?windowMode=1'),
+      type: 'popup',
+      width: 500,
+      height: 700,
+    });
   }
 }
 
@@ -138,17 +153,25 @@ export async function handlePushNotificationClick(
   try {
     const data = await getLocal<PushNotificationData>(dataKey(notificationId));
     if (!data) {
-      console.log('No notification data found for:', notificationId);
+      // SMS and the backlog summary have no record, but point at the popup.
+      if (
+        notificationId.startsWith('sms_') ||
+        notificationId === 'push_backlog_summary'
+      ) {
+        await chrome.notifications.clear(notificationId);
+        await openExtensionUi();
+      } else {
+        console.log('No notification data found for:', notificationId);
+      }
       return;
     }
-
-    await removeLocal(dataKey(notificationId));
 
     if (data.url) {
       await chrome.tabs.create({ url: data.url });
     } else {
-      await chrome.action.openPopup();
+      await openExtensionUi();
     }
+    await removeLocal(dataKey(notificationId));
   } catch (error) {
     console.error('Failed to handle notification click:', error);
   }

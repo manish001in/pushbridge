@@ -30,6 +30,7 @@ interface SimpleSmsData {
 // A sent message's local ID differs from the phone's, and the two clocks differ.
 const SENT_MESSAGE_MATCH_WINDOW = 5 * 60 * 1000;
 const NOT_YET_FETCHED_WINDOW = 10 * 60 * 1000;
+const SENT_MESSAGE_WINDOW = 65 * 60 * 1000;
 
 let cacheWrites: Promise<unknown> = Promise.resolve();
 
@@ -241,6 +242,15 @@ export async function updateThreadWithSentMessage(
         console.warn(
           `📝 [SimpleSMS] Thread ${conversationId} not found for sent message update`
         );
+        return;
+      }
+
+      // A retry the API recognized comes back with the same identity.
+      if (
+        thread.messages.some(
+          m => m.pb_guid === message.pb_guid || m.id === message.id
+        )
+      ) {
         return;
       }
 
@@ -488,6 +498,19 @@ function isSameSentMessage(cached: SmsMsg, fetched: SmsMsg): boolean {
   );
 }
 
+/**
+ * Missing from what the phone returned. A sent message can take a while to appear
+ * on the phone, even behind newer incoming ones, and Pushbullet gives up on it after
+ * an hour. An incoming one was on the phone first, so if it's older than what came
+ * back, or not recent, it was deleted there.
+ */
+function mayStillBeOnItsWay(message: SmsMsg, newestFetched: number): boolean {
+  const age = Date.now() - message.timestamp;
+  return message.inbound
+    ? message.timestamp > newestFetched && age < NOT_YET_FETCHED_WINDOW
+    : age < SENT_MESSAGE_WINDOW;
+}
+
 function claimSentMatch(message: SmsMsg, unmatched: Set<SmsMsg>): boolean {
   for (const m of unmatched) {
     if (isSameSentMessage(message, m)) {
@@ -518,9 +541,7 @@ function mergeThread(fetched: SmsThread, cached?: SmsThread): SmsThread {
   }
   const notYetFetched = (cached?.messages ?? []).filter(
     message =>
-      message.timestamp > newestFetched &&
-      // Only recent ones can still be on their way. Anything older was deleted.
-      Date.now() - message.timestamp < NOT_YET_FETCHED_WINDOW &&
+      mayStillBeOnItsWay(message, newestFetched) &&
       !fetched.messages.some(
         m => m.id === message.id || m.pb_guid === message.pb_guid
       ) &&
@@ -636,16 +657,29 @@ async function checkForNewMessages(thread: SmsThread): Promise<void> {
     const notificationId = `sms_sync_${latestMessage.id}`;
 
     // Create Chrome notification
-    const prefs = await getNotificationPrefs();
-    if (prefs.enabled && claimSmsContent(thread.name, latestMessage.text, latestMessage.timestamp)) {
-      await chrome.notifications.create(notificationId, {
-        type: 'basic',
-        title: `SMS from ${thread.name}`,
-        message: latestMessage.text,
-        iconUrl: 'icons/48.png',
-        requireInteraction: false,
-        silent: !prefs.sound,
-      });
+    try {
+      const prefs = await getNotificationPrefs();
+      if (prefs.enabled && claimSmsContent(
+          thread.name,
+          latestMessage.text,
+          latestMessage.timestamp,
+          'history'
+        )) {
+        await chrome.notifications.create(notificationId, {
+          type: 'basic',
+          title: `SMS from ${thread.name}`,
+          message: latestMessage.text,
+          iconUrl: 'icons/48.png',
+          requireInteraction: false,
+          silent: !prefs.sound,
+        });
+      }
+
+    } catch (error) {
+      // Not shown, so the next sync should try again.
+      console.error('Failed to show SMS notification:', error);
+      unifiedNotificationTracker.releaseClaim('sms', latestMessage.id);
+      return;
     }
 
     // Update SMS notifications and tracker

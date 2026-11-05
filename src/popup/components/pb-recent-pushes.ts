@@ -48,6 +48,13 @@ interface StoredState {
   activeSubtab: 'channels' | 'devices';
 }
 
+/** Deleted pushes come back from the API as bare records with nothing to show. */
+function withoutDeleted<T>(pushes: T[]): T[] {
+  return pushes.filter(
+    push => (push as { active?: boolean }).active !== false
+  );
+}
+
 @customElement('pb-recent-pushes')
 export class RecentPushes extends LitElement {
   @state()
@@ -850,7 +857,7 @@ export class RecentPushes extends LitElement {
         const state: StoredState = stored.pb_recent_pushes_state;
         // Since we're now using enhanced pushes, we can directly use the stored pushes
         // The metadata should already be properly computed by PushEnricher
-        this.pushes = state.pushes || [];
+        this.pushes = withoutDeleted(state.pushes || []);
         this.cursor = state.cursor;
         this.hasMore = state.hasMore || false;
         this.lastModified = state.lastModified;
@@ -928,7 +935,8 @@ export class RecentPushes extends LitElement {
       const response = await chrome.runtime.sendMessage({
         cmd: 'getEnhancedPushHistory',
         limit: 100,
-        modifiedAfter: lastModified,
+        // A page of older history must keep the query it started with.
+        modifiedAfter: refresh || this.cursor ? undefined : lastModified,
         cursor: refresh ? undefined : this.cursor,
         trigger: {
           type: 'popup_open',
@@ -946,7 +954,7 @@ export class RecentPushes extends LitElement {
       if (response.ok) {
         if (refresh) {
           console.log('🔄 [RecentPushes] Refreshing pushes list');
-          this.pushes = response.history.pushes;
+          this.pushes = withoutDeleted<EnhancedPush>(response.history.pushes);
         } else {
           console.log(
             '➕ [RecentPushes] Appending pushes to existing list with deduplication'
@@ -957,7 +965,7 @@ export class RecentPushes extends LitElement {
           );
 
           // Filter out duplicates and add new pushes
-          const newPushes = response.history.pushes.filter(
+          const newPushes = withoutDeleted<EnhancedPush>(response.history.pushes).filter(
             (push: EnhancedPush) => !existingPushesMap.has(push.iden)
           );
 
@@ -1277,6 +1285,12 @@ export class RecentPushes extends LitElement {
           ? html`
               <div
                 class="file-preview"
+                role="link"
+                tabindex="0"
+                aria-label="Open image"
+                @keydown=${(e: KeyboardEvent) => {
+                  if (e.key === 'Enter') openLink(push.image_url);
+                }}
                 @click=${(e: MouseEvent) => openLink(push.image_url, e)}
                 @auxclick=${(e: MouseEvent) => openLink(push.image_url, e)}
               >

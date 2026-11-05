@@ -3,6 +3,7 @@
  * Implements M6-01: Fetch & Cache Channel Subscriptions
  */
 
+import { currentAccountEpoch } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { getLocal, setLocal } from './storage';
@@ -64,7 +65,7 @@ let lastSubscriptionsFetchTime: number = 0;
 let lastOwnedChannelsFetchTime: number = 0;
 const CACHE_EXPIRY_HOURS = 6;
 const CACHE_DURATION = CACHE_EXPIRY_HOURS * 60 * 60 * 1000; // 6 hours in milliseconds
-const MAX_PAGES = 20;
+const MAX_PAGES = 50;
 
 /**
  * Fetch channel subscriptions from Pushbullet API with cursor support
@@ -77,6 +78,7 @@ export async function fetchSubscriptions(
   page = 0
 ): Promise<ChannelSubscription[]> {
   try {
+    const accountEpoch = currentAccountEpoch();
     const token = await getLocal<string>('pb_token');
     if (!token) {
       throw new Error('No access token available');
@@ -126,16 +128,25 @@ export async function fetchSubscriptions(
     }
 
     // The cache is treated as the whole list, so it has to be the whole list.
-    const all =
-      data.cursor && page < MAX_PAGES
-        ? [
-            ...data.subscriptions,
-            ...(await fetchSubscriptions(forceRefresh, data.cursor, page + 1)),
-          ]
-        : data.subscriptions;
+    // Deleted ones come back as bare records with nothing to show.
+    const active = data.subscriptions.filter(sub => sub.active !== false);
+    if (data.cursor && page >= MAX_PAGES) {
+      throw new Error('Too many pages of subscriptions');
+    }
+    const all = data.cursor
+      ? [
+          ...active,
+          ...(await fetchSubscriptions(forceRefresh, data.cursor, page + 1)),
+        ]
+      : active;
 
     if (page > 0) {
       return all;
+    }
+
+    // Signed out meanwhile: don't refill what the reset cleared.
+    if (accountEpoch !== currentAccountEpoch()) {
+      return [];
     }
 
     await cacheSubscriptions(all);
@@ -171,6 +182,7 @@ async function fetchOwnedChannels(
   page = 0
 ): Promise<OwnedChannel[]> {
   try {
+    const accountEpoch = currentAccountEpoch();
     const token = await getLocal<string>('pb_token');
     if (!token) {
       throw new Error('No access token available');
@@ -221,16 +233,23 @@ async function fetchOwnedChannels(
     }
 
     // The cache is treated as the whole list, so it has to be the whole list.
-    const all =
-      data.cursor && page < MAX_PAGES
-        ? [
-            ...data.channels,
-            ...(await fetchOwnedChannels(forceRefresh, data.cursor, page + 1)),
-          ]
-        : data.channels;
+    if (data.cursor && page >= MAX_PAGES) {
+      throw new Error('Too many pages of channels');
+    }
+    const all = data.cursor
+      ? [
+          ...data.channels,
+          ...(await fetchOwnedChannels(forceRefresh, data.cursor, page + 1)),
+        ]
+      : data.channels;
 
     if (page > 0) {
       return all;
+    }
+
+    // Signed out meanwhile: don't refill what the reset cleared.
+    if (accountEpoch !== currentAccountEpoch()) {
+      return [];
     }
 
     await cacheOwnedChannels(all);

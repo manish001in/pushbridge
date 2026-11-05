@@ -1,5 +1,8 @@
 import { createPush } from '../../src/background/pushManager';
-import { claimSmsContent } from '../../src/background/smsNotificationIdentity';
+import {
+  claimSmsContent,
+  clearSmsSightings,
+} from '../../src/background/smsNotificationIdentity';
 import { setLocal } from '../../src/background/storage';
 
 jest.mock('../../src/background/httpClient', () => ({
@@ -73,50 +76,37 @@ describe('storage writes', () => {
 });
 
 describe('recognizing one SMS arriving twice', () => {
-  test('the same message from both sources is shown once', () => {
-    expect(claimSmsContent('Alex', 'See you soon', 100_000)).toBe(true);
-    expect(claimSmsContent(' alex ', 'See you soon', 130_000)).toBe(false);
+  beforeEach(() => clearSmsSightings());
+
+  test('one message from both routes is shown once', () => {
+    expect(claimSmsContent('Alex', 'See you soon', 100_000, 'mirror')).toBe(true);
+    expect(claimSmsContent(' alex ', 'See you soon', 130_000, 'history')).toBe(
+      false
+    );
   });
 
   test('different senders or text are separate messages', () => {
-    expect(claimSmsContent('Sam', 'same words', 1000)).toBe(true);
-    expect(claimSmsContent('Pat', 'same words', 1000)).toBe(true);
-    expect(claimSmsContent('Sam', 'other words', 1000)).toBe(true);
+    expect(claimSmsContent('Sam', 'same words', 1000, 'mirror')).toBe(true);
+    expect(claimSmsContent('Pat', 'same words', 1000, 'history')).toBe(true);
+    expect(claimSmsContent('Sam', 'other words', 1000, 'history')).toBe(true);
   });
 
-  test('the same words sent again a couple of minutes later notify again', () => {
-    expect(claimSmsContent('Kim', 'ok', 1000)).toBe(true);
-    expect(claimSmsContent('Kim', 'ok', 1000 + 2 * 60 * 1000)).toBe(true);
-  });
-});
-
-describe('queued pushes', () => {
-  const { httpClient } = jest.requireMock('../../src/background/httpClient');
-
-  test('a rejected push reports its status, so it is not retried for days', async () => {
-    (chrome.storage.local.get as jest.Mock).mockImplementation((key, cb) =>
-      cb({ [key]: key === 'pb_token' ? 'token' : 'device' })
-    );
-    httpClient.fetch.mockResolvedValue({
-      ok: false,
-      status: 400,
-      json: async () => ({ error: { message: 'no such channel' } }),
-    });
-    await expect(
-      createPush({ type: 'note', body: 'x' } as any, { silent: true })
-    ).rejects.toMatchObject({ status: 400 });
+  test('the same words twice from one route are two messages', () => {
+    expect(claimSmsContent('Kim', 'ok', 1000, 'mirror')).toBe(true);
+    expect(claimSmsContent('Kim', 'ok', 2000, 'mirror')).toBe(true);
   });
 
-  test('the send ID goes to the API, so a retry can be recognized', async () => {
-    (chrome.storage.local.get as jest.Mock).mockImplementation((key, cb) =>
-      cb({ [key]: key === 'pb_token' ? 'token' : 'device' })
-    );
-    httpClient.fetch.mockClear();
-    httpClient.fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ iden: 'p' }),
-    });
-    await createPush({ type: 'note', body: 'x', guid: 'g1' } as any);
-    expect(JSON.parse(httpClient.fetch.mock.calls[0][1].body).guid).toBe('g1');
+  test('each route cancels only one sighting from the other', () => {
+    expect(claimSmsContent('Kim', 'ok', 1000, 'mirror')).toBe(true);
+    expect(claimSmsContent('Kim', 'ok', 2000, 'mirror')).toBe(true);
+    expect(claimSmsContent('Kim', 'ok', 3000, 'history')).toBe(false);
+    expect(claimSmsContent('Kim', 'ok', 4000, 'history')).toBe(false);
+    // A third arriving by history has no twin left: it's a new message.
+    expect(claimSmsContent('Kim', 'ok', 5000, 'history')).toBe(true);
+  });
+
+  test('the same words much later are a new message', () => {
+    expect(claimSmsContent('Kim', 'ok', 1000, 'mirror')).toBe(true);
+    expect(claimSmsContent('Kim', 'ok', 5 * 60 * 1000, 'history')).toBe(true);
   });
 });

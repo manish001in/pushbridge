@@ -6,6 +6,8 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
+import { serializeFile } from '../fileTransport';
+
 export interface FileUploadState {
   file: File | null;
   uploading: boolean;
@@ -461,14 +463,7 @@ export class PbFileDrop extends LitElement {
 
     try {
       // Convert File to ArrayBuffer to preserve data through message passing
-      const fileBuffer = await this.uploadState.file.arrayBuffer();
-      const fileData = {
-        name: this.uploadState.file.name,
-        type: this.uploadState.file.type,
-        size: this.uploadState.file.size,
-        lastModified: this.uploadState.file.lastModified,
-        buffer: Array.from(new Uint8Array(fileBuffer)), // Convert to regular array for serialization
-      };
+      const fileData = await serializeFile(this.uploadState.file);
 
       // Send message to background script to handle upload
       const response = await chrome.runtime.sendMessage({

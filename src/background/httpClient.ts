@@ -115,15 +115,7 @@ class HttpClient {
       // 5. Refill token bucket with new remaining quota
       tokenBucket.refillBucket(rateLimitManager.getRemaining());
 
-      // 6. Reset backoff on successful request
-      rateLimitManager.resetBackoff();
-
-      // 7. Clear rate limit notification if it was showing
-      if (userFeedback.isRateLimitNotificationActive()) {
-        await userFeedback.clearRateLimitNotification();
-      }
-
-      // 8. Handle 429 errors
+      // 6. Handle 429 errors
       if (response.status === 429) {
         console.error(
           `❌ [HTTP-${requestId}] Rate limited (429) - Starting backoff`
@@ -138,6 +130,14 @@ class HttpClient {
         console.log(`[HTTP-${requestId}] Rate limit headers on 429:`, headers);
         await this.handle429Error();
         throw new RateLimitError('Rate limited');
+      }
+
+      // 7. Reset backoff on successful request
+      rateLimitManager.resetBackoff();
+
+      // 8. Clear rate limit notification if it was showing
+      if (userFeedback.isRateLimitNotificationActive()) {
+        await userFeedback.clearRateLimitNotification();
       }
 
       // Log response body for debugging (if it's JSON and not too large)

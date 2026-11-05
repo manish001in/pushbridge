@@ -5,6 +5,7 @@
 
 import { MirrorPush, DismissalPush, MirrorMeta } from '../types/pushbullet';
 
+import { currentAccountEpoch } from './accountEpoch';
 // Contact lookup removed - SMS functionality uses phone numbers directly
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
@@ -43,7 +44,11 @@ let mirrorChain: Promise<void> = Promise.resolve();
  * arrive together, and each decides what to do from the record the last one wrote.
  */
 export function handleMirror(push: MirrorPush): Promise<void> {
-  const result = mirrorChain.then(() => processMirror(push));
+  // Signed out while this waited: it belongs to the previous account.
+  const accountEpoch = currentAccountEpoch();
+  const result = mirrorChain.then(() =>
+    accountEpoch === currentAccountEpoch() ? processMirror(push) : undefined
+  );
   mirrorChain = result.catch(() => undefined);
   return result;
 }
@@ -137,7 +142,19 @@ async function processMirror(push: MirrorPush): Promise<void> {
 /**
  * Handle remote dismissal by clearing Chrome notification
  */
-export async function handleRemoteDismiss(push: DismissalPush): Promise<void> {
+export function handleRemoteDismiss(push: DismissalPush): Promise<void> {
+  // In line with mirrors, so a dismissal can't overtake the mirror it dismisses.
+  const accountEpoch = currentAccountEpoch();
+  const result = mirrorChain.then(() =>
+    accountEpoch === currentAccountEpoch()
+      ? processRemoteDismiss(push)
+      : undefined
+  );
+  mirrorChain = result.catch(() => undefined);
+  return result;
+}
+
+async function processRemoteDismiss(push: DismissalPush): Promise<void> {
   try {
     console.log('🗑️ [MirrorManager] Handling remote dismissal:', {
       package_name: push.package_name,
@@ -514,16 +531,22 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
       chromeNotifId: chromeNotifId,
     });
 
-    const prefs = await getNotificationPrefs();
-    if (prefs.enabled && claimSmsContent(push.title, push.body, messageTimestamp)) {
-      await chrome.notifications.create(chromeNotifId, {
-        type: 'basic' as const,
-        title: push.title,
-        message: push.body,
-        iconUrl: push.icon_url ? push.icon_url : 'icons/48.png',
-        requireInteraction: false, // SMS notifications can auto-dismiss
-        silent: !prefs.sound,
-      });
+    try {
+      const prefs = await getNotificationPrefs();
+      if (prefs.enabled && claimSmsContent(push.title, push.body, messageTimestamp, 'mirror')) {
+        await chrome.notifications.create(chromeNotifId, {
+          type: 'basic' as const,
+          title: push.title,
+          message: push.body,
+          iconUrl: push.icon_url ? push.icon_url : 'icons/48.png',
+          requireInteraction: false, // SMS notifications can auto-dismiss
+          silent: !prefs.sound,
+        });
+      }
+    } catch (error) {
+      // Not shown: a later sync should still be able to notify for it.
+      console.error('Failed to show SMS notification:', error);
+      unifiedNotificationTracker.releaseClaim('sms', smsNotificationId);
     }
 
     // Create SMS message object

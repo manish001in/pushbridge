@@ -48,12 +48,15 @@ const MAX_OP_AGE = 7 * 24 * 60 * 60 * 1000;
  */
 export async function enqueue(
   op: Omit<PushbridgeOp, 'id' | 'timestamp' | 'retryCount'>
-): Promise<void> {
+): Promise<EnqueueOutcome> {
   try {
+    const id = generateOperationId();
     const operation: PushbridgeOp = {
       ...op,
+      // Identifies the send, so a later attempt can check whether this one got through.
+      payload: { ...op.payload, guid: op.payload?.guid ?? id },
       accountIden: await getLocal<string>('pb_user_iden'),
-      id: generateOperationId(),
+      id,
       timestamp: Date.now(),
       retryCount: 0,
     };
@@ -66,6 +69,10 @@ export async function enqueue(
     if (queueState.isOnline) {
       await processQueue();
     }
+
+    const outcome = opOutcomes.get(id) ?? { status: 'queued' as const };
+    opOutcomes.delete(id);
+    return outcome;
   } catch (error) {
     console.error('Failed to enqueue operation:', error);
     await reportError(PBError.Unknown, {
@@ -102,18 +109,25 @@ const deliveredOps = new Set<string>();
 const startedOps = new Set<string>();
 
 /** Find out whether an earlier attempt reached the server before its response was lost. */
-async function wasAlreadyDelivered(op: PushbridgeOp): Promise<boolean> {
+export async function wasGuidDelivered(guid: string): Promise<boolean> {
   const token = await getLocal<string>('pb_token');
   const response = await httpClient.fetch(
-    'https://api.pushbullet.com/v2/pushes?limit=20',
+    'https://api.pushbullet.com/v2/pushes?limit=100',
     { method: 'GET', headers: { 'Access-Token': token as string } }
   );
   if (!response.ok) {
     throw new Error(`Could not check for an earlier send: ${response.status}`);
   }
   const { pushes } = await response.json();
-  return (pushes ?? []).some((push: any) => push.guid === op.payload.guid);
+  return (pushes ?? []).some((push: any) => push.guid === guid);
 }
+
+export type EnqueueOutcome =
+  | { status: 'sent' }
+  | { status: 'queued' }
+  | { status: 'rejected'; error: string };
+
+const opOutcomes = new Map<string, EnqueueOutcome>();
 
 async function discardOp(op: PushbridgeOp, message: string): Promise<void> {
   await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
@@ -162,8 +176,11 @@ async function processPendingOp(op: PushbridgeOp): Promise<boolean> {
     return true;
   }
 
-  // Better to report a possibly unsent message than to risk sending it twice.
-  if (op.attemptStartedAt && !startedOps.has(op.id)) {
+  // An attempt marked by an earlier worker may or may not have left: it could have
+  // been waiting out a rate limit. Its send ID settles it below, so it is neither
+  // lost nor sent twice. Without an ID there's no way to know, so report it.
+  const interrupted = !!op.attemptStartedAt && !startedOps.has(op.id);
+  if (interrupted && !op.payload?.guid) {
     await discardOp(
       op,
       'A queued message was interrupted while sending and may not have been delivered. Please check and send it again if needed.'
@@ -181,19 +198,25 @@ async function processPendingOp(op: PushbridgeOp): Promise<boolean> {
     // An earlier attempt may have reached the server before its response was lost.
     if (
       op.payload?.guid &&
-      (op.retryCount > 0 || op.mayHaveBeenSent) &&
-      (await wasAlreadyDelivered(op))
+      (op.retryCount > 0 || op.mayHaveBeenSent || interrupted) &&
+      (await wasGuidDelivered(op.payload.guid))
     ) {
       deliveredOps.add(op.id);
+      opOutcomes.set(op.id, { status: 'sent' });
       await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
       return true;
     }
     await processOperation(op);
+    opOutcomes.set(op.id, { status: 'sent' });
   } catch (error) {
     console.error('Failed to process operation:', op.id, error);
     startedOps.delete(op.id);
 
     if (isPermanentFailure(error)) {
+      opOutcomes.set(op.id, {
+        status: 'rejected',
+        error: error instanceof Error ? error.message : 'Could not be sent',
+      });
       await discardOp(op, `A queued ${op.type} could not be sent`);
       return true;
     }
@@ -218,9 +241,6 @@ async function processPendingOp(op: PushbridgeOp): Promise<boolean> {
 
   deliveredOps.add(op.id);
   await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
-
-  // Rate limiting delay
-  await new Promise(resolve => setTimeout(resolve, PROCESSING_INTERVAL));
   return true;
 }
 
@@ -244,7 +264,13 @@ export async function processQueue(): Promise<void> {
     console.log(`Processing ${pendingOps.length} queued operations`);
 
     // Process operations one by one with rate limiting
+    let isFirst = true;
     for (const op of pendingOps) {
+      // Rate limiting delay between operations
+      if (!isFirst) {
+        await new Promise(resolve => setTimeout(resolve, PROCESSING_INTERVAL));
+      }
+      isFirst = false;
       if (!(await processPendingOp(op))) {
         break;
       }

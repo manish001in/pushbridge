@@ -77,32 +77,35 @@ async function storePendingUpload(
     attempts: 0,
   };
 
-  const pendingUploads =
-    (await getLocal<PendingUpload[]>('pb_pending_uploads')) || [];
-  const existingIndex = pendingUploads.findIndex(
-    upload => upload.fileHash === fileHash
-  );
+  await updatePendingUploads(uploads => [
+    ...uploads.filter(upload => upload.fileHash !== fileHash),
+    pendingUpload,
+  ]);
+}
 
-  if (existingIndex >= 0) {
-    pendingUploads[existingIndex] = pendingUpload;
-  } else {
-    pendingUploads.push(pendingUpload);
-  }
+let pendingUploadWrites: Promise<unknown> = Promise.resolve();
 
-  await setLocal('pb_pending_uploads', pendingUploads);
+/** One change at a time, so uploads from two windows can't overwrite each other. */
+function updatePendingUploads(
+  change: (uploads: PendingUpload[]) => PendingUpload[]
+): Promise<void> {
+  const write = pendingUploadWrites.then(async () => {
+    const uploads =
+      (await getLocal<PendingUpload[]>('pb_pending_uploads')) || [];
+    await setLocal('pb_pending_uploads', change(uploads));
+  });
+  pendingUploadWrites = write.catch(() => undefined);
+  return write;
 }
 
 /**
  * Remove pending upload from storage
  * @param fileHash - The file hash to remove
  */
-async function removePendingUpload(fileHash: string): Promise<void> {
-  const pendingUploads =
-    (await getLocal<PendingUpload[]>('pb_pending_uploads')) || [];
-  const filtered = pendingUploads.filter(
-    upload => upload.fileHash !== fileHash
+function removePendingUpload(fileHash: string): Promise<void> {
+  return updatePendingUploads(uploads =>
+    uploads.filter(upload => upload.fileHash !== fileHash)
   );
-  await setLocal('pb_pending_uploads', filtered);
 }
 
 /**
@@ -232,21 +235,6 @@ export async function resumeInterruptedUploads(): Promise<number> {
     let interruptedCount = 0;
 
     for (const pendingUpload of pendingUploads) {
-      // Skip uploads older than 1 hour
-      if (Date.now() - pendingUpload.timestamp > 60 * 60 * 1000) {
-        console.log('Skipping old pending upload:', pendingUpload.fileName);
-        continue;
-      }
-
-      // Skip uploads with too many attempts
-      if (pendingUpload.attempts >= 3) {
-        console.log(
-          'Skipping upload with too many attempts:',
-          pendingUpload.fileName
-        );
-        continue;
-      }
-
       // The file's contents don't survive a worker restart, so it can't be resumed.
       // Tell the user instead of quietly dropping it.
       console.warn('An upload was interrupted');

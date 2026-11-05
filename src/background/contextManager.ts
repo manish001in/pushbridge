@@ -17,6 +17,7 @@ import {
   ContactsApiResponse,
 } from '../types/api-interfaces';
 
+import { currentAccountEpoch } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { getLocal, setLocal } from './storage';
@@ -151,6 +152,7 @@ export class ContextManager {
   }
 
   private async performRefresh(trigger: ContextRefreshTrigger): Promise<void> {
+    const accountEpoch = currentAccountEpoch();
     try {
       const token = await getLocal<string>('pb_token');
       if (!token) {
@@ -231,6 +233,11 @@ export class ContextManager {
       }
 
       // Create new context
+      // Signed out meanwhile: don't refill what the reset cleared.
+      if (accountEpoch !== currentAccountEpoch()) {
+        return;
+      }
+
       this.context = {
         current_device_iden: currentDeviceIden,
         owned_channels: ownedChannelsMap,
