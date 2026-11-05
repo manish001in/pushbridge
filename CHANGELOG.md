@@ -8,7 +8,9 @@
 - Move up/down buttons for reordering tabs with the keyboard
 
 ### Fixed
-- Popup draws immediately instead of waiting on the network, and only loads a tab when it is opened
+- Popup draws immediately instead of waiting on the network, then loads the other tabs in the background
+- Tabs show saved data straight away and refresh quietly, instead of showing a loading state
+- SMS conversations update in the popup when a background sync finishes
 - Live pushes stopped after a browser restart or worker restart
 - Pushes sent while the computer was asleep are now caught up on reconnect, including auto-opening links
 - "Enable notifications", "Play notification sound" and "Auto-reconnect" settings had no effect

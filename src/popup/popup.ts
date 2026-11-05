@@ -118,6 +118,7 @@ async function initializePopup() {
 
       const firstTab = activateInitialPane(container);
       if (firstTab) mountPane(firstTab);
+      preloadPanes();
 
       // Initialize tab switching
       setupTabNavigation();
@@ -169,6 +170,34 @@ function mountPane(tab: string): void {
   pane.dataset.mounted = 'true';
   pane.innerHTML = PANE_CONTENT[tab]();
   if (tab === 'messages') setupSmsInterface();
+}
+
+/**
+ * Mount the other tabs in the background once the first one has drawn. Each shows
+ * its cached data straight away and refreshes itself, so switching tabs is instant.
+ * One per idle period keeps the popup responsive while they start.
+ */
+function preloadPanes(): void {
+  const schedule: (callback: () => void) => void =
+    'requestIdleCallback' in window
+      ? callback => window.requestIdleCallback(callback, { timeout: 200 })
+      : callback => window.setTimeout(callback, 50);
+
+  const mountNext = () => {
+    const next = Array.from(
+      document.querySelectorAll<HTMLElement>('.tab-button')
+    )
+      .map(button => button.dataset.tab!)
+      .find(
+        tab =>
+          !document.querySelector<HTMLElement>(`.tab-pane[data-tab="${tab}"]`)
+            ?.dataset.mounted
+      );
+    if (!next) return;
+    mountPane(next);
+    schedule(mountNext);
+  };
+  schedule(mountNext);
 }
 
 function showTab(tab: string): void {
@@ -247,6 +276,7 @@ async function refreshSmsTab(isStale: boolean): Promise<void> {
       nav.querySelector<HTMLElement>('.tab-button')?.dataset.tab;
     if (nextTab) showTab(nextTab);
     labelSmsTab();
+    preloadPanes();
   } catch (error) {
     console.error('🪟 [Popup] Failed to refresh SMS devices:', error);
   }

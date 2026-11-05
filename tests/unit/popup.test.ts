@@ -163,25 +163,41 @@ describe('Popup and standalone window', () => {
       });
     });
 
-    test('mounts a tab only when it is first opened', async () => {
-      await openPopup();
+    const idle = () => new Promise(resolve => setTimeout(resolve, 300));
+
+    test('draws the first tab at once and loads the others in the background', async () => {
+      await idle(); // Let timers from the previous test finish
+      document.dispatchEvent(new Event('DOMContentLoaded'));
+      await new Promise(resolve => setTimeout(resolve, 0));
       expect(document.querySelector('pb-composer')).not.toBeNull();
       expect(document.querySelector('pb-recent-pushes')).toBeNull();
-      expect(document.querySelector('pb-channels')).toBeNull();
 
-      document
-        .querySelector<HTMLButtonElement>('.tab-button[data-tab="pushes"]')!
-        .click();
+      await idle();
       expect(document.querySelector('pb-recent-pushes')).not.toBeNull();
-      const mounted = document.querySelector('pb-recent-pushes');
+      expect(document.querySelector('pb-mirror-list')).not.toBeNull();
+      expect(document.querySelector('pb-channels')).not.toBeNull();
+      // Loading in the background doesn't change the tab you're looking at.
+      expect(
+        document.querySelector<HTMLElement>('.tab-pane.active')?.dataset.tab
+      ).toBe('composer');
+    });
 
-      document
-        .querySelector<HTMLButtonElement>('.tab-button[data-tab="composer"]')!
-        .click();
+    test('switching to a background-loaded tab keeps the same instance', async () => {
+      await openPopup();
+      await idle();
+      const mounted = document.querySelector('pb-recent-pushes');
       document
         .querySelector<HTMLButtonElement>('.tab-button[data-tab="pushes"]')!
         .click();
       expect(document.querySelector('pb-recent-pushes')).toBe(mounted);
+    });
+
+    test('does not load hidden tabs in the background', async () => {
+      stored.pb_settings = { hiddenTabs: ['Subscriptions'] };
+      await openPopup();
+      await idle();
+      expect(document.querySelector('pb-channels')).toBeNull();
+      expect(document.querySelector('pb-recent-pushes')).not.toBeNull();
     });
 
     test('adds the SMS tab when an expired device list turns out to have one', async () => {

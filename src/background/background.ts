@@ -6,6 +6,7 @@ import { TransferRecord } from '../types/pushbullet';
 
 import { initializeKeepAlive, registerKeepAliveListener } from './alarm';
 import {
+  clearAllChannelCaches,
   initializeChannelManager,
   getOwnedChannels,
   refreshChannelData,
@@ -2540,6 +2541,7 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
     // notifications and writing to storage after the reset.
     disconnectWebSocket();
     operationQueue.clearQueue();
+    await clearAllChannelCaches();
 
     // Clear ALL storage from chrome.storage.local (this clears everything)
     await chrome.storage.local.clear();

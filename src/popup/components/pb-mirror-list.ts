@@ -308,7 +308,7 @@ export class PbMirrorList extends LitElement {
   }
 
   render() {
-    if (this.loading) {
+    if (this.loading && this.mirrors.length === 0) {
       return html`
         <div class="loading-state">
           <div>Loading notifications...</div>
