@@ -14,7 +14,7 @@ jest.mock('lit', () => ({
   css: () => '',
 }));
 jest.mock('lit/decorators.js', () => ({
-  customElement: (name: string) => (target: CustomElementConstructor) => {
+  customElement: (name: string) => (target: typeof HTMLElement) => {
     customElements.define(name, target);
   },
   property: () => () => {},
