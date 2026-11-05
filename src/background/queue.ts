@@ -47,9 +47,7 @@ export async function enqueue(
       retryCount: 0,
     };
 
-    const pendingOps = (await getLocal<PushbridgeOp[]>('pb_pending_ops')) || [];
-    pendingOps.push(operation);
-    await setLocal('pb_pending_ops', pendingOps);
+    await updatePendingOps(ops => [...ops, operation]);
 
     console.log('Operation queued:', operation.type, operation.id);
 
@@ -64,6 +62,24 @@ export async function enqueue(
       code: error instanceof Error ? undefined : 500,
     });
   }
+}
+
+let pendingOpsWrite: Promise<unknown> = Promise.resolve();
+
+/**
+ * Apply a change to the stored queue, one at a time, always from its current
+ * contents. Writing back an older snapshot would resend finished operations and
+ * drop ones added meanwhile.
+ */
+function updatePendingOps(
+  change: (ops: PushbridgeOp[]) => PushbridgeOp[]
+): Promise<void> {
+  const write = pendingOpsWrite.then(async () => {
+    const ops = (await getLocal<PushbridgeOp[]>('pb_pending_ops')) || [];
+    await setLocal('pb_pending_ops', change(ops));
+  });
+  pendingOpsWrite = write.catch(() => undefined);
+  return write;
 }
 
 /**
@@ -91,8 +107,7 @@ export async function processQueue(): Promise<void> {
         await processOperation(op);
 
         // Remove successful operation from queue
-        const updatedOps = pendingOps.filter(p => p.id !== op.id);
-        await setLocal('pb_pending_ops', updatedOps);
+        await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
 
         // Rate limiting delay
         await new Promise(resolve => setTimeout(resolve, PROCESSING_INTERVAL));
@@ -107,8 +122,7 @@ export async function processQueue(): Promise<void> {
             'Operation exceeded max retries, removing from queue:',
             op.id
           );
-          const updatedOps = pendingOps.filter(p => p.id !== op.id);
-          await setLocal('pb_pending_ops', updatedOps);
+          await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
 
           await reportError(PBError.Unknown, {
             message: `Operation failed after ${MAX_RETRY_COUNT} retries: ${op.type}`,
@@ -116,8 +130,9 @@ export async function processQueue(): Promise<void> {
           });
         } else {
           // Update operation in queue with new retry count
-          const updatedOps = pendingOps.map(p => (p.id === op.id ? op : p));
-          await setLocal('pb_pending_ops', updatedOps);
+          await updatePendingOps(ops =>
+            ops.map(p => (p.id === op.id ? op : p))
+          );
         }
       }
     }

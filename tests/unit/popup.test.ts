@@ -1,7 +1,4 @@
-import {
-  getDefaultSmsDevice,
-  hasSmsCapableDevices,
-} from '../../src/background/deviceManager';
+import { getCachedSmsState } from '../../src/popup/smsState';
 
 // Exercise the entry point, but leave network-backed Lit components out of this
 // popup/window contract. They have their own data-loading responsibilities.
@@ -16,9 +13,8 @@ jest.mock('../../src/popup/components/pb-channels', () => ({}));
 jest.mock('../../src/popup/components/pb-theme', () => ({ bootTheme() {} }), {
   virtual: true,
 });
-jest.mock('../../src/background/deviceManager', () => ({
-  hasSmsCapableDevices: jest.fn(),
-  getDefaultSmsDevice: jest.fn(),
+jest.mock('../../src/popup/smsState', () => ({
+  getCachedSmsState: jest.fn(),
 }));
 
 describe('Popup and standalone window', () => {
@@ -43,8 +39,10 @@ describe('Popup and standalone window', () => {
     windows = [];
     popupClosed = false;
     currentTab = undefined;
-    (hasSmsCapableDevices as jest.Mock).mockResolvedValue(false);
-    (getDefaultSmsDevice as jest.Mock).mockResolvedValue(null);
+    (getCachedSmsState as jest.Mock).mockResolvedValue({
+      device: null,
+      isStale: false,
+    });
     window.matchMedia = jest.fn().mockReturnValue({ matches: false });
     (chrome.storage.local.get as jest.Mock).mockImplementation((key, cb) => {
       const result = typeof key === 'string' ? { [key]: stored[key] } : stored;
@@ -146,5 +144,78 @@ describe('Popup and standalone window', () => {
     const button = document.getElementById('open-window-btn');
     expect(button).not.toBeNull();
     expect(button!.style.display).toBe('none');
+  });
+
+  describe('startup', () => {
+    const buttons = () =>
+      Array.from(document.querySelectorAll('.tab-button')).map(
+        button => (button as HTMLElement).dataset.tab
+      );
+
+    test('draws without waiting for the worker', async () => {
+      (chrome.runtime.sendMessage as jest.Mock).mockReturnValue(
+        new Promise(() => undefined)
+      );
+      await openPopup();
+      expect(buttons()).toContain('composer');
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        cmd: 'POPUP_OPEN',
+      });
+    });
+
+    test('mounts a tab only when it is first opened', async () => {
+      await openPopup();
+      expect(document.querySelector('pb-composer')).not.toBeNull();
+      expect(document.querySelector('pb-recent-pushes')).toBeNull();
+      expect(document.querySelector('pb-channels')).toBeNull();
+
+      document
+        .querySelector<HTMLButtonElement>('.tab-button[data-tab="pushes"]')!
+        .click();
+      expect(document.querySelector('pb-recent-pushes')).not.toBeNull();
+      const mounted = document.querySelector('pb-recent-pushes');
+
+      document
+        .querySelector<HTMLButtonElement>('.tab-button[data-tab="composer"]')!
+        .click();
+      document
+        .querySelector<HTMLButtonElement>('.tab-button[data-tab="pushes"]')!
+        .click();
+      expect(document.querySelector('pb-recent-pushes')).toBe(mounted);
+    });
+
+    test('adds the SMS tab when an expired device list turns out to have one', async () => {
+      (getCachedSmsState as jest.Mock)
+        .mockResolvedValueOnce({ device: null, isStale: true })
+        .mockResolvedValue({
+          device: { iden: 'phone-1', nickname: 'Phone' },
+          isStale: false,
+        });
+      await openPopup();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(buttons()).toContain('messages');
+      expect(
+        document.querySelector<HTMLElement>('.tab-button.active')?.dataset.tab
+      ).toBe('composer');
+    });
+
+    test('a fresh device list causes no background refresh', async () => {
+      (chrome.runtime.sendMessage as jest.Mock).mockClear();
+      await openPopup();
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith({
+        cmd: 'GET_SMS_CAPABLE_DEVICES',
+      });
+    });
+
+    test('device names cannot inject markup into the SMS tab', async () => {
+      (getCachedSmsState as jest.Mock).mockResolvedValue({
+        device: { iden: 'phone-1', nickname: '<img src=x onerror=alert(1)>' },
+        isStale: false,
+      });
+      await openPopup();
+      const tab = document.querySelector('.tab-button[data-tab="messages"]')!;
+      expect(tab.querySelector('img')).toBeNull();
+      expect(tab.textContent).toContain('<img src=x');
+    });
   });
 });

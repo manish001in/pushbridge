@@ -21,7 +21,6 @@ const requiredFiles = [
   'dist/background.js',
   'dist/popup.js',
   'dist/options.js',
-  'dist/content.js',
   'public/manifest.json',
   'public/popup.html',
   'public/options.html',

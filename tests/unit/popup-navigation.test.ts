@@ -1,7 +1,4 @@
-import {
-  getDefaultSmsDevice,
-  hasSmsCapableDevices,
-} from '../../src/background/deviceManager';
+import { getCachedSmsState } from '../../src/popup/smsState';
 
 // Exercise the entry point, but leave network-backed Lit components out of this
 // navigation contract. They have their own data-loading responsibilities.
@@ -13,9 +10,8 @@ jest.mock('../../src/popup/components/pb-file-drop', () => ({}));
 jest.mock('../../src/popup/components/pb-sms-thread', () => ({}));
 jest.mock('../../src/popup/components/pb-conversation-list', () => ({}));
 jest.mock('../../src/popup/components/pb-channels', () => ({}));
-jest.mock('../../src/background/deviceManager', () => ({
-  hasSmsCapableDevices: jest.fn(),
-  getDefaultSmsDevice: jest.fn(),
+jest.mock('../../src/popup/smsState', () => ({
+  getCachedSmsState: jest.fn(),
 }));
 
 describe('Popup navigation', () => {
@@ -41,8 +37,10 @@ describe('Popup navigation', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div class="container"></div>';
     stored = { pb_token: 'fixture-token', pb_settings: {} };
-    (hasSmsCapableDevices as jest.Mock).mockResolvedValue(false);
-    (getDefaultSmsDevice as jest.Mock).mockResolvedValue(null);
+    (getCachedSmsState as jest.Mock).mockResolvedValue({
+      device: null,
+      isStale: false,
+    });
     window.matchMedia = jest.fn().mockReturnValue({ matches: false });
     (chrome.storage.local.get as jest.Mock).mockImplementation((key, cb) => {
       const result = typeof key === 'string' ? { [key]: stored[key] } : stored;
@@ -109,24 +107,22 @@ describe('Popup navigation', () => {
   });
 
   test('keeps the SMS pane intact when the SMS tab is hidden', async () => {
-    (hasSmsCapableDevices as jest.Mock).mockResolvedValue(true);
-    (getDefaultSmsDevice as jest.Mock).mockResolvedValue({
-      iden: 'phone-1',
-      nickname: 'Fixture phone',
+    (getCachedSmsState as jest.Mock).mockResolvedValue({
+      device: { iden: 'phone-1', nickname: 'Fixture phone' },
+      isStale: false,
     });
     stored.pb_settings = { hiddenTabs: ['SMS/MMS'] };
     await openPopup();
     expect(
       document.querySelector('.tab-button[data-tab="messages"]')
     ).toBeNull();
-    expect(document.getElementById('conversation-list')).not.toBeNull();
+    expect(document.querySelector('.tab-pane .sms-header')).toBeNull();
   });
 
   test('shows SMS first when requested and an SMS-capable device is available', async () => {
-    (hasSmsCapableDevices as jest.Mock).mockResolvedValue(true);
-    (getDefaultSmsDevice as jest.Mock).mockResolvedValue({
-      iden: 'phone-1',
-      nickname: 'Fixture phone',
+    (getCachedSmsState as jest.Mock).mockResolvedValue({
+      device: { iden: 'phone-1', nickname: 'Fixture phone' },
+      isStale: false,
     });
     stored.pb_settings = { optionOrder: ['SMS/MMS', 'Send'] };
     await openPopup();
@@ -159,7 +155,10 @@ describe('Popup navigation', () => {
     ).toBe('channels');
     expect(JSON.stringify(stored.pb_settings)).toBe(savedSettings);
 
-    (hasSmsCapableDevices as jest.Mock).mockResolvedValue(true);
+    (getCachedSmsState as jest.Mock).mockResolvedValue({
+      device: { iden: 'phone-1', nickname: 'Fixture phone' },
+      isStale: false,
+    });
     await openPopup();
     expect(document.querySelectorAll('.tab-button')).toHaveLength(1);
     expect(

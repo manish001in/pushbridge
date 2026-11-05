@@ -55,15 +55,7 @@ class HttpClient {
     const method = options.method || 'GET';
 
     console.log(`🌐 [HTTP-${requestId}] ${method} ${url}`);
-    console.log(`📋 [HTTP-${requestId}] Request options:`, {
-      method,
-      headers: options.headers,
-      body: options.body
-        ? options.body.length > 200
-          ? options.body.substring(0, 200) + '...'
-          : options.body
-        : undefined,
-    });
+    // Headers hold the access token and bodies hold message text; never log them.
 
     // 1. Check if backoff is active
     if (rateLimitManager.isBackoffActive()) {

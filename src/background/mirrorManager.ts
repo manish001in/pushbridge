@@ -9,6 +9,7 @@ import { MirrorPush, DismissalPush, MirrorMeta } from '../types/pushbullet';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { notificationBadge } from './notificationBadge';
+import { getNotificationPrefs } from './notificationPrefs';
 import { addMessageToThread } from './smsBridge';
 import { getLocal, setLocal, removeLocal } from './storage';
 import { fromPushbulletTime } from './timestampUtils';
@@ -52,22 +53,24 @@ export async function handleMirror(push: MirrorPush): Promise<void> {
       application_name: push.application_name,
       icon_url: push.icon_url,
       expiresAt: Date.now() + MIRROR_TTL,
+      createdAt: Date.now(),
     };
 
     // Store metadata in local storage
     await setLocal(`${MIRROR_STORAGE_PREFIX}${chromeNotifId}`, notifMeta);
 
     // Create Chrome notification
-    const notificationOptions = {
-      type: 'basic' as const,
-      title: push.title,
-      message: push.body,
-      iconUrl: push.icon_url ? push.icon_url : 'icons/48.png',
-      requireInteraction: true,
-      silent: false,
-    };
-
-    await chrome.notifications.create(chromeNotifId, notificationOptions);
+    const prefs = await getNotificationPrefs();
+    if (prefs.enabled && prefs.mirrorsEnabled) {
+      await chrome.notifications.create(chromeNotifId, {
+        type: 'basic' as const,
+        title: push.title,
+        message: push.body,
+        iconUrl: push.icon_url ? push.icon_url : 'icons/48.png',
+        requireInteraction: !prefs.autoDismiss,
+        silent: !prefs.sound,
+      });
+    }
 
     // Update notification badge for mirror notification
     console.log('🔔 [MirrorManager] Adding mirror notification to badge');
@@ -108,7 +111,7 @@ export async function handleRemoteDismiss(push: DismissalPush): Promise<void> {
     // Find matching Chrome notification by metadata
     const mirrorEntries = await findMatchingMirrors(push);
 
-    for (const [chromeNotifId] of mirrorEntries) {
+    for (const [chromeNotifId, meta] of mirrorEntries) {
       // Clear the Chrome notification
       await chrome.notifications.clear(chromeNotifId);
 
@@ -117,7 +120,7 @@ export async function handleRemoteDismiss(push: DismissalPush): Promise<void> {
 
       // Update notification badge (decrement mirror count)
       console.log('🗑️ [MirrorManager] Removing mirror notification from badge');
-      await notificationBadge.addPushNotifications(-1);
+      await releaseMirrorBadge(meta);
 
       console.log(
         'Chrome notification cleared:',
@@ -138,6 +141,27 @@ export async function handleRemoteDismiss(push: DismissalPush): Promise<void> {
 /**
  * Handle user-initiated dismissal (Chrome notification clicked/closed)
  */
+/**
+ * Take a mirror off the badge. The badge count is shared and opening the popup
+ * resets it, so a mirror from before that no longer counts; removing it would
+ * take away a newer push instead.
+ */
+async function releaseMirrorBadge(meta: MirrorMeta): Promise<void> {
+  const lastSeenMs = await unifiedNotificationTracker.getLastSeenMs();
+  // Records from older versions only have an expiry to go by.
+  const createdAt = meta.createdAt ?? meta.expiresAt - MIRROR_TTL;
+  if (createdAt > lastSeenMs) {
+    await notificationBadge.addPushNotifications(-1);
+  }
+}
+
+/** Mirror notifications are the ones with a stored record under their ID. */
+export async function isMirrorNotificationId(
+  chromeNotifId: string
+): Promise<boolean> {
+  return !!(await getLocal(`${MIRROR_STORAGE_PREFIX}${chromeNotifId}`));
+}
+
 export async function handleUserDismissal(
   chromeNotifId: string
 ): Promise<void> {
@@ -158,6 +182,11 @@ export async function handleUserDismissal(
       return;
     }
 
+    // Finish locally first, so a failure telling the phone can't bring back a
+    // notification the user already dismissed.
+    await removeLocal(`${MIRROR_STORAGE_PREFIX}${chromeNotifId}`);
+    await releaseMirrorBadge(meta);
+
     // Get user ID for dismissal payload
     const userIden = await getLocal<string>('pb_user_iden');
     if (!userIden) {
@@ -167,15 +196,6 @@ export async function handleUserDismissal(
 
     // Send dismissal ephemeral to Pushbullet
     await sendDismissalEphemeral(meta, userIden);
-
-    // Remove from storage
-    await removeLocal(`${MIRROR_STORAGE_PREFIX}${chromeNotifId}`);
-
-    // Update notification badge (decrement mirror count)
-    console.log(
-      '👤 [MirrorManager] Removing mirror notification from badge (user dismissal)'
-    );
-    await notificationBadge.addPushNotifications(-1);
 
     console.log('User dismissal sent to phone for:', chromeNotifId);
   } catch (error) {
@@ -284,23 +304,30 @@ export async function reconstructMirrors(): Promise<void> {
 
         // Skip expired entries
         if (meta.expiresAt < now) {
+          await chrome.notifications.clear(
+            key.replace(MIRROR_STORAGE_PREFIX, '')
+          );
           await removeLocal(key);
           continue;
         }
 
         const chromeNotifId = key.replace(MIRROR_STORAGE_PREFIX, '');
 
+        // Auto-dismissed notifications should not come back after a restart.
+        const prefs = await getNotificationPrefs();
+        if (!prefs.enabled || !prefs.mirrorsEnabled || prefs.autoDismiss) {
+          continue;
+        }
+
         // Recreate the notification
-        const notificationOptions = {
+        await chrome.notifications.create(chromeNotifId, {
           type: 'basic' as const,
           title: meta.title,
           message: meta.body,
           iconUrl: meta.icon_url ? meta.icon_url : 'icons/48.png',
           requireInteraction: true,
-          silent: false,
-        };
-
-        await chrome.notifications.create(chromeNotifId, notificationOptions);
+          silent: !prefs.sound,
+        });
         console.log('Reconstructed notification:', chromeNotifId);
       }
     }
@@ -324,19 +351,20 @@ export async function cleanupExpiredMirrors(): Promise<void> {
         const meta = value as MirrorMeta;
 
         if (meta.expiresAt < now) {
+          // Clear it too; without its record it could never be dismissed later.
+          await chrome.notifications.clear(
+            key.replace(MIRROR_STORAGE_PREFIX, '')
+          );
           await removeLocal(key);
+          await releaseMirrorBadge(meta);
           expiredCount++;
           console.log('Cleaned up expired mirror:', key);
         }
       }
     }
 
-    // Update notification badge if any mirrors were cleaned up
     if (expiredCount > 0) {
-      console.log(
-        `🧹 [MirrorManager] Removed ${expiredCount} expired mirrors from badge`
-      );
-      await notificationBadge.addPushNotifications(-expiredCount);
+      console.log(`🧹 [MirrorManager] Removed ${expiredCount} expired mirrors`);
     }
   } catch (error) {
     console.error('Failed to cleanup expired mirrors:', error);
@@ -441,14 +469,17 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
       chromeNotifId: chromeNotifId,
     });
 
-    await chrome.notifications.create(chromeNotifId, {
-      type: 'basic' as const,
-      title: push.title,
-      message: push.body,
-      iconUrl: push.icon_url ? push.icon_url : 'icons/48.png',
-      requireInteraction: false, // SMS notifications can auto-dismiss
-      silent: false,
-    });
+    const prefs = await getNotificationPrefs();
+    if (prefs.enabled) {
+      await chrome.notifications.create(chromeNotifId, {
+        type: 'basic' as const,
+        title: push.title,
+        message: push.body,
+        iconUrl: push.icon_url ? push.icon_url : 'icons/48.png',
+        requireInteraction: false, // SMS notifications can auto-dismiss
+        silent: !prefs.sound,
+      });
+    }
 
     // Create SMS message object
     const message = {

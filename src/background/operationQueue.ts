@@ -63,7 +63,8 @@ class OperationQueue {
     const originalReject = target.reject;
 
     target.resolve = (response: Response) => {
-      originalResolve(response);
+      // A response body can only be read once, so each caller gets its own copy.
+      originalResolve(response.clone());
       source.resolve(response);
     };
 
@@ -434,11 +435,17 @@ class OperationQueue {
 
       if (queueData && Array.isArray(queueData)) {
         // Convert back to QueuedOperation format (without resolve/reject)
-        this.queue = queueData.map(op => ({
-          ...op,
-          resolve: () => {}, // Placeholder - these operations will be lost on restart
-          reject: () => {}, // This is expected behavior for service worker restarts
-        }));
+        // Keep anything queued while storage was being read; it has live callers.
+        this.queue = [
+          ...queueData.map(op => ({
+            ...op,
+            resolve: () => {}, // Placeholder - these operations will be lost on restart
+            reject: () => {}, // This is expected behavior for service worker restarts
+          })),
+          ...this.queue.filter(
+            current => !queueData.some(stored => stored.id === current.id)
+          ),
+        ];
 
         console.log(`Loaded ${this.queue.length} operations from storage`);
 

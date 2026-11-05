@@ -50,6 +50,9 @@ export interface UnreadCounts {
 
 // Constants
 const CACHE_SIZE = 50; // Maximum entries per notification type
+// Must exceed the 250 pushes a catch-up can scan. An ID evicted before it is
+// checked again would look new, and auto-open its link a second time.
+const PUSH_CACHE_SIZE = 500;
 const BUFFER_TIME = 5000; // 5 seconds buffer for clock skew
 const CACHE_CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 const STORAGE_KEYS = {
@@ -58,6 +61,14 @@ const STORAGE_KEYS = {
   COUNTS: 'unified_notification_counts',
   VERSION: 'unified_notification_tracker_version',
 };
+
+/**
+ * Pushes report seconds while SMS and mirrors report milliseconds. Anything this
+ * large is already milliseconds: as seconds it would be thousands of years away.
+ */
+function toMilliseconds(timestamp: number): number {
+  return timestamp > 1e11 ? timestamp : timestamp * 1000;
+}
 
 class UnifiedNotificationTracker {
   private static instance: UnifiedNotificationTracker;
@@ -155,6 +166,28 @@ class UnifiedNotificationTracker {
     }
   }
 
+  /** Last seen time in ms. Older versions could store it in ms by mistake. */
+  private lastSeenMs(): number {
+    return toMilliseconds(this.timestamps.lastSeenTimestamp);
+  }
+
+  async getLastSeenMs(): Promise<number> {
+    await this.ensureInitialized();
+    return this.lastSeenMs();
+  }
+
+  /** True if the timestamp is after what the user has last seen. */
+  async isNewerThanLastSeen(timestamp: number): Promise<boolean> {
+    await this.ensureInitialized();
+    return toMilliseconds(timestamp) > this.lastSeenMs() - BUFFER_TIME;
+  }
+
+  /** False until the user has opened the popup at least once. */
+  async hasBaseline(): Promise<boolean> {
+    await this.ensureInitialized();
+    return this.timestamps.lastSeenTimestamp > 0;
+  }
+
   /**
    * Determine if a notification should be shown based on timestamp and cache
    */
@@ -166,9 +199,9 @@ class UnifiedNotificationTracker {
     const created =
       typeof notification.created === 'string'
         ? new Date(notification.created).getTime()
-        : formatToThreeDecimals(notification.created) * 1000;
+        : toMilliseconds(formatToThreeDecimals(notification.created));
 
-    const lastSeenTimestampMs = this.timestamps.lastSeenTimestamp * 1000; // Convert seconds to milliseconds
+    const lastSeenTimestampMs = this.lastSeenMs(); // Convert seconds to milliseconds
     const bufferTimeMs = BUFFER_TIME;
     const cutoffTimestampMs = lastSeenTimestampMs - bufferTimeMs;
 
@@ -195,7 +228,7 @@ class UnifiedNotificationTracker {
 
     // Check if notification is too old (with buffer time for clock skew)
     // Note: lastSeenTimestamp is in seconds, created is in milliseconds
-    if (created <= this.timestamps.lastSeenTimestamp * 1000 - bufferTimeMs) {
+    if (created <= this.lastSeenMs() - bufferTimeMs) {
       console.log(
         `⏭️ [UnifiedTracker] REJECTED - Too old: ${notification.id}`,
         {
@@ -399,7 +432,7 @@ class UnifiedNotificationTracker {
     // Reset timestamps to current time
     const now = Date.now();
     this.timestamps = {
-      lastSeenTimestamp: now,
+      lastSeenTimestamp: now / 1000, // Stored in seconds, unlike the others
       lastProcessedPushTimestamp: now,
       lastProcessedMirrorTimestamp: now,
       lastProcessedSmsTimestamp: now,
@@ -521,8 +554,9 @@ class UnifiedNotificationTracker {
     cache.unshift(id);
 
     // Keep only the most recent entries
-    if (cache.length > CACHE_SIZE) {
-      cache.splice(CACHE_SIZE);
+    const limit = type === 'push' ? PUSH_CACHE_SIZE : CACHE_SIZE;
+    if (cache.length > limit) {
+      cache.splice(limit);
     }
 
     (this.cache[cacheKey] as string[]) = cache;

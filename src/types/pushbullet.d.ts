@@ -55,6 +55,7 @@ export interface MirrorMeta {
   application_name?: string;
   icon_url?: string;
   expiresAt: number;
+  createdAt?: number;
 }
 
 // File upload types for Milestone 4

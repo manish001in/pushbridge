@@ -10,10 +10,7 @@ import './components/pb-file-drop';
 import './components/pb-sms-thread';
 import './components/pb-conversation-list';
 import './components/pb-channels';
-import {
-  hasSmsCapableDevices,
-  getDefaultSmsDevice,
-} from '../background/deviceManager';
+import type { PushbulletDevice } from '../background/deviceManager';
 import { getLocal } from '../background/storage';
 
 import {
@@ -21,8 +18,11 @@ import {
   getHiddenTabs,
   buildTabButtonsHTML,
   activateInitialPane,
+  type OptionKey,
 } from './components/pb-nav';
 import { bootTheme } from './components/pb-theme';
+import { installBackgroundLinkHandler } from './linkHandling';
+import { getCachedSmsState } from './smsState';
 
 bootTheme();
 
@@ -31,17 +31,23 @@ if (new URLSearchParams(window.location.search).has('windowMode')) {
   document.documentElement.classList.add('window-mode');
 }
 
+installBackgroundLinkHandler();
+
+let currentSmsDevice: PushbulletDevice | null = null;
+let currentOrder: OptionKey[] = [];
+let currentHidden: OptionKey[] = [];
+
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('🪟 [Popup] Popup opened, sending POPUP_OPEN message');
 
-  // Send POPUP_OPEN message to clear push notifications from badge
-  try {
-    await chrome.runtime.sendMessage({ cmd: 'POPUP_OPEN' });
-    console.log('🪟 [Popup] POPUP_OPEN message sent successfully');
-  } catch (error) {
-    console.error('🪟 [Popup] Failed to send POPUP_OPEN message:', error);
-  }
+  // Clearing the badge can wait on the worker and the network, so it must not
+  // hold up the first paint.
+  chrome.runtime
+    .sendMessage({ cmd: 'POPUP_OPEN' })
+    .catch(error =>
+      console.error('🪟 [Popup] Failed to send POPUP_OPEN message:', error)
+    );
 
   await initializePopup();
 });
@@ -73,13 +79,15 @@ async function initializePopup() {
         });
       }
     } else {
-      // Check if user has SMS-capable devices
-      const hasSms = await hasSmsCapableDevices();
-      const defaultSmsDevice = hasSms ? await getDefaultSmsDevice() : null;
-      const [order, hidden] = await Promise.all([
+      // Draw from cached data; anything newer is applied after first paint.
+      const [smsState, order, hidden] = await Promise.all([
+        getCachedSmsState(),
         getOptionOrder(),
         getHiddenTabs(),
       ]);
+      currentSmsDevice = smsState.device;
+      currentOrder = order;
+      currentHidden = hidden;
 
       // Show main UI with tabs
       container.innerHTML = `
@@ -87,41 +95,13 @@ async function initializePopup() {
           <div class="popup-header">
             <h2 class="popup-title">Pushbridge</h2>
             <div class="tab-navigation">
-              ${buildTabButtonsHTML(order, hasSms, hidden)}
+              ${buildTabButtonsHTML(order, !!smsState.device, hidden)}
             </div>
           </div>
           <div class="tab-content">
-              <div class="tab-pane active" data-tab="composer">
-                <pb-composer></pb-composer>
-              </div>
-              <div class="tab-pane" data-tab="pushes">
-                <pb-recent-pushes></pb-recent-pushes>
-              </div>
-              <div class="tab-pane" data-tab="notifications">
-                <pb-mirror-list></pb-mirror-list>
-              </div>
-
-              <div class="tab-pane" data-tab="channels">
-                <pb-channels></pb-channels>
-              </div>
-              ${
-                hasSms
-                  ? `<div class="tab-pane" data-tab="messages">
-                <div class="sms-interface">
-                  <div class="sms-view conversation-list-view active">
-                    <pb-conversation-list id="conversation-list"></pb-conversation-list>
-                  </div>
-                  <div class="sms-view sms-thread-view">
-                    <div class="sms-thread-header">
-                      <button class="back-button" id="sms-back-button">← Back</button>
-                      <span class="conversation-title" id="conversation-title">Conversation</span>
-                    </div>
-                    <pb-sms-thread id="sms-thread" device-iden="${defaultSmsDevice?.iden || ''}"></pb-sms-thread>
-                  </div>
-                </div>
-              </div>`
-                  : ''
-              }
+            ${Object.keys(PANE_CONTENT)
+              .map(tab => `<div class="tab-pane" data-tab="${tab}"></div>`)
+              .join('')}
             </div>
             <div class="popup-footer">
               <div class="footer-content">
@@ -136,15 +116,13 @@ async function initializePopup() {
         </div>
       `;
 
-      activateInitialPane(container);
+      const firstTab = activateInitialPane(container);
+      if (firstTab) mountPane(firstTab);
 
       // Initialize tab switching
       setupTabNavigation();
-
-      // Setup SMS interface if available
-      if (hasSms) {
-        setupSmsInterface();
-      }
+      labelSmsTab();
+      void refreshSmsTab(smsState.isStale);
 
       // Setup About dialog
       setupAboutDialog();
@@ -162,55 +140,123 @@ async function initializePopup() {
   }
 }
 
+// Panes mount on first view, so opening the popup only loads what is on screen.
+const PANE_CONTENT: Record<string, () => string> = {
+  composer: () => '<pb-composer></pb-composer>',
+  pushes: () => '<pb-recent-pushes></pb-recent-pushes>',
+  notifications: () => '<pb-mirror-list></pb-mirror-list>',
+  channels: () => '<pb-channels></pb-channels>',
+  messages: () => `
+    <div class="sms-interface">
+      <div class="sms-view conversation-list-view active">
+        <pb-conversation-list id="conversation-list"></pb-conversation-list>
+      </div>
+      <div class="sms-view sms-thread-view">
+        <div class="sms-thread-header">
+          <button class="back-button" id="sms-back-button">← Back</button>
+          <span class="conversation-title" id="conversation-title">Conversation</span>
+        </div>
+        <pb-sms-thread id="sms-thread" device-iden="${currentSmsDevice?.iden || ''}"></pb-sms-thread>
+      </div>
+    </div>`,
+};
+
+function mountPane(tab: string): void {
+  const pane = document.querySelector<HTMLElement>(
+    `.tab-pane[data-tab="${tab}"]`
+  );
+  if (!pane || pane.dataset.mounted) return;
+  pane.dataset.mounted = 'true';
+  pane.innerHTML = PANE_CONTENT[tab]();
+  if (tab === 'messages') setupSmsInterface();
+}
+
+function showTab(tab: string): void {
+  document.querySelectorAll<HTMLElement>('.tab-button').forEach(button => {
+    button.classList.toggle('active', button.dataset.tab === tab);
+  });
+  document.querySelectorAll<HTMLElement>('.tab-pane').forEach(pane => {
+    pane.classList.toggle('active', pane.dataset.tab === tab);
+  });
+  mountPane(tab);
+}
+
 function setupTabNavigation() {
-  const tabButtons = document.querySelectorAll('.tab-button');
-  const tabPanes = document.querySelectorAll('.tab-pane');
-
-  tabButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      const targetTab = button.getAttribute('data-tab');
-
-      // Update active tab button
-      tabButtons.forEach(btn => btn.classList.remove('active'));
-      button.classList.add('active');
-
-      // Update active tab pane
-      tabPanes.forEach(pane => {
-        pane.classList.remove('active');
-        if (pane.getAttribute('data-tab') === targetTab) {
-          pane.classList.add('active');
-        }
-      });
-    });
+  document.querySelector('.tab-navigation')?.addEventListener('click', event => {
+    const button = (event.target as HTMLElement).closest<HTMLElement>(
+      '.tab-button'
+    );
+    if (button?.dataset.tab) showTab(button.dataset.tab);
   });
 }
 
-/**
- * Setup SMS interface with device information
- */
-async function setupSmsInterface(): Promise<void> {
-  try {
-    const defaultDevice = await getDefaultSmsDevice();
-    if (defaultDevice) {
-      const deviceName =
-        defaultDevice.nickname ||
-        defaultDevice.model ||
-        `Device ${defaultDevice.iden.slice(0, 8)}`;
+/** Show which device the SMS tab sends from. */
+function labelSmsTab(): void {
+  const smsTab = document.querySelector('.tab-button[data-tab="messages"]');
+  if (!smsTab || !currentSmsDevice) return;
+  const deviceName =
+    currentSmsDevice.nickname ||
+    currentSmsDevice.model ||
+    `Device ${currentSmsDevice.iden.slice(0, 8)}`;
+  smsTab.innerHTML = `
+    <div class="sms-header">
+      <span class="sms-title">SMS/MMS</span>
+      <span class="device-info"></span>
+    </div>
+  `;
+  // Device names are user-controlled text.
+  smsTab.querySelector('.device-info')!.textContent = `from ${deviceName}`;
+}
 
-      // Update SMS tab header
-      const smsTab = document.querySelector(
-        '.tab-button[data-tab="messages"]'
-      );
-      if (smsTab) {
-        smsTab.innerHTML = `
-          <div class="sms-header">
-            <span class="sms-title">SMS/MMS</span>
-            <span class="device-info">from ${deviceName}</span>
-          </div>
-        `;
-      }
+/**
+ * Refresh an expired device list after first paint, and add or remove the SMS
+ * tab if the answer changed.
+ */
+async function refreshSmsTab(isStale: boolean): Promise<void> {
+  if (!isStale) return;
+  try {
+    const response = await chrome.runtime.sendMessage({
+      cmd: 'GET_SMS_CAPABLE_DEVICES',
+    });
+    if (!response?.success) return;
+
+    const { device } = await getCachedSmsState();
+    const changed = device?.iden !== currentSmsDevice?.iden;
+    currentSmsDevice = device;
+    if (!changed) return;
+
+    // An already-open SMS pane is still bound to the old device.
+    const smsPane = document.querySelector<HTMLElement>(
+      '.tab-pane[data-tab="messages"]'
+    );
+    if (smsPane?.dataset.mounted) {
+      delete smsPane.dataset.mounted;
+      smsPane.innerHTML = '';
     }
 
+    const nav = document.querySelector('.tab-navigation');
+    if (!nav) return;
+    const activeTab =
+      nav.querySelector<HTMLElement>('.tab-button.active')?.dataset.tab;
+    nav.innerHTML = buildTabButtonsHTML(currentOrder, !!device, currentHidden);
+    const stillThere = nav.querySelector(
+      `.tab-button[data-tab="${activeTab}"]`
+    );
+    const nextTab =
+      (stillThere && activeTab) ||
+      nav.querySelector<HTMLElement>('.tab-button')?.dataset.tab;
+    if (nextTab) showTab(nextTab);
+    labelSmsTab();
+  } catch (error) {
+    console.error('🪟 [Popup] Failed to refresh SMS devices:', error);
+  }
+}
+
+/**
+ * Wire up the conversation list and thread once the SMS pane has mounted.
+ */
+function setupSmsInterface(): void {
+  try {
     // Setup conversation list and thread components
     const conversationList = document.getElementById(
       'conversation-list'

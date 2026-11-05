@@ -18,6 +18,9 @@ describe('Saved navigation customization', () => {
     document.body.innerHTML = '<div class="container"></div>';
     stored = { pb_settings: {} };
     window.matchMedia = jest.fn().mockReturnValue({ matches: false });
+    chrome.runtime.getManifest = jest
+      .fn()
+      .mockReturnValue({ version: '0.0.0' });
     (chrome.storage.local.get as jest.Mock).mockImplementation(
       async () => stored
     );
@@ -152,5 +155,78 @@ describe('Saved navigation customization', () => {
     expect(document.getElementById('message')!.textContent).toBe(
       'At least one tab must remain visible.'
     );
+  });
+
+  test('loads when no settings have been saved yet (issue #8)', async () => {
+    delete stored.pb_settings;
+    await openOptions();
+    expect(labels()).toEqual([
+      'Send',
+      'Messages',
+      'Notifications',
+      'Subscriptions',
+    ]);
+  });
+
+  test('moves tabs with the keyboard buttons and keeps focus', async () => {
+    await openOptions();
+    const move = (key: string, direction: number) =>
+      document.querySelector<HTMLButtonElement>(
+        `.move-tab[data-key="${key}"][data-direction="${direction}"]`
+      )!;
+
+    expect(move('Send', -1).disabled).toBe(true);
+    move('Messages', -1).click();
+    await settle();
+    expect(stored.pb_settings.optionOrder.slice(0, 2)).toEqual([
+      'Messages',
+      'Send',
+    ]);
+    // Now first, so "up" is disabled and focus moves to "down".
+    expect(document.activeElement).toBe(move('Messages', 1));
+
+    move('Messages', 1).click();
+    await settle();
+    expect(stored.pb_settings.optionOrder.slice(0, 2)).toEqual([
+      'Send',
+      'Messages',
+    ]);
+    expect(document.activeElement).toBe(move('Messages', 1));
+  });
+
+  test('keyboard moves keep the saved position of an unavailable SMS tab', async () => {
+    stored.pb_settings.optionOrder = [
+      'SMS/MMS',
+      'Send',
+      'Messages',
+      'Notifications',
+      'Subscriptions',
+    ];
+    await openOptions();
+    document
+      .querySelector<HTMLButtonElement>(
+        '.move-tab[data-key="Messages"][data-direction="-1"]'
+      )!
+      .click();
+    await settle();
+    expect(stored.pb_settings.optionOrder).toEqual([
+      'SMS/MMS',
+      'Messages',
+      'Send',
+      'Notifications',
+      'Subscriptions',
+    ]);
+  });
+
+  test.each([
+    ['mirror-notifications-toggle', 'mirrorNotificationsEnabled', true],
+    ['auto-dismiss-toggle', 'autoDismissNotifications', false],
+  ])('%s saves %s', async (id, key, initial) => {
+    await openOptions();
+    const toggle = document.getElementById(id) as HTMLInputElement;
+    expect(toggle.checked).toBe(initial);
+    toggle.click();
+    await settle();
+    expect(stored.pb_settings[key]).toBe(!initial);
   });
 });

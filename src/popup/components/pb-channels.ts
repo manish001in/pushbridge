@@ -6,6 +6,8 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
+import { isSafeLinkUrl } from '../linkHandling';
+
 interface ChannelInfo {
   iden: string;
   tag: string;
@@ -998,7 +1000,7 @@ export class PbChannels extends LitElement {
                         ${post.body
                           ? html`<p class="post-body">${post.body}</p>`
                           : ''}
-                        ${post.url
+                        ${isSafeLinkUrl(post.url)
                           ? html`<a
                               href="${post.url}"
                               target="_blank"

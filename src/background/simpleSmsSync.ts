@@ -8,6 +8,7 @@ import { SmsThread, SmsMsg } from '../types/pushbullet';
 
 import { getDefaultSmsDevice } from './deviceManager';
 import { notificationBadge } from './notificationBadge';
+import { getNotificationPrefs } from './notificationPrefs';
 import { smsApiClient } from './smsApiClient';
 import { getLocal, setLocal } from './storage';
 import { fromPushbulletTime, now } from './timestampUtils';
@@ -466,13 +467,17 @@ async function checkForNewMessages(thread: SmsThread): Promise<void> {
     const notificationId = `sms_sync_${latestMessage.id}`;
 
     // Create Chrome notification
-    await chrome.notifications.create(notificationId, {
-      type: 'basic',
-      title: `SMS from ${thread.name}`,
-      message: latestMessage.text,
-      iconUrl: 'icons/48.png',
-      requireInteraction: false,
-    });
+    const prefs = await getNotificationPrefs();
+    if (prefs.enabled) {
+      await chrome.notifications.create(notificationId, {
+        type: 'basic',
+        title: `SMS from ${thread.name}`,
+        message: latestMessage.text,
+        iconUrl: 'icons/48.png',
+        requireInteraction: false,
+        silent: !prefs.sound,
+      });
+    }
 
     // Update SMS notifications and tracker
     await updateSmsNotificationBadge();
