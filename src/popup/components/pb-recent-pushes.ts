@@ -48,6 +48,8 @@ interface StoredState {
   activeSubtab: 'channels' | 'devices';
 }
 
+const MAX_EMPTY_PAGES_TO_SKIP = 5;
+
 /** Deleted pushes come back from the API as bare records with nothing to show. */
 function withoutDeleted<T>(pushes: T[]): T[] {
   return pushes.filter(
@@ -910,7 +912,7 @@ export class RecentPushes extends LitElement {
     }
   }
 
-  async loadPushes(refresh = false) {
+  async loadPushes(refresh = false, emptyPages = 0) {
     console.log('🔄 [RecentPushes] loadPushes called with refresh:', refresh);
 
     if (this.isLoading) {
@@ -922,6 +924,7 @@ export class RecentPushes extends LitElement {
     this.isLoading = true;
     this.isRefreshing = refresh;
     this.errorMessage = '';
+    let pageHadNothingToShow = false;
 
     try {
       const lastModified = refresh ? undefined : this.lastModified;
@@ -986,6 +989,8 @@ export class RecentPushes extends LitElement {
 
         this.cursor = response.history.cursor;
         this.hasMore = !!response.history.cursor;
+        pageHadNothingToShow =
+          this.hasMore && withoutDeleted(response.history.pushes).length === 0;
 
         // Update last modified timestamp
         if (response.history.pushes.length > 0) {
@@ -1014,6 +1019,12 @@ export class RecentPushes extends LitElement {
       console.log('🔄 [RecentPushes] Setting isLoading to false');
       this.isLoading = false;
       this.isRefreshing = false;
+    }
+
+    // The API can return a page of only deleted records, or none, with real pushes
+    // further back. Don't leave the user looking at an empty list.
+    if (pageHadNothingToShow && emptyPages < MAX_EMPTY_PAGES_TO_SKIP) {
+      await this.loadPushes(false, emptyPages + 1);
     }
   }
 

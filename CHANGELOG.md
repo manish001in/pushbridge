@@ -34,6 +34,7 @@
 - Clicking an SMS or backlog notification opens the extension, with a window on Chrome versions that can't open the popup
 - Live pushes aren't missed in a burst of more than one page
 - Deleted pushes and subscriptions no longer appear as empty rows, and loading more history keeps its place
+- The Messages tab no longer looks empty when recent history is all deleted pushes
 - Settings no longer fail on a device with no type
 - The connection test and diagnostics report the real state and version
 - Mirrored notifications and images in the popup can be used from the keyboard

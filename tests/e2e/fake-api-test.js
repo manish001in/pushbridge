@@ -805,8 +805,16 @@ try {
     await restartWorker();
     api.pushes = [
       ...Array.from({ length: 150 }, (_, i) => newPush(`row${i}`, { modified: 2000 - i, created: 2000 - i })),
-      { iden: 'gone', active: false, created: 3000, modified: 3000 },
     ];
+    // More deleted records than one page holds, ahead of everything real.
+    api.pushes.unshift(
+      ...Array.from({ length: 120 }, (_, i) => ({
+        iden: `gone${i}`,
+        active: false,
+        created: 3000 - i,
+        modified: 3000 - i,
+      }))
+    );
     const popup = await openPopup();
     await popup.click('.tab-button[data-tab="pushes"]');
     await popup.waitForFunction(() =>
