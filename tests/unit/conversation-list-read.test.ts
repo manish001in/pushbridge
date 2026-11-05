@@ -4,6 +4,23 @@
  */
 import '../../src/popup/components/pb-conversation-list';
 
+// Jest can't parse Lit's ES modules. Only the component's own logic is under test.
+jest.mock('lit', () => ({
+  LitElement: class extends HTMLElement {
+    connectedCallback() {}
+    disconnectedCallback() {}
+  },
+  html: () => '',
+  css: () => '',
+}));
+jest.mock('lit/decorators.js', () => ({
+  customElement: (name: string) => (target: CustomElementConstructor) => {
+    customElements.define(name, target);
+  },
+  property: () => () => {},
+  state: () => () => {},
+}));
+
 describe('marking a conversation read from the list', () => {
   const DEVICE_KEY = 'sms_data_phone';
   const thread = (id: string, unreadCount: number) => ({
