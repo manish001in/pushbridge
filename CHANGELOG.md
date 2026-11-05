@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.3] - 2026-11-06
+
+### Added
+- Desktop notifications for live pushes. They skip pushes sent from this browser or to another device, and links that opened in a tab. One scan raises at most 10; the rest stay in Messages and on the badge
+
+### Changed
+- Received files only notify, and are downloaded from Messages. The old auto-download code never ran in practice and has been removed
+
+### Fixed
+- Updates to a mirrored notification replace it instead of adding another, and count once on the badge
+- SMS sync no longer loses newer messages, or threads it failed to fetch
+- Opening an SMS conversation now marks it read, and it stays read after a sync
+- A queued request that got HTTP 429 now retries by itself after the backoff
+- One click on a push notification opens one tab, and only web links can open
+
 ## [1.3.2] - 2026-11-06
 
 ### Added

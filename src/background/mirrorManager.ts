@@ -20,9 +20,34 @@ const MIRROR_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 const MIRROR_STORAGE_PREFIX = 'mirror_';
 
 /**
- * Handle mirror push by creating Chrome notification
+ * The same for every update to a phone notification, so that Chrome replaces it
+ * rather than showing another. Encoded so a separator inside a field can't make
+ * two different notifications match.
  */
-export async function handleMirror(push: MirrorPush): Promise<void> {
+function stableMirrorKey(push: MirrorPush): string {
+  return [
+    push.source_device_iden,
+    push.package_name,
+    push.notification_id,
+    push.notification_tag ?? '',
+  ]
+    .map(part => encodeURIComponent(part))
+    .join(':');
+}
+
+let mirrorChain: Promise<void> = Promise.resolve();
+
+/**
+ * Handle mirror push by creating Chrome notification. One at a time: updates can
+ * arrive together, and each decides what to do from the record the last one wrote.
+ */
+export function handleMirror(push: MirrorPush): Promise<void> {
+  const result = mirrorChain.then(() => processMirror(push));
+  mirrorChain = result.catch(() => undefined);
+  return result;
+}
+
+async function processMirror(push: MirrorPush): Promise<void> {
   try {
     console.log('🔔 [MirrorManager] Handling mirror push:', {
       application_name: push.application_name,
@@ -39,8 +64,14 @@ export async function handleMirror(push: MirrorPush): Promise<void> {
       return;
     }
 
-    // Generate unique Chrome notification ID
-    const chromeNotifId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const chromeNotifId = stableMirrorKey(push);
+
+    // An update to one the badge still counts doesn't count again. If the user has
+    // looked since, the update is news.
+    const existing = await getLocal<MirrorMeta>(
+      `${MIRROR_STORAGE_PREFIX}${chromeNotifId}`
+    );
+    const alreadyOnBadge = !!existing && (await isOnBadge(existing));
 
     // Create notification metadata
     const notifMeta: MirrorMeta = {
@@ -53,7 +84,9 @@ export async function handleMirror(push: MirrorPush): Promise<void> {
       application_name: push.application_name,
       icon_url: push.icon_url,
       expiresAt: Date.now() + MIRROR_TTL,
-      createdAt: Date.now(),
+      createdAt: alreadyOnBadge
+        ? mirrorCreatedAt(existing as MirrorMeta)
+        : Date.now(),
     };
 
     // Store metadata in local storage
@@ -73,8 +106,10 @@ export async function handleMirror(push: MirrorPush): Promise<void> {
     }
 
     // Update notification badge for mirror notification
-    console.log('🔔 [MirrorManager] Adding mirror notification to badge');
-    await notificationBadge.addPushNotifications(1);
+    if (!alreadyOnBadge) {
+      console.log('🔔 [MirrorManager] Adding mirror notification to badge');
+      await notificationBadge.addPushNotifications(1);
+    }
 
     // Mark as processed in unified tracker
     await unifiedNotificationTracker.markAsProcessed(
@@ -147,12 +182,19 @@ export async function handleRemoteDismiss(push: DismissalPush): Promise<void> {
  * take away a newer push instead.
  */
 async function releaseMirrorBadge(meta: MirrorMeta): Promise<void> {
-  const lastSeenMs = await unifiedNotificationTracker.getLastSeenMs();
-  // Records from older versions only have an expiry to go by.
-  const createdAt = meta.createdAt ?? meta.expiresAt - MIRROR_TTL;
-  if (createdAt > lastSeenMs) {
+  if (await isOnBadge(meta)) {
     await notificationBadge.addPushNotifications(-1);
   }
+}
+
+/** Records from older versions only have an expiry to go by. */
+function mirrorCreatedAt(meta: MirrorMeta): number {
+  return meta.createdAt ?? meta.expiresAt - MIRROR_TTL;
+}
+
+async function isOnBadge(meta: MirrorMeta): Promise<boolean> {
+  const lastSeenMs = await unifiedNotificationTracker.getLastSeenMs();
+  return mirrorCreatedAt(meta) > lastSeenMs;
 }
 
 /** Mirror notifications are the ones with a stored record under their ID. */
@@ -461,7 +503,7 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
     }
 
     // Create Chrome notification for SMS (since we removed createSmsNotification call)
-    const chromeNotifId = `sms_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const chromeNotifId = `sms_${stableMirrorKey(push)}`;
 
     console.log('📱 [MirrorManager] Creating Chrome notification for SMS:', {
       title: push.title,

@@ -39,7 +39,6 @@ import {
   getActiveMirrors,
 } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
-import { getNotificationPrefs } from './notificationPrefs';
 import { formatToThreeDecimals } from './numberUtils';
 import { operationQueue } from './operationQueue';
 import {
@@ -52,6 +51,12 @@ import {
   requestUpload,
   createFilePush,
 } from './pushManager';
+import {
+  addTransferRecord,
+  forgetPushNotification,
+  handlePushNotificationClick,
+  showPushNotification,
+} from './pushNotifications';
 import { initializeQueue, enqueue, getQueueStatus, clearQueue } from './queue';
 import { initializeQuotaMonitor, registerQuotaListener } from './quotaMonitor';
 import { rateLimitManager } from './rateLimitManager';
@@ -61,6 +66,7 @@ import {
   getCachedSmsData,
   getThreadById,
   reloadSmsThread,
+  markConversationRead,
 } from './simpleSmsSync';
 import { sendSms } from './smsBridge';
 import {
@@ -256,35 +262,6 @@ registerQuotaListener();
 registerTokenHealthListener();
 void ensureWorkerRuntime();
 
-// Handle notification clicks
-chrome.notifications.onClicked.addListener(async notificationId => {
-  try {
-    const notificationData = await getLocal<{
-      pushIden: string;
-      url?: string;
-      type: string;
-    }>(`notification_${notificationId}`);
-
-    if (!notificationData) {
-      console.log('No notification data found for:', notificationId);
-      return;
-    }
-
-    if (notificationData.url) {
-      // Open link in new tab
-      await chrome.tabs.create({ url: notificationData.url });
-    } else {
-      // Focus popup for note pushes
-      await chrome.action.openPopup();
-    }
-
-    // Clear notification data
-    await setLocal(`notification_${notificationId}`, null);
-  } catch (error) {
-    console.error('Failed to handle notification click:', error);
-  }
-});
-
 // Handle notification button clicks (dismiss)
 chrome.notifications.onButtonClicked.addListener(
   async (notificationId, buttonIndex) => {
@@ -311,54 +288,24 @@ chrome.notifications.onButtonClicked.addListener(
   }
 );
 
-// Handle mirror notification clicks and dismissals
+// Handle notification clicks. Keep this the only click listener: a second one
+// would act on the same click, and open a link twice.
 chrome.notifications.onClicked.addListener(async notificationId => {
-  // Check if this is a mirror notification
-  const isMirrorNotification = await isMirrorNotificationId(notificationId);
-
-  if (isMirrorNotification) {
-    // Handle mirror notification click (dismiss)
+  if (await isMirrorNotificationId(notificationId)) {
     await handleUserDismissal(notificationId);
   } else {
-    // Handle regular push notification click (existing logic)
-    try {
-      const notificationData = await getLocal<{
-        pushIden: string;
-        url?: string;
-        type: string;
-      }>(`notification_${notificationId}`);
-
-      if (!notificationData) {
-        console.log('No notification data found for:', notificationId);
-        return;
-      }
-
-      if (notificationData.url) {
-        // Open link in new tab
-        await chrome.tabs.create({ url: notificationData.url });
-      } else {
-        // Focus popup for note pushes
-        await chrome.action.openPopup();
-      }
-
-      // Clear notification data
-      await setLocal(`notification_${notificationId}`, null);
-    } catch (error) {
-      console.error('Failed to handle notification click:', error);
-    }
+    await handlePushNotificationClick(notificationId);
   }
 });
 
-// Handle mirror notification dismissals (when user closes notification)
+// Handle notifications the user closes
 chrome.notifications.onClosed.addListener(async (notificationId, byUser) => {
-  if (byUser) {
-    // Check if this is a mirror notification
-    const isMirrorNotification = await isMirrorNotificationId(notificationId);
+  if (!byUser) return;
 
-    if (isMirrorNotification) {
-      // Handle mirror notification dismissal
-      await handleUserDismissal(notificationId);
-    }
+  if (await isMirrorNotificationId(notificationId)) {
+    await handleUserDismissal(notificationId);
+  } else {
+    await forgetPushNotification(notificationId);
   }
 });
 
@@ -1190,160 +1137,6 @@ async function handleSyncHistory(sendResponse: (response: any) => void) {
 }
 
 /**
- * Show Chrome notification for a new push
- */
-async function showPushNotification(push: any): Promise<boolean> {
-  try {
-    console.log('🔔 [Background] Showing push notification:', {
-      type: push.type,
-      title: push.title,
-      channel_tag: push.channel_tag,
-    });
-
-    const chromeDeviceIden = await getLocal<string>('pb_device_iden');
-
-    // Only show notifications for pushes received by our Chrome device
-    if (push.receiver_iden !== chromeDeviceIden) {
-      console.log(
-        '🔔 [Background] Push not for this device, skipping notification'
-      );
-      return false;
-    }
-
-    let title: string;
-    let message: string;
-    let iconUrl: string;
-
-    if (push.type === 'file') {
-      // Handle file push
-      title = 'File received';
-      message = push.file_name || 'New file';
-      iconUrl = '/icons/48.png';
-
-      // Add transfer record for received file
-      const transferRecord: TransferRecord = {
-        id: push.iden,
-        type: 'received',
-        fileName: push.file_name,
-        fileSize: 0, // We don't have file size in the push
-        fileType: push.file_type || 'application/octet-stream',
-        timestamp: Date.now(),
-        status: 'completed',
-        sourceDevice: push.source_device_iden,
-      };
-
-      await addTransferRecord(transferRecord);
-
-      // Auto-download the file
-      await downloadReceivedFile(push);
-    } else if (push.channel_tag) {
-      // Handle channel push (M6-04)
-      title = `${push.channel_tag}: ${push.title ?? 'New post'}`;
-      message = push.body ?? '';
-      iconUrl = '/icons/48.png'; // Use existing icon as fallback
-
-      // Store in recent list with channel badge
-      await addChannelPushToRecent(push);
-    } else {
-      // Handle regular pushes
-      title = push.title || (push.type === 'link' ? push.url : 'New push');
-      message = push.body || '';
-      iconUrl = '/icons/48.png';
-    }
-
-    const notificationId = `push_${push.iden}`;
-
-    const prefs = await getNotificationPrefs();
-    if (prefs.enabled) {
-      await chrome.notifications.create(notificationId, {
-        type: 'basic',
-        iconUrl: iconUrl,
-        title: title,
-        message: message,
-        requireInteraction: !prefs.autoDismiss,
-        silent: !prefs.sound,
-      });
-    }
-
-    // Store notification mapping for click handling
-    await setLocal(`notification_${notificationId}`, {
-      pushIden: push.iden,
-      url: push.url,
-      type: push.type,
-      channelTag: push.channel_tag,
-    });
-
-    // Update notification badge for new push
-    console.log('🔔 [Background] Updating badge for new push notification');
-    await notificationBadge.addPushNotifications(1);
-
-    console.log('🔔 [Background] Push notification created:', notificationId);
-    return true; // Indicate that the notification was shown
-  } catch (error) {
-    console.error('Failed to show push notification:', error);
-    return false; // Indicate that the notification was not shown
-  }
-}
-
-/**
- * Download received file
- */
-async function downloadReceivedFile(filePush: any): Promise<void> {
-  try {
-    // Use chrome.downloads.download for service worker context
-    await chrome.downloads.download({
-      url: filePush.file_url,
-      filename: filePush.file_name,
-    });
-
-    await chrome.notifications.create({
-      type: 'basic',
-      iconUrl: '/icons/48.png',
-      title: 'File Downloaded',
-      message: `File "${filePush.file_name}" has been downloaded`,
-    });
-  } catch (error) {
-    console.error('Failed to download received file:', error);
-
-    // Fallback: just show notification with download link
-    await chrome.notifications.create({
-      type: 'basic',
-      iconUrl: '/icons/48.png',
-      title: 'File Available',
-      message: `Click to view file "${filePush.file_name}"`,
-    });
-  }
-}
-
-/**
- * Add channel push to recent list with channel badge
- */
-async function addChannelPushToRecent(push: any): Promise<void> {
-  try {
-    const recentPushes = (await getLocal<any[]>('pb_recent_pushes')) || [];
-
-    // Add channel badge to push data
-    const pushWithBadge = {
-      ...push,
-      isChannelPush: true,
-      channelTag: push.channel_tag,
-    };
-
-    // Add to beginning of list
-    recentPushes.unshift(pushWithBadge);
-
-    // Keep only last 100 pushes
-    if (recentPushes.length > 500) {
-      recentPushes.splice(500);
-    }
-
-    await setLocal('pb_recent_pushes', recentPushes);
-  } catch (error) {
-    console.error('Failed to add channel push to recent list:', error);
-  }
-}
-
-/**
  * Handle queue status requests
  */
 async function handleGetQueueStatus(sendResponse: (response: any) => void) {
@@ -1385,27 +1178,6 @@ async function handleGetActiveMirrors(sendResponse: (response: any) => void) {
   } catch (error) {
     console.error('Failed to get active mirrors:', error);
     sendResponse({ success: false, error: 'Failed to fetch notifications' });
-  }
-}
-
-/**
- * Add transfer record to storage
- */
-async function addTransferRecord(transfer: TransferRecord): Promise<void> {
-  try {
-    const transfers = (await getLocal<TransferRecord[]>('pb_transfers')) || [];
-
-    // Add new transfer at the beginning
-    transfers.unshift(transfer);
-
-    // Keep only last 50 transfers
-    if (transfers.length > 50) {
-      transfers.splice(50);
-    }
-
-    await setLocal('pb_transfers', transfers);
-  } catch (error) {
-    console.error('Failed to add transfer record:', error);
   }
 }
 
@@ -1939,8 +1711,14 @@ async function handleMarkConversationRead(
   sendResponse: (response: any) => void
 ) {
   try {
-    // Conversation read marking now handled by simple system
     console.log(`[Background] Marking conversation ${conversationId} as read`);
+    const defaultDevice = await getDefaultSmsDevice();
+    if (!defaultDevice) {
+      sendResponse({ success: false, error: 'No SMS device available' });
+      return;
+    }
+
+    await markConversationRead(defaultDevice.iden, conversationId);
     sendResponse({ success: true });
   } catch (error) {
     console.error('Failed to mark conversation as read:', error);

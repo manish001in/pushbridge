@@ -10,6 +10,7 @@ import { handleMirror, handleRemoteDismiss } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
 import { formatToThreeDecimals } from './numberUtils';
 import { getPushHistory } from './pushManager';
+import { isPushForThisBrowser, showPushNotification } from './pushNotifications';
 import { syncAllSmsData } from './simpleSmsSync';
 import { getLocal, getSession, setSession } from './storage';
 import { unifiedNotificationTracker } from './unifiedNotificationTracker';
@@ -48,6 +49,8 @@ const STREAM_STARTED_KEY = 'pb_stream_started';
 const MAX_CATCH_UP_TABS = 10;
 // Enough for a long absence without paging through a whole account's history.
 const MAX_CATCH_UP_PAGES = 5;
+// A backlog shouldn't flood the desktop; the rest stay in Messages and on the badge.
+const MAX_NOTIFICATIONS_PER_SCAN = 10;
 const RECONNECT_DELAYS = [2000, 4000, 8000, 16000, 32000]; // Exponential backoff
 const HEARTBEAT_TIMEOUT = 60000; // 60 seconds
 const POLL_INTERVAL = 60000; // 60 seconds
@@ -333,6 +336,7 @@ async function handlePushTickle(catchUp = false): Promise<void> {
     }
 
     let tabsOpened = 0;
+    let notificationsShown = 0;
 
     // Get recent pushes and process them
     const pushes = await fetchPushesToProcess(catchUp);
@@ -373,13 +377,24 @@ async function handlePushTickle(catchUp = false): Promise<void> {
             );
             
             // Handle specific push types
+            let openedInTab = false;
             if (push.type === 'link') {
               console.log('🔗 [WebSocket] Processing link push from history');
               if (!catchUp || tabsOpened < MAX_CATCH_UP_TABS) {
-                if (await handleLinkPush(push)) tabsOpened++;
+                openedInTab = await handleLinkPush(push);
+                if (openedInTab) tabsOpened++;
               }
             }
-            
+
+            // The new tab already shows a link that opened.
+            if (
+              !openedInTab &&
+              notificationsShown < MAX_NOTIFICATIONS_PER_SCAN &&
+              (await showPushNotification(push))
+            ) {
+              notificationsShown++;
+            }
+
             await notificationBadge.addPushNotifications(1);
             await unifiedNotificationTracker.markAsProcessed(
               'push',
@@ -523,11 +538,7 @@ async function handleLinkPush(push: any): Promise<boolean> {
     // Only open links meant for this browser, not ones sent to another device
     // or sent from here.
     const deviceIden = await getLocal<string>('pb_device_iden');
-    if (
-      push.direction === 'outgoing' || // Sent to another person
-      (push.target_device_iden && push.target_device_iden !== deviceIden) ||
-      (deviceIden && push.source_device_iden === deviceIden)
-    ) {
+    if (!isPushForThisBrowser(push, deviceIden)) {
       console.log('🔗 [WebSocket] Link push is not for this browser, skipping');
       return false;
     }

@@ -315,8 +315,9 @@ class OperationQueue {
         console.error(
           `[OperationQueue] Rate limited (429) for operation ${operation.id}`
         );
+        // Processing keeps running: each tick skips until the backoff ends, and then
+        // this retry goes out. Nothing else would restart it.
         rateLimitManager.startBackoff();
-        this.stopProcessing();
 
         // Re-queue the operation if retry count not exceeded
         if (operation.retryCount < this.maxRetryCount) {
