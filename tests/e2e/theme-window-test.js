@@ -174,14 +174,39 @@ try {
     );
     const action = await actionTarget.asPage();
     await action.waitForSelector('#open-window-btn', { visible: true });
+    assert.equal(
+      await action.evaluate(() =>
+        document.documentElement.classList.contains('window-mode')
+      ),
+      false,
+      'The action popup keeps its fixed popup layout'
+    );
     const closed = once(action, 'close', {
       signal: AbortSignal.timeout(10000),
     });
     await action.click('#open-window-btn');
     await closed;
-    await browser.waitForTarget(
+    const standaloneTarget = await browser.waitForTarget(
       t => t.url() === `${base}/popup.html?windowMode=1`
     );
+    if (!attempt) {
+      const standalonePage = await standaloneTarget.asPage();
+      await standalonePage.waitForSelector('.popup-footer');
+      const fill = await standalonePage.evaluate(() => ({
+        width: document.querySelector('.popup-container').offsetWidth,
+        footerBottom: document
+          .querySelector('.popup-footer')
+          .getBoundingClientRect().bottom,
+        innerWidth,
+        innerHeight,
+      }));
+      assert.equal(fill.width, fill.innerWidth, 'Window layout fills the width');
+      assert.equal(
+        Math.round(fill.footerBottom),
+        fill.innerHeight,
+        'Window layout fills the height'
+      );
+    }
     await options.waitForFunction(() =>
       chrome.windows
         .getAll({ populate: true })

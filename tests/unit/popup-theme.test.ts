@@ -31,6 +31,7 @@ describe('Popup theme preference', () => {
   afterEach(() => {
     teardownTheme();
     document.documentElement.removeAttribute('data-theme');
+    localStorage.clear();
     jest.restoreAllMocks();
   });
 
@@ -61,6 +62,22 @@ describe('Popup theme preference', () => {
       expect(theme()).toBe('light');
     }
   );
+
+  test('does not start dark on a dark OS until the preference allows it', () => {
+    (chrome.storage.local.get as jest.Mock).mockImplementation(() => {});
+    bootTheme();
+    expect(theme()).toBe('light');
+  });
+
+  test('starts dark straight away when the last preference followed the OS', async () => {
+    bootTheme();
+    await settle();
+    teardownTheme();
+    document.documentElement.removeAttribute('data-theme');
+    (chrome.storage.local.get as jest.Mock).mockImplementation(() => {});
+    bootTheme();
+    expect(theme()).toBe('dark');
+  });
 
   test('applies local preference changes, ignoring session and unrelated changes', async () => {
     bootTheme();

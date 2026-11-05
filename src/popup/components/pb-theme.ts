@@ -4,6 +4,25 @@ let mql: MediaQueryList | undefined;
 let followSystem = false;
 let initialized = false;
 
+// Storage reads are async, so remember the preference for a correct first paint.
+const FOLLOW_SYSTEM_CACHE_KEY = 'pb_follow_system_theme';
+
+function rememberFollowSystem() {
+  try {
+    localStorage.setItem(FOLLOW_SYSTEM_CACHE_KEY, followSystem ? '1' : '0');
+  } catch {
+    // The cache only avoids a flash; the saved setting still applies.
+  }
+}
+
+function lastKnownFollowSystem(): boolean {
+  try {
+    return localStorage.getItem(FOLLOW_SYSTEM_CACHE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 function applyTheme(isDark: boolean) {
   const mode = isDark ? 'dark' : 'light';
   if (document.documentElement.getAttribute('data-theme') !== mode) {
@@ -39,6 +58,7 @@ async function applyFromStorage() {
   } catch {
     followSystem = false;
   }
+  rememberFollowSystem();
   applyTheme(
     followSystem
       ? window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -53,6 +73,7 @@ function onStorageChange(
 ) {
   if (area !== 'local' || !changes.pb_settings) return;
   followSystem = !!changes.pb_settings.newValue?.systemTheme;
+  rememberFollowSystem();
   applyTheme(
     followSystem && window.matchMedia('(prefers-color-scheme: dark)').matches
   );
@@ -72,7 +93,7 @@ export function bootTheme(): void {
     const osDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     document.documentElement.setAttribute(
       'data-theme',
-      osDark ? 'dark' : 'light'
+      lastKnownFollowSystem() && osDark ? 'dark' : 'light'
     );
   } catch {
     document.documentElement.setAttribute('data-theme', 'light');

@@ -981,3 +981,21 @@ html[data-theme='dark'] .license-info p {
   color: var(--pb-text, #e6e1e3);
   margin: 0.25rem 0;
 }
+
+/* === Standalone window (popup.html?windowMode=1) === */
+html.window-mode,
+html.window-mode body,
+html.window-mode .container,
+html.window-mode .popup-container {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 100%;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+html.window-mode body,
+html.window-mode .container {
+  overflow: hidden;
+}

@@ -20,6 +20,11 @@ import { bootTheme } from './components/pb-theme';
 
 bootTheme();
 
+// The standalone window fills its window; the action popup keeps its fixed size.
+if (new URLSearchParams(window.location.search).has('windowMode')) {
+  document.documentElement.classList.add('window-mode');
+}
+
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('🪟 [Popup] Popup opened, sending POPUP_OPEN message');
