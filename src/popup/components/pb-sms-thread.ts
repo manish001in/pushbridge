@@ -42,6 +42,9 @@ export class PbSmsThread extends LitElement {
   private selectedFile: File | null = null;
 
   @state()
+  private sendError: string = '';
+
+  @state()
   private recipients: Recipient[] = [];
 
   @state()
@@ -249,6 +252,20 @@ export class PbSmsThread extends LitElement {
 
     .attachment-area {
       margin-bottom: 12px;
+    }
+
+    .send-error {
+      margin: 0 0 8px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    :host-context(html[data-theme='dark']) .send-error {
+      background: #7f1d1d;
+      color: #fee2e2;
     }
 
     .file-input-container {
@@ -799,13 +816,27 @@ export class PbSmsThread extends LitElement {
   `;
 
   private readonly drafts = new Map<string, string>();
+  private pendingSend: { key: string; guid: string } | null = null;
+
+  /** Only if the user is still in the conversation it's about. */
+  private showSendError(conversationId: string, message: string) {
+    if (conversationId === this.conversationId) {
+      this.sendError = message;
+    }
+  }
+
   private latestLoad = 0;
 
   /** Keep typed text with its conversation; attachments never carry over. */
   private switchDraft(previousConversationId: string | undefined) {
-    if (previousConversationId && this.messageText) {
-      this.drafts.set(previousConversationId, this.messageText);
+    if (previousConversationId) {
+      if (this.messageText) {
+        this.drafts.set(previousConversationId, this.messageText);
+      } else {
+        this.drafts.delete(previousConversationId);
+      }
     }
+    this.sendError = '';
     this.messageText = this.drafts.get(this.conversationId) ?? '';
     this.selectedFile = null;
     const input = this.shadowRoot?.querySelector<HTMLInputElement>('.file-input');
@@ -1288,6 +1319,15 @@ export class PbSmsThread extends LitElement {
     const messageText = this.messageText;
     const selectedFile = this.selectedFile;
 
+    // Retrying the same message keeps its ID, so the API can recognize a text whose
+    // earlier attempt went through even though the response was lost.
+    const retryKey = `${conversationId}|${messageText}|${selectedFile?.name ?? ''}`;
+    if (this.pendingSend?.key !== retryKey) {
+      this.pendingSend = { key: retryKey, guid: crypto.randomUUID() };
+    }
+    const guid = this.pendingSend.guid;
+
+    this.sendError = '';
     this.isSending = true;
     try {
       let attachments:
@@ -1317,7 +1357,10 @@ export class PbSmsThread extends LitElement {
 
         if (!uploadResponse.success) {
           console.error('Failed to upload file:', uploadResponse.error);
-          // TODO: Show error to user
+          this.showSendError(
+            conversationId,
+            "The attachment couldn't be uploaded, so nothing was sent. Please try again."
+          );
           return;
         }
 
@@ -1339,10 +1382,13 @@ export class PbSmsThread extends LitElement {
           message: messageText,
           deviceIden,
           attachments,
+          guid,
         },
       });
 
       if (response.success) {
+        this.pendingSend = null;
+
         // Clear the message and file, unless the user has moved on to another
         // conversation, whose draft isn't this one.
         this.drafts.delete(conversationId);
@@ -1380,11 +1426,17 @@ export class PbSmsThread extends LitElement {
           );
         }
 
-        // TODO: Show other errors to user
+        this.showSendError(
+          conversationId,
+          "This message couldn't be sent. Your text is still here, so you can try again."
+        );
       }
     } catch (error) {
       console.error('Failed to send message:', error);
-      // TODO: Show error to user
+      this.showSendError(
+        conversationId,
+        "This message couldn't be sent. Your text is still here, so you can try again."
+      );
     } finally {
       this.isSending = false;
     }
@@ -1400,6 +1452,7 @@ export class PbSmsThread extends LitElement {
       return;
     }
 
+    const requestedConversationId = this.conversationId;
     console.log('💬 [SmsThread] Reloading thread:', this.conversationId);
     this.isReloading = true;
     this.conversationNotFound = false;
@@ -1408,8 +1461,13 @@ export class PbSmsThread extends LitElement {
       const response = await chrome.runtime.sendMessage({
         cmd: 'RELOAD_SMS_THREAD',
         deviceIden: this.deviceIden,
-        threadId: this.conversationId,
+        threadId: requestedConversationId,
       });
+
+      // Don't show this above a reply box for another conversation.
+      if (requestedConversationId !== this.conversationId) {
+        return;
+      }
 
       if (response.success && response.thread) {
         console.log('💬 [SmsThread] Thread reloaded successfully');
@@ -1604,6 +1662,9 @@ export class PbSmsThread extends LitElement {
           : ''}
 
         <div class="attachment-area">
+          ${this.sendError
+            ? html`<div class="send-error" role="alert">${this.sendError}</div>`
+            : ''}
           <div class="file-input-container">
             <input
               class="file-input"

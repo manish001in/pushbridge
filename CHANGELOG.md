@@ -3,7 +3,7 @@
 ## [1.3.3] - 2026-11-06
 
 ### Added
-- Desktop notifications for live pushes. They skip pushes sent from this browser or to another device, and links that opened in a tab. One scan raises at most 10; the rest stay in Messages and on the badge
+- Desktop notifications for live pushes. They skip pushes sent from this browser or to another device, and links that opened in a tab. After time away at most 10 show, plus one summary of the rest
 
 ### Changed
 - Received files only notify, and are downloaded from Messages. The old auto-download code never ran in practice and has been removed
@@ -14,6 +14,8 @@
 - Posts to a channel went to all your own devices instead of the channel
 - Pressing Cmd/Ctrl+Enter twice sent a push twice
 - A queued push could send twice after a worker restart or a failed storage write. One interrupted mid-send is now reported instead of being resent
+- A queued push is never sent from a different account, and a retry first checks whether the earlier attempt went through
+- SMS failures now show in the conversation, and a failed queue save is reported instead of showing as queued
 - Queued pushes are no longer dropped after repeated network failures
 - Signing out or changing account stops work already running for the old account, and clears its notifications
 - Refreshing devices, contacts or channels could lose everything on earlier pages

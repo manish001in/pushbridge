@@ -73,9 +73,9 @@ describe('storage writes', () => {
 });
 
 describe('recognizing one SMS arriving twice', () => {
-  test('the same sender and text is only shown once', () => {
-    expect(claimSmsContent('Alex', 'See you soon', 1000)).toBe(true);
-    expect(claimSmsContent(' alex ', 'see you soon', 2000)).toBe(false);
+  test('the same message from both sources is shown once', () => {
+    expect(claimSmsContent('Alex', 'See you soon', 100_000)).toBe(true);
+    expect(claimSmsContent(' alex ', 'See you soon', 130_000)).toBe(false);
   });
 
   test('different senders or text are separate messages', () => {
@@ -84,8 +84,39 @@ describe('recognizing one SMS arriving twice', () => {
     expect(claimSmsContent('Sam', 'other words', 1000)).toBe(true);
   });
 
-  test('the same words later are a new message', () => {
+  test('the same words sent again a couple of minutes later notify again', () => {
     expect(claimSmsContent('Kim', 'ok', 1000)).toBe(true);
-    expect(claimSmsContent('Kim', 'ok', 1000 + 6 * 60 * 1000)).toBe(true);
+    expect(claimSmsContent('Kim', 'ok', 1000 + 2 * 60 * 1000)).toBe(true);
+  });
+});
+
+describe('queued pushes', () => {
+  const { httpClient } = jest.requireMock('../../src/background/httpClient');
+
+  test('a rejected push reports its status, so it is not retried for days', async () => {
+    (chrome.storage.local.get as jest.Mock).mockImplementation((key, cb) =>
+      cb({ [key]: key === 'pb_token' ? 'token' : 'device' })
+    );
+    httpClient.fetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: { message: 'no such channel' } }),
+    });
+    await expect(
+      createPush({ type: 'note', body: 'x' } as any, { silent: true })
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  test('the send ID goes to the API, so a retry can be recognized', async () => {
+    (chrome.storage.local.get as jest.Mock).mockImplementation((key, cb) =>
+      cb({ [key]: key === 'pb_token' ? 'token' : 'device' })
+    );
+    httpClient.fetch.mockClear();
+    httpClient.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ iden: 'p' }),
+    });
+    await createPush({ type: 'note', body: 'x', guid: 'g1' } as any);
+    expect(JSON.parse(httpClient.fetch.mock.calls[0][1].body).guid).toBe('g1');
   });
 });

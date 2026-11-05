@@ -515,7 +515,7 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
     });
 
     const prefs = await getNotificationPrefs();
-    if (prefs.enabled && claimSmsContent(push.title, push.body)) {
+    if (prefs.enabled && claimSmsContent(push.title, push.body, messageTimestamp)) {
       await chrome.notifications.create(chromeNotifId, {
         type: 'basic' as const,
         title: push.title,

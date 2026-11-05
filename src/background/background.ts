@@ -283,11 +283,13 @@ chrome.notifications.onClicked.addListener(async notificationId => {
 
 // Handle notifications the user closes
 chrome.notifications.onClosed.addListener(async (notificationId, byUser) => {
-  if (!byUser) return;
-
   if (await isMirrorNotificationId(notificationId)) {
-    await handleUserDismissal(notificationId);
+    // Only the user closing it means dismissing it on the phone too.
+    if (byUser) {
+      await handleUserDismissal(notificationId);
+    }
   } else {
+    // Auto-dismissed ones also need their click record removed.
     await forgetPushNotification(notificationId);
   }
 });
@@ -396,7 +398,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         message.payload.message,
         sendResponse,
         message.payload.deviceIden,
-        message.payload.attachments
+        message.payload.attachments,
+        message.payload.guid
       );
       break;
     case 'MARK_CONVERSATION_READ':
@@ -720,6 +723,9 @@ async function handleCreatePush(
   payload: PushPayload,
   sendResponse: (response: any) => void
 ) {
+  // Fixed before the first attempt, so a retry can tell if that one went through.
+  payload.guid = payload.guid ?? crypto.randomUUID();
+
   try {
     // Check if we're online
     if (!isWebSocketHealthy()) {
@@ -755,16 +761,21 @@ async function handleCreatePush(
 
     // If it's a network error, queue the operation
     if (error instanceof Error && error.message.includes('network')) {
-      await enqueue({
-        type: 'pushSend',
-        payload,
-      });
-      sendResponse({
-        ok: true,
-        queued: true,
-        message: 'Push queued due to network error',
-      });
-      return;
+      try {
+        await enqueue({
+          type: 'pushSend',
+          payload,
+          mayHaveBeenSent: true,
+        });
+        sendResponse({
+          ok: true,
+          queued: true,
+          message: 'Push queued due to network error',
+        });
+        return;
+      } catch (queueError) {
+        console.error('Failed to queue push:', queueError);
+      }
     }
 
     sendResponse({
@@ -1836,7 +1847,8 @@ async function handleSendSms(
   message: string,
   sendResponse: (response: any) => void,
   deviceIden?: string,
-  attachments?: Array<{ content_type: string; name: string; url: string }>
+  attachments?: Array<{ content_type: string; name: string; url: string }>,
+  guid?: string
 ) {
   try {
     console.log('📱 [Background] Sending SMS:', {
@@ -1864,12 +1876,16 @@ async function handleSendSms(
     }
 
     // Send SMS using smsBridge
-    await sendSms(targetDeviceIden, conversationId, message, attachments);
+    await sendSms(targetDeviceIden, conversationId, message, attachments, guid);
 
     console.log('📱 [Background] SMS sent successfully to:', conversationId);
     sendResponse({ success: true });
   } catch (error) {
-    console.error('📱 [Background] Failed to send SMS:', error);
+    // The error can contain a phone number, so only its type is logged.
+    console.error(
+      '📱 [Background] Failed to send SMS:',
+      error instanceof Error ? error.name : 'unknown'
+    );
 
     // Handle specific error types
     if (error instanceof Error) {
@@ -2269,6 +2285,7 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
     disconnectWebSocket();
     operationQueue.clearQueue();
     await clearAllChannelCaches();
+    contextManager.clearContext();
 
     // Notifications from the old account shouldn't stay on screen.
     const visible = await new Promise<object>(resolve =>

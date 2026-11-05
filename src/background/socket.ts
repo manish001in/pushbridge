@@ -9,6 +9,7 @@ import { getDevices, getDefaultSmsDevice } from './deviceManager';
 import { reportError, PBError } from './errorManager';
 import { handleMirror, handleRemoteDismiss } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
+import { getNotificationPrefs } from './notificationPrefs';
 import { formatToThreeDecimals } from './numberUtils';
 import { getPushHistory } from './pushManager';
 import { isPushForThisBrowser, showPushNotification } from './pushNotifications';
@@ -71,7 +72,11 @@ export async function connectOnWorkerStart(): Promise<void> {
     console.log('Auto-reconnect is off, not reconnecting on worker start');
     return;
   }
-  await setSession(STREAM_STARTED_KEY, true);
+  try {
+    await setSession(STREAM_STARTED_KEY, true);
+  } catch (error) {
+    console.error('Failed to record stream start:', error);
+  }
   await initializeWebSocket();
 }
 
@@ -338,6 +343,7 @@ async function handlePushTickle(catchUp = false): Promise<void> {
 
     let tabsOpened = 0;
     let notificationsShown = 0;
+    let notificationsHeldBack = 0;
 
     // Get recent pushes and process them
     const accountEpoch = currentAccountEpoch();
@@ -395,12 +401,15 @@ async function handlePushTickle(catchUp = false): Promise<void> {
             }
 
             // The new tab already shows a link that opened.
-            if (
-              !openedInTab &&
-              notificationsShown < MAX_NOTIFICATIONS_PER_SCAN &&
-              (await showPushNotification(push))
-            ) {
-              notificationsShown++;
+            if (!openedInTab) {
+              // Only a backlog is capped. The rest get one summary, below.
+              if (catchUp && notificationsShown >= MAX_NOTIFICATIONS_PER_SCAN) {
+                if (isPushForThisBrowser(push, deviceIden)) {
+                  notificationsHeldBack++;
+                }
+              } else if (await showPushNotification(push)) {
+                notificationsShown++;
+              }
             }
 
             // Only count what was meant for this browser.
@@ -420,6 +429,19 @@ async function handlePushTickle(catchUp = false): Promise<void> {
           }
 
           processedCount++;
+        }
+      }
+
+      if (notificationsHeldBack > 0) {
+        const prefs = await getNotificationPrefs();
+        if (prefs.enabled) {
+          await chrome.notifications.create('push_backlog_summary', {
+            type: 'basic',
+            iconUrl: 'icons/48.png',
+            title: 'More pushes',
+            message: `${notificationsHeldBack} more while you were away. See Messages.`,
+            silent: !prefs.sound,
+          });
         }
       }
 
@@ -568,7 +590,7 @@ async function handleLinkPush(push: any): Promise<boolean> {
         return false;
       }
     } catch (error) {
-      console.warn('⚠️ [WebSocket] Invalid URL format:', url, error);
+      console.warn('⚠️ [WebSocket] Link push has an invalid URL', error);
       return false;
     }
 

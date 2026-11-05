@@ -24,6 +24,7 @@ jest.mock('../../src/background/unifiedNotificationTracker', () => ({
   unifiedNotificationTracker: {
     getState: jest.fn(),
     shouldShowNotification: jest.fn().mockResolvedValue(false),
+    claimNotification: jest.fn().mockResolvedValue(false),
     markAsProcessed: jest.fn(),
     setCount: jest.fn(),
   },

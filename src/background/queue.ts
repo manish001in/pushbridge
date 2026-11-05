@@ -4,6 +4,7 @@
  */
 
 import { reportError, PBError } from './errorManager';
+import { httpClient } from './httpClient';
 import { createPush, PushPayload } from './pushManager';
 import { getLocal, setLocal } from './storage';
 
@@ -16,6 +17,10 @@ export interface PushbridgeOp {
   /** Set while a send is in flight; survives if the worker stops mid-send. */
   attemptStartedAt?: number;
   nextAttemptAt?: number;
+  /** The account that wrote it. */
+  accountIden?: string;
+  /** A send already tried before queueing, whose outcome is unknown. */
+  mayHaveBeenSent?: boolean;
 }
 
 interface QueueState {
@@ -47,6 +52,7 @@ export async function enqueue(
   try {
     const operation: PushbridgeOp = {
       ...op,
+      accountIden: await getLocal<string>('pb_user_iden'),
       id: generateOperationId(),
       timestamp: Date.now(),
       retryCount: 0,
@@ -66,6 +72,8 @@ export async function enqueue(
       message: 'Failed to queue operation',
       code: error instanceof Error ? undefined : 500,
     });
+    // The caller must not tell the user this was saved.
+    throw error;
   }
 }
 
@@ -93,33 +101,65 @@ const deliveredOps = new Set<string>();
 // earlier worker stopped, so it may already have been delivered.
 const startedOps = new Set<string>();
 
+/** Find out whether an earlier attempt reached the server before its response was lost. */
+async function wasAlreadyDelivered(op: PushbridgeOp): Promise<boolean> {
+  const token = await getLocal<string>('pb_token');
+  const response = await httpClient.fetch(
+    'https://api.pushbullet.com/v2/pushes?limit=20',
+    { method: 'GET', headers: { 'Access-Token': token as string } }
+  );
+  if (!response.ok) {
+    throw new Error(`Could not check for an earlier send: ${response.status}`);
+  }
+  const { pushes } = await response.json();
+  return (pushes ?? []).some((push: any) => push.guid === op.payload.guid);
+}
+
 async function discardOp(op: PushbridgeOp, message: string): Promise<void> {
   await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
   await reportError(PBError.Unknown, { message, code: 1002 });
 }
 
-/** Rejected by the server or unsupported, so trying again can't help. */
+/** Rejected by the server or unsendable, so trying again can't help. */
 function isPermanentFailure(error: unknown): boolean {
+  const status = (error as { status?: number })?.status;
+  if (typeof status === 'number') {
+    return status >= 400 && status < 500 && status !== 429;
+  }
   const message = error instanceof Error ? error.message : String(error);
-  return (
-    /not yet implemented|unknown operation|required/i.test(message) ||
-    /\b4(?!29)\d\d\b/.test(message)
+  return /not yet implemented|unknown operation|is required|not registered|no token/i.test(
+    message
   );
 }
 
-async function processPendingOp(op: PushbridgeOp): Promise<void> {
+/** Returns false if later operations must wait, so messages stay in order. */
+async function processPendingOp(op: PushbridgeOp): Promise<boolean> {
   if (deliveredOps.has(op.id)) {
     await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
-    return;
+    return true;
   }
+
+  // Reset or a sign-in may have happened since this pass started.
+  const current = (await getLocal<PushbridgeOp[]>('pb_pending_ops')) || [];
+  if (!current.some(p => p.id === op.id)) {
+    return true;
+  }
+
+  // Never send one account's message from another.
+  const account = await getLocal<string>('pb_user_iden');
+  if (op.accountIden && op.accountIden !== account) {
+    await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
+    return true;
+  }
+
   if (op.nextAttemptAt && Date.now() < op.nextAttemptAt) {
-    return;
+    return false;
   }
 
   const age = Date.now() - op.timestamp;
   if (age > MAX_OP_AGE) {
     await discardOp(op, `A queued ${op.type} was too old to send and was dropped`);
-    return;
+    return true;
   }
 
   // Better to report a possibly unsent message than to risk sending it twice.
@@ -128,7 +168,7 @@ async function processPendingOp(op: PushbridgeOp): Promise<void> {
       op,
       'A queued message was interrupted while sending and may not have been delivered. Please check and send it again if needed.'
     );
-    return;
+    return true;
   }
 
   startedOps.add(op.id);
@@ -138,6 +178,16 @@ async function processPendingOp(op: PushbridgeOp): Promise<void> {
   );
 
   try {
+    // An earlier attempt may have reached the server before its response was lost.
+    if (
+      op.payload?.guid &&
+      (op.retryCount > 0 || op.mayHaveBeenSent) &&
+      (await wasAlreadyDelivered(op))
+    ) {
+      deliveredOps.add(op.id);
+      await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
+      return true;
+    }
     await processOperation(op);
   } catch (error) {
     console.error('Failed to process operation:', op.id, error);
@@ -145,7 +195,7 @@ async function processPendingOp(op: PushbridgeOp): Promise<void> {
 
     if (isPermanentFailure(error)) {
       await discardOp(op, `A queued ${op.type} could not be sent`);
-      return;
+      return true;
     }
 
     // Being offline isn't the message's fault: keep it and try again later.
@@ -163,7 +213,7 @@ async function processPendingOp(op: PushbridgeOp): Promise<void> {
           : p
       )
     );
-    return;
+    return false;
   }
 
   deliveredOps.add(op.id);
@@ -171,6 +221,7 @@ async function processPendingOp(op: PushbridgeOp): Promise<void> {
 
   // Rate limiting delay
   await new Promise(resolve => setTimeout(resolve, PROCESSING_INTERVAL));
+  return true;
 }
 
 /**
@@ -194,7 +245,9 @@ export async function processQueue(): Promise<void> {
 
     // Process operations one by one with rate limiting
     for (const op of pendingOps) {
-      await processPendingOp(op);
+      if (!(await processPendingOp(op))) {
+        break;
+      }
     }
   } catch (error) {
     console.error('Failed to process queue:', error);
@@ -209,7 +262,7 @@ export async function processQueue(): Promise<void> {
 async function processOperation(op: PushbridgeOp): Promise<void> {
   switch (op.type) {
     case 'pushSend':
-      await createPush(op.payload as PushPayload);
+      await createPush(op.payload as PushPayload, { silent: true });
       break;
 
     case 'smsSend':
@@ -276,7 +329,8 @@ export async function getQueueStatus(): Promise<{
  * Clear all pending operations
  */
 export async function clearQueue(): Promise<void> {
-  await setLocal('pb_pending_ops', []);
+  // Through the same queue as other writes, so one in progress can't restore it.
+  await updatePendingOps(() => []);
   console.log('Operation queue cleared');
 }
 

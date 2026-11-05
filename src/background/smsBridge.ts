@@ -317,7 +317,8 @@ export async function sendSms(
   deviceIden: string,
   conversationId: string,
   message: string,
-  attachments?: Array<{ content_type: string; name: string; url: string }>
+  attachments?: Array<{ content_type: string; name: string; url: string }>,
+  guid?: string
 ): Promise<void> {
   try {
     // Allow empty message if attachments are present (for MMS)
@@ -361,6 +362,11 @@ export async function sendSms(
         message: message,
       },
     };
+
+    // Lets the API recognize a retry of the same text instead of sending it again.
+    if (guid) {
+      smsData.data.guid = guid;
+    }
 
     // Add file attachments for MMS if provided
     if (attachments && attachments.length > 0) {

@@ -147,11 +147,10 @@ describe('desktop notifications for live pushes', () => {
     expect(create()).not.toHaveBeenCalled();
   });
 
-  test('limits how many notifications one scan can raise', async () => {
-    const backlog = Array.from({ length: 30 }, (_, i) => note(`p${i}`));
-    await receive(...backlog);
-    expect(create()).toHaveBeenCalledTimes(10);
-    // The rest still count as unread, and stay in Messages.
+  test('every live push notifies, even several at once', async () => {
+    const many = Array.from({ length: 30 }, (_, i) => note(`live${i}`));
+    await receive(...many);
+    expect(create()).toHaveBeenCalledTimes(30);
     expect(notificationBadge.addPushNotifications).toHaveBeenCalledTimes(30);
   });
 

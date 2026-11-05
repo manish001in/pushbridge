@@ -21,6 +21,8 @@ import { PushEnricher } from './pushEnricher';
 import { getLocal } from './storage';
 
 export interface PushPayload {
+  /** Identifies this send, so a retry can tell whether it already went out. */
+  guid?: string;
   type: 'note' | 'link' | 'broadcast';
   title?: string;
   body?: string;
@@ -51,8 +53,19 @@ export interface EnhancedPushHistoryResponse {
  * @param payload - The push payload
  * @returns Promise resolving to the created push
  */
+/** The server answered, and said no. Carries the status so callers needn't parse text. */
+export class PushApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
+}
+
 export async function createPush(
-  payload: PushPayload
+  payload: PushPayload,
+  { silent = false }: { silent?: boolean } = {}
 ): Promise<PushbulletPush> {
   try {
     // Validate payload
@@ -88,6 +101,10 @@ export async function createPush(
       type: payload.type === 'broadcast' ? 'note' : payload.type, // Broadcasts are sent as notes with channel_tag
       source_device_iden: sourceDeviceIden,
     };
+
+    if (payload.guid) {
+      pushData.guid = payload.guid;
+    }
 
     if (payload.title) {
       pushData.title = payload.title;
@@ -131,28 +148,33 @@ export async function createPush(
           message: 'Token revoked while creating push',
           code: response.status,
         });
-        throw new Error('Token is invalid or revoked');
+        throw new PushApiError('Token is invalid or revoked', 401);
       }
 
       if (response.status === 400) {
         const errorData = await response.json();
-        throw new Error(
-          `Invalid push data: ${errorData.error?.message || 'Bad request'}`
+        throw new PushApiError(
+          `Invalid push data: ${errorData.error?.message || 'Bad request'}`,
+          400
         );
       }
 
-      throw new Error(
-        `Failed to create push: ${response.status} ${response.statusText}`
+      throw new PushApiError(
+        `Failed to create push: ${response.status} ${response.statusText}`,
+        response.status
       );
     }
 
     const push: PushbulletPush = await response.json();
     return push;
   } catch (error) {
-    await reportError(PBError.Unknown, {
-      message: 'Failed to create push',
-      code: error instanceof Error ? undefined : 500,
-    });
+    // The queue reports once it gives up, not on every attempt.
+    if (!silent) {
+      await reportError(PBError.Unknown, {
+        message: 'Failed to create push',
+        code: error instanceof Error ? undefined : 500,
+      });
+    }
     throw error;
   }
 }
@@ -226,7 +248,7 @@ export async function requestUpload(file: File): Promise<UploadInfo> {
     const uploadInfo: UploadInfo = {
       uploadUrl: uploadResponse.upload_url,
       fileUrl: uploadResponse.file_url,
-      s3Fields: uploadResponse.data,
+      s3Fields: uploadResponse.data ?? {},
     };
 
     console.log('Upload request successful:', uploadInfo.fileUrl);

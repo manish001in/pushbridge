@@ -15,6 +15,7 @@ const browser = await puppeteer.launch({
     `--disable-extensions-except=${extensionPath}`,
     `--load-extension=${extensionPath}`,
     '--enable-unsafe-extension-debugging',
+    '--host-resolver-rules=MAP * 127.0.0.1:9',
   ],
 });
 

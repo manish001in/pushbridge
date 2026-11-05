@@ -10,6 +10,10 @@ import {
 } from '../../src/background/socket';
 import { unifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
 
+jest.mock('../../src/background/pushNotifications', () => ({
+  ...jest.requireActual('../../src/background/pushNotifications'),
+  showPushNotification: jest.fn().mockResolvedValue(false),
+}));
 jest.mock('../../src/background/pushManager', () => ({
   getPushHistory: jest.fn(),
 }));
@@ -141,6 +145,22 @@ describe('catching up when the stream connects', () => {
     });
     await connect();
     expect(chrome.tabs.create).not.toHaveBeenCalled();
+  });
+
+  test('after time away, shows 10 notifications and one summary of the rest', async () => {
+    const shown = jest.requireMock('../../src/background/pushNotifications');
+    (shown.showPushNotification as jest.Mock).mockResolvedValue(true);
+    chrome.notifications.create = jest.fn().mockResolvedValue('id');
+    const notes = Array.from({ length: 25 }, (_, i) =>
+      link(`n${i}`, { type: 'note', url: undefined })
+    );
+    (getPushHistory as jest.Mock).mockResolvedValue({ pushes: notes });
+    await connect();
+    expect(shown.showPushNotification).toHaveBeenCalledTimes(10);
+    expect(chrome.notifications.create).toHaveBeenCalledWith(
+      'push_backlog_summary',
+      expect.objectContaining({ message: expect.stringContaining('15 more') })
+    );
   });
 
   test('opens a link targeted at this browser', async () => {

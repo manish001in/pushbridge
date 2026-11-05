@@ -76,6 +76,14 @@ jobs:
       - name: Build extension for production
         run: npm run build --production
 
+      - name: Run browser tests
+        run: |
+          npm run test:e2e
+          npm run test:e2e:tabs
+          npm run test:e2e:send-safety
+          npm run test:e2e:popup-links
+          npm run test:e2e:theme-window
+
       - name: Copy manifest and other assets
         run: |
           cp public/manifest.json dist/

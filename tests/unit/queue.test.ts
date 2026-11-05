@@ -9,6 +9,9 @@ jest.mock('../../src/background/errorManager', () => ({
   reportError: jest.fn(),
   PBError: { Unknown: 'unknown' },
 }));
+jest.mock('../../src/background/httpClient', () => ({
+  httpClient: { fetch: jest.fn() },
+}));
 jest.mock('../../src/background/storage', () => ({
   getLocal: jest.fn(),
   setLocal: jest.fn(),
@@ -87,7 +90,7 @@ describe('outgoing operation queue', () => {
     test('a request the server rejects is dropped and reported', async () => {
       ops = [op('a')];
       (createPush as jest.Mock).mockRejectedValueOnce(
-        new Error('Failed to create push: 400 Bad Request')
+        Object.assign(new Error('Invalid push data'), { status: 400 })
       );
       await processQueue();
       expect(ops).toEqual([]);
@@ -97,7 +100,7 @@ describe('outgoing operation queue', () => {
     test('rate limiting is not treated as a rejection', async () => {
       ops = [op('a')];
       (createPush as jest.Mock).mockRejectedValueOnce(
-        new Error('Failed to create push: 429 Too Many Requests')
+        Object.assign(new Error('Too many requests'), { status: 429 })
       );
       await processQueue();
       expect(ops).toHaveLength(1);
@@ -137,6 +140,45 @@ describe('outgoing operation queue', () => {
       expect(ops).toEqual([]);
     });
 
+    test('a message from another account is dropped, never sent', async () => {
+      ops = [{ ...op('a'), accountIden: 'account-a' }];
+      (getLocal as jest.Mock).mockImplementation(async key =>
+        key === 'pb_user_iden' ? 'account-b' : [...ops]
+      );
+      await processQueue();
+      expect(createPush).not.toHaveBeenCalled();
+      expect(ops).toEqual([]);
+    });
+
+    test('a retry first checks whether the earlier attempt went through', async () => {
+      const { httpClient } = jest.requireMock(
+        '../../src/background/httpClient'
+      );
+      const queued = {
+        ...op('a'),
+        retryCount: 1,
+        payload: { guid: 'sent-guid' },
+      };
+      ops = [queued];
+      httpClient.fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ pushes: [{ guid: 'sent-guid' }] }),
+      });
+      await processQueue();
+      expect(createPush).not.toHaveBeenCalled();
+      expect(ops).toEqual([]);
+    });
+
+    test('later messages wait behind one that is backing off', async () => {
+      ops = [
+        { ...op('first'), nextAttemptAt: Date.now() + 60_000 },
+        op('second'),
+      ];
+      await processQueue();
+      expect(createPush).not.toHaveBeenCalled();
+      expect(ops).toHaveLength(2);
+    });
+
     test('an old push is dropped and reported rather than sent days late', async () => {
       ops = [{ ...op('a'), timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 }];
       await processQueue();
@@ -148,9 +190,9 @@ describe('outgoing operation queue', () => {
   // Last: its send never finishes, so the queue stays busy afterwards.
   test('concurrent additions are all kept', async () => {
     // Slow storage makes a lost update likely if writes aren't serialized.
-    (getLocal as jest.Mock).mockImplementation(async () => {
+    (getLocal as jest.Mock).mockImplementation(async key => {
       await new Promise(resolve => setTimeout(resolve, 1));
-      return [...ops];
+      return key === 'pb_pending_ops' ? [...ops] : undefined;
     });
     (createPush as jest.Mock).mockImplementation(
       () => new Promise(() => undefined)

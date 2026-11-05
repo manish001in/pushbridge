@@ -1,25 +1,26 @@
 /**
  * One incoming SMS can arrive twice: as a mirrored notification and through history
- * sync, each with its own ID. The sender and text are what they share, so the first
- * to arrive shows the notification and the other stays quiet.
+ * sync, each with its own ID. What they share is the sender, the text and roughly the
+ * time it was sent. The same words sent again later are a separate message.
  */
-const WINDOW_MS = 5 * 60 * 1000;
-const seen = new Map<string, number>();
+const SAME_MESSAGE_WINDOW_MS = 60 * 1000;
+const FORGET_AFTER_MS = 10 * 60 * 1000;
+const seen = new Map<string, number[]>();
 
-const normalize = (value: string | undefined) =>
-  (value ?? '').trim().toLowerCase();
-
-/** True if this message hasn't been shown recently. Records it either way. */
+/** True if this message hasn't been shown yet. Records it either way. */
 export function claimSmsContent(
   sender: string | undefined,
   text: string | undefined,
-  now: number = Date.now()
+  sentAt: number
 ): boolean {
-  for (const [key, time] of seen) {
-    if (now - time > WINDOW_MS) seen.delete(key);
-  }
-  const key = `${normalize(sender)}|${normalize(text)}`;
-  if (seen.has(key)) return false;
-  seen.set(key, now);
-  return true;
+  const key = `${(sender ?? '').trim().toLowerCase()}|${(text ?? '').trim()}`;
+  const times = (seen.get(key) ?? []).filter(
+    time => Math.abs(sentAt - time) < FORGET_AFTER_MS
+  );
+  const isDuplicate = times.some(
+    time => Math.abs(sentAt - time) <= SAME_MESSAGE_WINDOW_MS
+  );
+  times.push(sentAt);
+  seen.set(key, times);
+  return !isDuplicate;
 }

@@ -280,6 +280,7 @@ export async function reloadSmsThread(
   deviceIden: string,
   threadId: string
 ): Promise<SmsThread | null> {
+  const accountEpoch = currentAccountEpoch();
   console.log(
     `🔄 [SimpleSMS] Reloading specific thread: ${threadId} for device: ${deviceIden}`
   );
@@ -327,6 +328,10 @@ export async function reloadSmsThread(
 
     // Update the cached data with this specific thread
     const updatedThread = await withCacheLock(async () => {
+      // Signed out meanwhile: don't refill what the reset cleared.
+      if (accountEpoch !== currentAccountEpoch()) {
+        throw new Error('Account changed during reload');
+      }
       const cachedData = await getCachedSmsData(deviceIden);
       const threadIndex = cachedData.threads.findIndex(t => t.id === threadId);
       const merged = mergeThread(
@@ -483,6 +488,16 @@ function isSameSentMessage(cached: SmsMsg, fetched: SmsMsg): boolean {
   );
 }
 
+function claimSentMatch(message: SmsMsg, unmatched: Set<SmsMsg>): boolean {
+  for (const m of unmatched) {
+    if (isSameSentMessage(message, m)) {
+      unmatched.delete(m);
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Combine what the phone returned with what is cached. The phone decides everything
  * up to its newest message, so older ones it no longer has go away. Cached messages
@@ -490,17 +505,26 @@ function isSameSentMessage(cached: SmsMsg, fetched: SmsMsg): boolean {
  */
 function mergeThread(fetched: SmsThread, cached?: SmsThread): SmsThread {
   const newestFetched = Math.max(0, ...fetched.messages.map(m => m.timestamp));
+  // Each fetched message can stand for one cached message only, or a second "ok"
+  // sent a minute later would disappear into the first.
+  const unmatched = new Set(fetched.messages);
+  for (const message of cached?.messages ?? []) {
+    for (const m of unmatched) {
+      if (m.id === message.id || m.pb_guid === message.pb_guid) {
+        unmatched.delete(m);
+        break;
+      }
+    }
+  }
   const notYetFetched = (cached?.messages ?? []).filter(
     message =>
       message.timestamp > newestFetched &&
       // Only recent ones can still be on their way. Anything older was deleted.
       Date.now() - message.timestamp < NOT_YET_FETCHED_WINDOW &&
       !fetched.messages.some(
-        m =>
-          m.id === message.id ||
-          m.pb_guid === message.pb_guid ||
-          isSameSentMessage(message, m)
-      )
+        m => m.id === message.id || m.pb_guid === message.pb_guid
+      ) &&
+      !claimSentMatch(message, unmatched)
   );
   const messages = [...fetched.messages, ...notYetFetched].sort(
     (a, b) => a.timestamp - b.timestamp
@@ -613,7 +637,7 @@ async function checkForNewMessages(thread: SmsThread): Promise<void> {
 
     // Create Chrome notification
     const prefs = await getNotificationPrefs();
-    if (prefs.enabled && claimSmsContent(thread.name, latestMessage.text)) {
+    if (prefs.enabled && claimSmsContent(thread.name, latestMessage.text, latestMessage.timestamp)) {
       await chrome.notifications.create(notificationId, {
         type: 'basic',
         title: `SMS from ${thread.name}`,

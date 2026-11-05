@@ -249,7 +249,7 @@ export async function resumeInterruptedUploads(): Promise<number> {
 
       // The file's contents don't survive a worker restart, so it can't be resumed.
       // Tell the user instead of quietly dropping it.
-      console.warn('Upload was interrupted:', pendingUpload.fileName);
+      console.warn('An upload was interrupted');
       await chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icons/48.png',

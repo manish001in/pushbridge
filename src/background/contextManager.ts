@@ -539,6 +539,7 @@ export class ContextManager {
    * Clear stored context (for testing/debugging)
    */
   async clearContext(): Promise<void> {
+    this.lastRefreshAt = 0;
     this.context = null;
     await setLocal(CONTEXT_STORAGE_KEY, null);
     await setLocal(CONTEXT_REFRESH_TRIGGERS_KEY, null);
