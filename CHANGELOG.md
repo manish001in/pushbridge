@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1] - 2026-11-05
+
+### Added
+- Match system theme toggle
+- Open in window link, with a layout that fills the window
+- Navigation customization: reorder and hide popup tabs from the options page
+
 ## [1.3.0] - 2025-08-13
 
 ### Changed

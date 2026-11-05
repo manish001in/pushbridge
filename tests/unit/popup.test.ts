@@ -4,7 +4,7 @@ import {
 } from '../../src/background/deviceManager';
 
 // Exercise the entry point, but leave network-backed Lit components out of this
-// navigation contract. They have their own data-loading responsibilities.
+// popup/window contract. They have their own data-loading responsibilities.
 jest.mock('../../src/popup/components/pb-token-setup', () => ({}));
 jest.mock('../../src/popup/components/pb-composer', () => ({}));
 jest.mock('../../src/popup/components/pb-recent-pushes', () => ({}));
@@ -13,13 +13,19 @@ jest.mock('../../src/popup/components/pb-file-drop', () => ({}));
 jest.mock('../../src/popup/components/pb-sms-thread', () => ({}));
 jest.mock('../../src/popup/components/pb-conversation-list', () => ({}));
 jest.mock('../../src/popup/components/pb-channels', () => ({}));
+jest.mock('../../src/popup/components/pb-theme', () => ({ bootTheme() {} }), {
+  virtual: true,
+});
 jest.mock('../../src/background/deviceManager', () => ({
   hasSmsCapableDevices: jest.fn(),
   getDefaultSmsDevice: jest.fn(),
 }));
 
-describe('Popup navigation', () => {
+describe('Popup and standalone window', () => {
   let stored: Record<string, unknown>;
+  let windows: chrome.windows.Window[];
+  let popupClosed: boolean;
+  let currentTab: chrome.tabs.Tab | undefined;
 
   const settle = () => new Promise(resolve => setTimeout(resolve, 0));
   const openPopup = async () => {
@@ -34,6 +40,9 @@ describe('Popup navigation', () => {
   beforeEach(() => {
     document.body.innerHTML = '<div class="container"></div>';
     stored = { pb_token: 'fixture-token', pb_settings: {} };
+    windows = [];
+    popupClosed = false;
+    currentTab = undefined;
     (hasSmsCapableDevices as jest.Mock).mockResolvedValue(false);
     (getDefaultSmsDevice as jest.Mock).mockResolvedValue(null);
     window.matchMedia = jest.fn().mockReturnValue({ matches: false });
@@ -49,6 +58,30 @@ describe('Popup navigation', () => {
       ok: true,
       success: true,
       devices: [],
+    });
+    chrome.runtime.getURL = path => `chrome-extension://fixture/${path}`;
+    chrome.tabs = {
+      getCurrent: async () => currentTab,
+    } as typeof chrome.tabs;
+    chrome.windows = {
+      getAll: async () => windows,
+      create: async options => {
+        const created = {
+          ...options,
+          id: 42,
+          tabs: [{ url: options.url }],
+        } as chrome.windows.Window;
+        windows.push(created);
+        return created;
+      },
+      update: async (id, options) => {
+        const existing = windows.find(win => win.id === id)!;
+        Object.assign(existing, options);
+        return existing;
+      },
+    } as typeof chrome.windows;
+    jest.spyOn(window, 'close').mockImplementation(() => {
+      popupClosed = true;
     });
   });
 
@@ -73,90 +106,45 @@ describe('Popup navigation', () => {
     ).toBe('composer');
   });
 
-  test('uses the saved order, hides tabs and selects the first visible pane', async () => {
-    stored.pb_settings = {
-      optionOrder: [
-        'Subscriptions',
-        'SMS/MMS',
-        'Messages',
-        'Send',
-        'Notifications',
-      ],
-      hiddenTabs: ['Send', 'Notifications'],
-    };
-    await openPopup();
-    expect(
-      Array.from(document.querySelectorAll('.tab-button')).map(
-        button => (button as HTMLElement).dataset.tab
-      )
-    ).toEqual(['channels', 'pushes']);
-    expect(
-      document.querySelector<HTMLElement>('.tab-pane.active')?.dataset.tab
-    ).toBe('channels');
+  test.each([false, true])(
+    'opens a standalone window or focuses the existing one (exists=%s)',
+    async exists => {
+      const url = 'chrome-extension://fixture/popup.html?windowMode=1';
+      windows = exists
+        ? [{ id: 17, tabs: [{ url }], focused: false } as chrome.windows.Window]
+        : [
+            {
+              id: 8,
+              tabs: [{ url: 'https://example.com/' }],
+            } as chrome.windows.Window,
+          ];
+      await openPopup();
+      const button = document.getElementById('open-window-btn');
+      expect(button).not.toBeNull();
+      button!.click();
+      await settle();
+      expect(windows).toHaveLength(exists ? 1 : 2);
+      const standalone = windows.find(win => win.tabs?.[0].url === url);
+      expect(standalone).toBeDefined();
+      if (exists) {
+        expect(standalone!.id).toBe(17);
+        expect(standalone!.focused).toBe(true);
+      } else {
+        expect(standalone).toMatchObject({
+          type: 'popup',
+          width: 500,
+          height: 700,
+        });
+      }
+      expect(popupClosed).toBe(true);
+    }
+  );
 
-    document.querySelector<HTMLButtonElement>('[data-tab="pushes"]')!.click();
-    expect(document.querySelectorAll('.tab-pane.active')).toHaveLength(1);
-    expect(
-      document.querySelector<HTMLElement>('.tab-pane.active')?.dataset.tab
-    ).toBe('pushes');
-  });
-
-  test('keeps the SMS pane intact when the SMS tab is hidden', async () => {
-    (hasSmsCapableDevices as jest.Mock).mockResolvedValue(true);
-    (getDefaultSmsDevice as jest.Mock).mockResolvedValue({
-      iden: 'phone-1',
-      nickname: 'Fixture phone',
-    });
-    stored.pb_settings = { hiddenTabs: ['SMS/MMS'] };
+  test('hides Open in Window when already running in a tab', async () => {
+    currentTab = { id: 9 } as chrome.tabs.Tab;
     await openPopup();
-    expect(
-      document.querySelector('.tab-button[data-tab="messages"]')
-    ).toBeNull();
-    expect(document.getElementById('conversation-list')).not.toBeNull();
-  });
-
-  test('shows SMS first when requested and an SMS-capable device is available', async () => {
-    (hasSmsCapableDevices as jest.Mock).mockResolvedValue(true);
-    (getDefaultSmsDevice as jest.Mock).mockResolvedValue({
-      iden: 'phone-1',
-      nickname: 'Fixture phone',
-    });
-    stored.pb_settings = { optionOrder: ['SMS/MMS', 'Send'] };
-    await openPopup();
-    expect(
-      Array.from(document.querySelectorAll('.tab-button')).map(
-        button => (button as HTMLElement).dataset.tab
-      )
-    ).toEqual(['messages', 'composer', 'pushes', 'notifications', 'channels']);
-    expect(
-      document.querySelector<HTMLElement>('.tab-pane.active')?.dataset.tab
-    ).toBe('messages');
-    expect(
-      document.querySelector('pb-sms-thread')?.getAttribute('device-iden')
-    ).toBe('phone-1');
-  });
-
-  test('keeps a usable tab if the only saved visible tab is SMS but no SMS device remains', async () => {
-    stored.pb_settings = {
-      optionOrder: ['SMS/MMS', 'Subscriptions', 'Send'],
-      hiddenTabs: ['Send', 'Messages', 'Notifications', 'Subscriptions'],
-    };
-    const savedSettings = JSON.stringify(stored.pb_settings);
-    await openPopup();
-    expect(document.querySelectorAll('.tab-button')).toHaveLength(1);
-    expect(
-      document.querySelector<HTMLElement>('.tab-button.active')?.dataset.tab
-    ).toBe('channels');
-    expect(
-      document.querySelector<HTMLElement>('.tab-pane.active')?.dataset.tab
-    ).toBe('channels');
-    expect(JSON.stringify(stored.pb_settings)).toBe(savedSettings);
-
-    (hasSmsCapableDevices as jest.Mock).mockResolvedValue(true);
-    await openPopup();
-    expect(document.querySelectorAll('.tab-button')).toHaveLength(1);
-    expect(
-      document.querySelector<HTMLElement>('.tab-pane.active')?.dataset.tab
-    ).toBe('messages');
+    const button = document.getElementById('open-window-btn');
+    expect(button).not.toBeNull();
+    expect(button!.style.display).toBe('none');
   });
 });

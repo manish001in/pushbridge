@@ -25,6 +25,7 @@ export class PbMirrorList extends LitElement {
   @state() private error: string | null = null;
 
   static styles = css`
+    /* === Light mode base === */
     :host {
       display: block;
       width: 100%;
@@ -167,6 +168,78 @@ export class PbMirrorList extends LitElement {
       background: #f8f9fa;
       border-radius: 4px;
       border: 1px solid #e9ecef;
+    }
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .mirror-list {
+      border-color: #495057;
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .mirror-item {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .mirror-item:hover {
+      background-color: #343a40;
+    }
+
+    :host-context(html[data-theme='dark']) .mirror-item:active {
+      background-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .app-icon {
+      background: #495057;
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .app-name {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .notification-title {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .notification-body {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .empty-state {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .loading-state {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .error-state {
+      background: #2c0b0e;
+      border-color: #842029;
+      color: #ea868f;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button:hover {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button:disabled {
+      background: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .shortcut-hint {
+      color: rgba(222, 226, 230, 0.75);
+      background: #2b3035;
+      border-color: #495057;
     }
   `;
 

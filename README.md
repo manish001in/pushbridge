@@ -173,6 +173,19 @@ npm run test:e2e
 npm run test:coverage
 ```
 
+The theme/window browser regression test loads the built, unpacked extension in
+Chrome for Testing with disposable cached data and blocked Pushbullet requests:
+
+```bash
+npm run build
+npm run test:e2e:theme-window
+```
+
+Use a current Chrome for Testing (Chrome 127+ for the test's `action.openPopup`
+automation). If Puppeteer's bundled browser is not installed, set
+`PUPPETEER_EXECUTABLE_PATH` to your Chrome for Testing executable. This exercises
+real Chrome storage/window APIs, not live Pushbullet delivery.
+
 ## 🔒 Privacy & Security
 
 - **No Data Storage**: All data is stored locally in Chrome storage

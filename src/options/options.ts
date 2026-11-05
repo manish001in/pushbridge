@@ -17,6 +17,7 @@ interface Settings {
   autoOpenPushLinksAsTab: boolean;
   optionOrder: OptionKey[];
   hiddenTabs: OptionKey[];
+  systemTheme: boolean;
 }
 
 class OptionsPage {
@@ -29,6 +30,7 @@ class OptionsPage {
     autoOpenPushLinksAsTab: false,
     optionOrder: DEFAULT_OPTION_ORDER.slice(),
     hiddenTabs: [],
+    systemTheme: false,
   };
 
   private devices: Array<{ iden: string; nickname: string; type: string }> = [];
@@ -40,6 +42,33 @@ class OptionsPage {
     model?: string;
   }> = [];
   private pendingSmsDeviceChange: string | null = null;
+  private themeMql?: MediaQueryList;
+
+  private ensureThemeListener() {
+    if (!this.settings.systemTheme) {
+      // remove if present
+      if (this.themeMql) {
+        this.themeMql.removeEventListener
+          ? this.themeMql.removeEventListener('change', this.onSchemeChange)
+          : this.themeMql.removeListener(this.onSchemeChange as any);
+        this.themeMql = undefined;
+      }
+      return;
+    }
+
+    if (!this.themeMql) {
+      this.themeMql = window.matchMedia('(prefers-color-scheme: dark)');
+      this.themeMql.addEventListener
+        ? this.themeMql.addEventListener('change', this.onSchemeChange)
+        : this.themeMql.addListener(this.onSchemeChange as any); // old API fallback
+    }
+  }
+
+  private onSchemeChange = () => {
+    if (!this.settings.systemTheme) return;
+    const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  };
 
   async init() {
     await this.loadSettings();
@@ -47,6 +76,12 @@ class OptionsPage {
     await this.loadSmsDevices();
     this.render();
     this.setupEventListeners();
+    this.ensureThemeListener();
+    document.documentElement.dataset.theme =
+      this.settings.systemTheme &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
   }
 
   private async loadSettings() {
@@ -156,6 +191,24 @@ class OptionsPage {
       await chrome.storage.local.set({
         pb_settings: this.settings,
       });
+      if (this.settings.systemTheme) {
+        if (!this.themeMql) {
+          this.themeMql = window.matchMedia('(prefers-color-scheme: dark)');
+          this.themeMql.addEventListener
+            ? this.themeMql.addEventListener('change', this.onSchemeChange)
+            : this.themeMql.addListener(this.onSchemeChange);
+        }
+      } else if (this.themeMql) {
+        this.themeMql.removeEventListener
+          ? this.themeMql.removeEventListener('change', this.onSchemeChange)
+          : this.themeMql.removeListener(this.onSchemeChange);
+        this.themeMql = undefined;
+      }
+      this.ensureThemeListener();
+      const dark = this.settings.systemTheme
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        : false;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
       this.showMessage('Settings saved successfully!', 'success');
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -437,6 +490,18 @@ class OptionsPage {
       };
     }
 
+    // System theme (auto) toggle
+    const systemThemeToggle = document.getElementById(
+      'system-theme-toggle'
+    ) as HTMLInputElement;
+    if (systemThemeToggle) {
+      systemThemeToggle.checked = !!this.settings.systemTheme;
+      systemThemeToggle.addEventListener('change', e => {
+        this.settings.systemTheme = (e.target as HTMLInputElement).checked;
+        this.saveSettings();
+      });
+    }
+
     // Auto reconnect toggle
     const autoReconnectToggle = document.getElementById(
       'auto-reconnect-toggle'
@@ -545,6 +610,7 @@ class OptionsPage {
         autoOpenPushLinksAsTab: false,
         optionOrder: DEFAULT_OPTION_ORDER.slice(),
         hiddenTabs: [],
+        systemTheme: false,
       };
       this.pendingSmsDeviceChange = null;
       await this.saveSettings();
@@ -578,6 +644,7 @@ class OptionsPage {
           autoOpenPushLinksAsTab: false,
           optionOrder: DEFAULT_OPTION_ORDER.slice(),
           hiddenTabs: [],
+          systemTheme: false,
         };
         this.pendingSmsDeviceChange = null;
         await this.saveSettings();
@@ -608,7 +675,7 @@ class OptionsPage {
 
       <div class="settings-section">
         <h2>Notifications</h2>
-        
+
         <div class="setting-item">
           <div class="setting-info">
             <label for="notifications-toggle">Enable notifications</label>
@@ -632,6 +699,16 @@ class OptionsPage {
 
       <div class="settings-section">
         <h2>Customization</h2>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="system-theme-toggle">Match system theme</label>
+            <p>Automatically switch between light and dark mode based on your system settings</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="system-theme-toggle" class="toggle" checked="${this.settings.systemTheme}">
+          </div>
+        </div>
 
         <div class="setting-item">
           <div class="setting-info">
@@ -761,7 +838,7 @@ class OptionsPage {
       </div>
 
       <div class="footer">
-        <p>Pushbridge v1.0.0 · <a href="https://github.com/manish001in/pushbridge" target="_blank">GitHub</a> · <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a></p>
+        <p>Pushbridge v1.3.1 · <a href="https://github.com/manish001in/pushbridge" target="_blank">GitHub</a> · <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a></p>
         <p class="disclaimer">This is an unofficial extension and is not affiliated with Pushbullet Inc.</p>
       </div>
     `;

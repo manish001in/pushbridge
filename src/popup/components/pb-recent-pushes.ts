@@ -76,6 +76,7 @@ export class RecentPushes extends LitElement {
   private currentDeviceIden?: string;
 
   static styles = css`
+    /* === Light mode base === */
     :host {
       display: block;
       font-family:
@@ -668,6 +669,148 @@ export class RecentPushes extends LitElement {
         padding: 14px 18px;
       }
     }
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .pushes-header {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .pushes-title {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button:hover {
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .refresh-button:disabled {
+      color: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-navigation {
+      border-bottom-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button.active {
+      color: #6ea8fe;
+      border-bottom-color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .subtab-button:hover:not(.active) {
+      color: #dee2e6;
+      background: #2b3035;
+    }
+
+    :host-context(html[data-theme='dark']) .push-item {
+      background: #343a40;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .push-title {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .push-body {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .push-url {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .push-url:hover {
+      color: #9ec5fe;
+    }
+
+    :host-context(html[data-theme='dark']) .push-meta,
+    :host-context(html[data-theme='dark']) .push-time {
+      color: #868e96;
+    }
+
+    :host-context(html[data-theme='dark']) .push-type {
+      background: #495057;
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .device-info {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .ownership-info {
+      color: #6ea8fe;
+    }
+
+    :host-context(html[data-theme='dark']) .file-display {
+      background: #2b3035;
+      border-color: #495057;
+    }
+
+    :host-context(html[data-theme='dark']) .file-name {
+      color: #dee2e6;
+    }
+
+    :host-context(html[data-theme='dark']) .file-type {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .file-download {
+      background: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .file-download:hover {
+      background: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .channel-badge {
+      background: #0d6efd;
+      color: #fff;
+    }
+
+    :host-context(html[data-theme='dark']) .loading {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .error {
+      background: #2c0b0e;
+      color: #ea868f;
+      border-color: #842029;
+    }
+
+    :host-context(html[data-theme='dark']) .empty-state {
+      color: #adb5bd;
+    }
+
+    :host-context(html[data-theme='dark']) .load-more {
+      background: #0d6efd;
+      border-color: #0d6efd;
+    }
+
+    :host-context(html[data-theme='dark']) .load-more:hover:not(:disabled) {
+      background: #0b5ed7;
+      border-color: #0b5ed7;
+    }
+
+    :host-context(html[data-theme='dark']) .load-more:disabled {
+      background: #6c757d;
+      border-color: #6c757d;
+    }
+
+    :host-context(html[data-theme='dark']) .loading-spinner {
+      border-color: #343a40;
+      border-top-color: #0d6efd;
+    }
   `;
 
   connectedCallback() {
@@ -1222,8 +1365,12 @@ export class RecentPushes extends LitElement {
                         : push.type === 'file'
                           ? push.file_name || 'File'
                           : 'Untitled')}
-                      ${push.sender_name 
-                        ? html`<span style="font-weight: normal; color: #666; font-size: 12px;"> • from ${push.sender_name}</span>`
+                      ${push.sender_name
+                        ? html`<span
+                            style="font-weight: normal; color: #666; font-size: 12px;"
+                          >
+                            • from ${push.sender_name}</span
+                          >`
                         : ''}
                     </h4>
                     <div class="push-actions">

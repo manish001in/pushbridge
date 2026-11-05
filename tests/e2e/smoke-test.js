@@ -106,10 +106,10 @@ try {
     process.exit(1);
   }
 
-  if (popupContent.includes('dist/popup.js')) {
+  if (popupContent.includes('src="popup.js"')) {
     console.log('✅ popup.html references popup.js');
   } else {
-    console.log('❌ popup.html should reference dist/popup.js');
+    console.log('❌ popup.html should reference popup.js');
     process.exit(1);
   }
 } catch (error) {

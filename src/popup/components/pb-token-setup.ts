@@ -16,6 +16,7 @@ export class PbTokenSetup extends LitElement {
   private isSuccess = false;
 
   static styles = css`
+    /* === Light mode base === */
     :host {
       display: block;
       font-family:
@@ -212,6 +213,71 @@ export class PbTokenSetup extends LitElement {
         font-size: 13px;
       }
     }
+
+    /* === Dark mode overrides === */
+    :host-context(html[data-theme='dark']) {
+      background: #121212;
+      color: #e6e1e3;
+    }
+
+    :host-context(html[data-theme='dark']) .title {
+      color: #e6e1e3;
+    }
+
+    :host-context(html[data-theme='dark']) .subtitle {
+      color: #a1a1aa;
+    }
+
+    :host-context(html[data-theme='dark']) .label {
+      color: #d4d4d8;
+    }
+
+    :host-context(html[data-theme='dark']) .input {
+      background: #1e1e1e;
+      border-color: #3f3f46;
+      color: #e6e1e3;
+    }
+
+    :host-context(html[data-theme='dark']) .input:focus {
+      border-color: #8b5cf6;
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.3);
+    }
+
+    :host-context(html[data-theme='dark']) .input.error {
+      border-color: #f87171;
+    }
+
+    :host-context(html[data-theme='dark']) .button {
+      background-color: #8b5cf6;
+      color: white;
+    }
+
+    :host-context(html[data-theme='dark']) .button:hover:not(:disabled) {
+      background-color: #7c3aed;
+    }
+
+    :host-context(html[data-theme='dark']) .button:disabled {
+      background-color: #52525b;
+    }
+
+    :host-context(html[data-theme='dark']) .error-message {
+      color: #f87171;
+    }
+
+    :host-context(html[data-theme='dark']) .success-message {
+      color: #4ade80;
+      background: #052e16;
+      border-color: #14532d;
+    }
+
+    :host-context(html[data-theme='dark']) .help-text {
+      color: #a1a1aa;
+    }
+
+    :host-context(html[data-theme='dark']) .loading {
+      border-color: #e6e1e3;
+      border-top-color: transparent;
+    }
   `;
 
   render() {
@@ -303,7 +369,7 @@ export class PbTokenSetup extends LitElement {
 
       if (response.ok) {
         this.isSuccess = true;
-        
+
         // Show success message briefly before refreshing popup
         setTimeout(() => {
           // Dispatch custom event for parent components
