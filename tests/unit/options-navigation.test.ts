@@ -83,6 +83,35 @@ describe('Saved navigation customization', () => {
     ]);
   });
 
+  test('keeps the saved SMS position when reordering while SMS is unavailable', async () => {
+    stored.pb_settings.optionOrder = [
+      'SMS/MMS',
+      'Send',
+      'Messages',
+      'Notifications',
+      'Subscriptions',
+    ];
+    await openOptions();
+    const first = document.querySelector('#option-order li')!;
+    first.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    document.getElementById('option-order')!.dispatchEvent(
+      new MouseEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        clientY: 1000,
+      })
+    );
+    first.dispatchEvent(new Event('dragend', { bubbles: true }));
+    await settle();
+    expect(stored.pb_settings.optionOrder).toEqual([
+      'SMS/MMS',
+      'Messages',
+      'Notifications',
+      'Subscriptions',
+      'Send',
+    ]);
+  });
+
   test('persists visibility toggles and restores them when settings are reopened', async () => {
     await openOptions();
     document

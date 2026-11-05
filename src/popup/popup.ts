@@ -186,7 +186,9 @@ async function setupSmsInterface(): Promise<void> {
         `Device ${defaultDevice.iden.slice(0, 8)}`;
 
       // Update SMS tab header
-      const smsTab = document.querySelector('[data-tab="messages"]');
+      const smsTab = document.querySelector(
+        '.tab-button[data-tab="messages"]'
+      );
       if (smsTab) {
         smsTab.innerHTML = `
           <div class="sms-header">

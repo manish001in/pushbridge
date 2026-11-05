@@ -405,6 +405,10 @@ class OptionsPage {
         const order = Array.from(ul.querySelectorAll('li')).map(
           li => li.getAttribute('data-key') as OptionKey
         );
+        // Tabs left out of the list (SMS with no device) keep their saved position.
+        this.settings.optionOrder.forEach((key, index) => {
+          if (!order.includes(key)) order.splice(index, 0, key);
+        });
         await this.setOptionOrder(order);
         renderOrder(); // rehydrate DOM to avoid any ghost states
       });

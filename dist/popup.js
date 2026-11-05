@@ -3382,7 +3382,7 @@ import{j as Ce,c as ve}from"./notificationBadge.js";import{g as ze}from"./storag
         <div>Failed to load popup</div>
         <div style="font-size: 12px; margin-top: 8px;">${t instanceof Error?t.message:"Unknown error"}</div>
       </div>
-    `}}function vt(){const e=document.querySelectorAll(".tab-button"),t=document.querySelectorAll(".tab-pane");e.forEach(s=>{s.addEventListener("click",()=>{const i=s.getAttribute("data-tab");e.forEach(o=>o.classList.remove("active")),s.classList.add("active"),t.forEach(o=>{o.classList.remove("active"),o.getAttribute("data-tab")===i&&o.classList.add("active")})})})}async function yt(){try{const e=await ve();if(e){const c=e.nickname||e.model||`Device ${e.iden.slice(0,8)}`,d=document.querySelector('[data-tab="messages"]');d&&(d.innerHTML=`
+    `}}function vt(){const e=document.querySelectorAll(".tab-button"),t=document.querySelectorAll(".tab-pane");e.forEach(s=>{s.addEventListener("click",()=>{const i=s.getAttribute("data-tab");e.forEach(o=>o.classList.remove("active")),s.classList.add("active"),t.forEach(o=>{o.classList.remove("active"),o.getAttribute("data-tab")===i&&o.classList.add("active")})})})}async function yt(){try{const e=await ve();if(e){const c=e.nickname||e.model||`Device ${e.iden.slice(0,8)}`,d=document.querySelector('.tab-button[data-tab="messages"]');d&&(d.innerHTML=`
           <div class="sms-header">
             <span class="sms-title">SMS/MMS</span>
             <span class="device-info">from ${c}</span>

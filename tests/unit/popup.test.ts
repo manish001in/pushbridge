@@ -101,6 +101,20 @@ describe('Popup navigation', () => {
     ).toBe('pushes');
   });
 
+  test('keeps the SMS pane intact when the SMS tab is hidden', async () => {
+    (hasSmsCapableDevices as jest.Mock).mockResolvedValue(true);
+    (getDefaultSmsDevice as jest.Mock).mockResolvedValue({
+      iden: 'phone-1',
+      nickname: 'Fixture phone',
+    });
+    stored.pb_settings = { hiddenTabs: ['SMS/MMS'] };
+    await openPopup();
+    expect(
+      document.querySelector('.tab-button[data-tab="messages"]')
+    ).toBeNull();
+    expect(document.getElementById('conversation-list')).not.toBeNull();
+  });
+
   test('shows SMS first when requested and an SMS-capable device is available', async () => {
     (hasSmsCapableDevices as jest.Mock).mockResolvedValue(true);
     (getDefaultSmsDevice as jest.Mock).mockResolvedValue({
