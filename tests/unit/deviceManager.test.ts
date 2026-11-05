@@ -263,4 +263,13 @@ describe('Device Manager', () => {
       expect(result).toBe(false);
     });
   });
+
+  test('a lookup before sign-in does not cache an empty device list', async () => {
+    (getLocal as jest.Mock).mockResolvedValue(undefined);
+    expect(await getDevices()).toEqual([]);
+    expect(setLocal).not.toHaveBeenCalledWith(
+      'pb_device_cache',
+      expect.anything()
+    );
+  });
 });

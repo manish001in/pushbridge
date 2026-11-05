@@ -17,6 +17,7 @@
 - Queued pushes are no longer dropped after repeated network failures
 - Signing out or changing account stops work already running for the old account, and clears its notifications
 - Refreshing devices, contacts or channels could lose everything on earlier pages
+- The SMS tab could go missing because a device lookup before sign-in was cached as an empty list
 - Device names can no longer inject markup into the settings page
 - SMS notifications: fewer duplicates, and a reply from your phone no longer hides a new incoming message
 - Open SMS conversations update when a sync finishes, and the 6-hour SMS sync survives worker restarts

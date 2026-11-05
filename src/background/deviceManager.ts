@@ -211,8 +211,8 @@ async function fetchDevicesFromAPI(
 ): Promise<PushbulletDevice[]> {
   const token = await getLocal<string>('pb_token');
   if (!token) {
-    console.log('No token available, skipping device fetch and returning empty list');
-    return [];
+    // Not an empty list: getDevices would cache that as the truth for a day.
+    throw new Error('No token available');
   }
 
   // Build query parameters
