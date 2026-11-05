@@ -2,6 +2,7 @@
 import { getDevices } from '../../src/background/deviceManager';
 import { httpClient } from '../../src/background/httpClient';
 import { showPushNotification } from '../../src/background/pushNotifications';
+import { rateLimitManager } from '../../src/background/rateLimitManager';
 import { getLocal, setLocal } from '../../src/background/storage';
 import { checkTokenHealth } from '../../src/background/tokenHealth';
 import { unifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
@@ -47,6 +48,53 @@ describe('token health check', () => {
     await checkTokenHealth();
     expect(setLocal).not.toHaveBeenCalledWith('pb_token', expect.anything());
     expect(chrome.notifications.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('quota', () => {
+  const headers = (remaining: number, resetInSeconds: number) =>
+    ({
+      headers: {
+        get: (name: string) =>
+          ({
+            'X-Ratelimit-Limit': '16384',
+            'X-Ratelimit-Remaining': String(remaining),
+            'X-Ratelimit-Reset': String(
+              Math.floor(Date.now() / 1000) + resetInSeconds
+            ),
+          })[name] ?? null,
+      },
+    }) as any;
+
+  afterEach(async () => {
+    await rateLimitManager.clearState();
+  });
+
+  test('a 429 with no quota left waits for the reset, not just the backoff', () => {
+    rateLimitManager.parseHeaders(headers(0, 600));
+    rateLimitManager.startBackoff();
+    expect(rateLimitManager.getBackoffRemainingSeconds()).toBeGreaterThan(590);
+  });
+
+  test('a far-off reset is not trusted beyond the API window', () => {
+    rateLimitManager.parseHeaders(headers(0, 100000));
+    rateLimitManager.startBackoff();
+    expect(rateLimitManager.getBackoffRemainingSeconds()).toBeLessThanOrEqual(960);
+  });
+
+  test('a 429 with quota left uses the normal backoff', () => {
+    rateLimitManager.parseHeaders(headers(9000, 600));
+    rateLimitManager.startBackoff();
+    expect(rateLimitManager.getBackoffRemainingSeconds()).toBeLessThan(60);
+  });
+
+  test('low quota is noticed, and ends when the period does', () => {
+    rateLimitManager.parseHeaders(headers(1000, 600));
+    expect(rateLimitManager.isQuotaLow()).toBe(true);
+    rateLimitManager.parseHeaders(headers(5000, 600));
+    expect(rateLimitManager.isQuotaLow()).toBe(false);
+    rateLimitManager.parseHeaders(headers(1000, -5));
+    expect(rateLimitManager.isQuotaLow()).toBe(false);
   });
 });
 

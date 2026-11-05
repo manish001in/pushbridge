@@ -20,6 +20,7 @@ import {
 import { currentAccountEpoch } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
+import { rateLimitManager } from './rateLimitManager';
 import { getLocal, setLocal } from './storage';
 
 const CONTEXT_STORAGE_KEY = 'user_context';
@@ -152,6 +153,10 @@ export class ContextManager {
   }
 
   private async performRefresh(trigger: ContextRefreshTrigger): Promise<void> {
+    if (this.context && rateLimitManager.isQuotaLow()) {
+      return;
+    }
+
     const accountEpoch = currentAccountEpoch();
     try {
       const token = await getLocal<string>('pb_token');

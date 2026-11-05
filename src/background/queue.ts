@@ -47,7 +47,8 @@ const MAX_OP_AGE = 7 * 24 * 60 * 60 * 1000;
  * @param op - The operation to enqueue
  */
 export async function enqueue(
-  op: Omit<PushbridgeOp, 'id' | 'timestamp' | 'retryCount'>
+  op: Omit<PushbridgeOp, 'id' | 'timestamp' | 'retryCount'>,
+  { waitForSend = true }: { waitForSend?: boolean } = {}
 ): Promise<EnqueueOutcome> {
   try {
     const id = generateOperationId();
@@ -64,6 +65,12 @@ export async function enqueue(
     await updatePendingOps(ops => [...ops, operation]);
 
     console.log('Operation queued:', operation.type, operation.id);
+
+    // During a rate limit the send can be minutes away. It's saved, so say so now.
+    if (!waitForSend) {
+      void processQueue();
+      return { status: 'queued' };
+    }
 
     // Try to process queue if online
     if (queueState.isOnline) {

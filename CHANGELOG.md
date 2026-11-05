@@ -6,6 +6,8 @@
 - Desktop notifications for live pushes. They skip pushes sent from this browser or to another device, and links that opened in a tab. After time away at most 10 show, plus one summary of the rest
 
 ### Changed
+- Uses far less of your Pushbullet quota. Checking for pushes reads only what changed, a new SMS fetches only its own conversation (a full check still runs every 6 hours), and optional background syncs pause when quota runs low
+- After hitting the rate limit, requests wait for the limit to reset instead of retrying sooner. A push sent meanwhile is saved and goes out afterwards
 - Received files only notify, and are downloaded from Messages. The old auto-download code never ran in practice and has been removed
 
 ### Fixed

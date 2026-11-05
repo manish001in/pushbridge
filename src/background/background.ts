@@ -81,6 +81,7 @@ import {
 import { sendSms } from './smsBridge';
 import { clearSmsSightings } from './smsNotificationIdentity';
 import {
+  resetPushScan,
   initializeWebSocket,
   connectOnWorkerStart,
   disconnectWebSocket,
@@ -518,6 +519,8 @@ async function handleTokenVerification(
       bumpAccountEpoch();
       await setLocal('pb_token', token);
       await setLocal('pb_user_iden', userData.iden);
+      // Another account's history has its own timeline.
+      await resetPushScan();
 
       // Register Chrome device
       try {
@@ -759,6 +762,16 @@ async function handleCreatePush(
       return;
     }
 
+    if (rateLimitManager.isBackoffActive()) {
+      respondToQueued(
+        await enqueue(
+          { type: 'pushSend', payload: push },
+          { waitForSend: false }
+        )
+      );
+      return;
+    }
+
     // Failures are reported to the composer that's waiting for this answer.
     const created = await createPush(push, { silent: true });
 
@@ -787,11 +800,14 @@ async function handleCreatePush(
     if (noAnswer || rateLimited) {
       try {
         respondToQueued(
-          await enqueue({
-            type: 'pushSend',
-            payload: push,
-            mayHaveBeenSent: noAnswer,
-          })
+          await enqueue(
+            {
+              type: 'pushSend',
+              payload: push,
+              mayHaveBeenSent: noAnswer,
+            },
+            { waitForSend: !rateLimited }
+          )
         );
         return;
       } catch (queueError) {
@@ -1709,8 +1725,10 @@ export async function triggerSmsSync(reason: string = 'manual'): Promise<void> {
       return;
     }
 
-    // Always sync when explicitly triggered
-    await syncAllSmsData(defaultDevice.iden);
+    // Opening the popup only needs what changed. The periodic sync checks everything.
+    await syncAllSmsData(defaultDevice.iden, {
+      incremental: reason === 'popup_open',
+    });
   } catch (error) {
     console.error(`❌ [Background] SMS sync failed (${reason}):`, error);
   }

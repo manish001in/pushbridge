@@ -14,7 +14,7 @@ import { formatToThreeDecimals } from './numberUtils';
 import { getPushHistory } from './pushManager';
 import { isPushForThisBrowser, showPushNotification } from './pushNotifications';
 import { syncAllSmsData } from './simpleSmsSync';
-import { getLocal, getSession, setSession } from './storage';
+import { getLocal, getSession, setLocal, setSession } from './storage';
 import { unifiedNotificationTracker } from './unifiedNotificationTracker';
 
 interface WebSocketMessage {
@@ -281,6 +281,16 @@ async function switchToPollingMode(): Promise<void> {
   }, POLL_INTERVAL) as any;
 }
 
+const PUSH_SCAN_WATERMARK_KEY = 'pb_push_scan_watermark';
+// Re-read a few seconds, in case a push became visible slightly out of order. The
+// tracker already knows which of those were handled.
+const PUSH_SCAN_OVERLAP_SECONDS = 5;
+
+/** Forget how far scans have got, because the account changed. */
+export async function resetPushScan(): Promise<void> {
+  await setLocal(PUSH_SCAN_WATERMARK_KEY, 0);
+}
+
 let pushSyncChain: Promise<void> = Promise.resolve();
 let syncWaiting = false;
 
@@ -309,11 +319,14 @@ function schedulePushSync(catchUp = false): Promise<void> {
 async function fetchPushesToProcess(catchUp: boolean): Promise<any[]> {
   const pushes: any[] = [];
   let cursor: string | undefined = '';
+  // The API charges per row read, so ask only for what changed since the last scan.
+  const scannedUpTo = await getLocal<number>(PUSH_SCAN_WATERMARK_KEY);
+  const since = scannedUpTo ? scannedUpTo - PUSH_SCAN_OVERLAP_SECONDS : 0;
 
   for (let page = 0; page < MAX_CATCH_UP_PAGES; page++) {
     const history: { pushes?: any[]; cursor?: string } = await getPushHistory(
       50,
-      0,
+      since,
       cursor
     );
     const batch = history.pushes ?? [];
@@ -325,8 +338,11 @@ async function fetchPushesToProcess(catchUp: boolean): Promise<any[]> {
       !cursor ||
       !oldest ||
       !(await unifiedNotificationTracker.isNewerThanLastSeen(oldest.modified)) ||
-      // A live scan has caught up once it reaches one it has already handled.
+      // A live scan has caught up once it reaches one it has already handled. With a
+      // watermark the query itself says where to stop, and an old push that was only
+      // dismissed mustn't hide new ones behind it.
       (!catchUp &&
+        !since &&
         batch.some(push =>
           unifiedNotificationTracker.wasProcessed('push', push.iden)
         ))
@@ -356,6 +372,7 @@ async function handlePushTickle(catchUp = false): Promise<void> {
       return;
     }
 
+    let showFailed = false;
     let tabsOpened = 0;
     let notificationsShown = 0;
     let notificationsHeldBack = 0;
@@ -429,6 +446,7 @@ async function handlePushTickle(catchUp = false): Promise<void> {
                   }
                 } catch {
                   // Not shown. Leave it unprocessed so the next scan retries.
+                  showFailed = true;
                   continue;
                 }
               }
@@ -470,6 +488,15 @@ async function handlePushTickle(catchUp = false): Promise<void> {
       console.log(
         `🔄 [WebSocket] Processed ${processedCount} pushes, ${newPushesCount} new pushes from tickle`
       );
+
+      // Only after handling them, so a failure gets another look next scan.
+      if (!showFailed && accountEpoch === currentAccountEpoch()) {
+        const newest = Math.max(...pushes.map(push => push.modified ?? 0));
+        const scannedUpTo = await getLocal<number>(PUSH_SCAN_WATERMARK_KEY);
+        if (newest > (scannedUpTo ?? 0)) {
+          await setLocal(PUSH_SCAN_WATERMARK_KEY, newest);
+        }
+      }
     }
   } catch (error) {
     console.error('Failed to handle push tickle:', error);
@@ -591,7 +618,7 @@ async function handleSmsChanged(_push: any): Promise<void> {
     }
 
     // Use the simple SMS sync system
-    await syncAllSmsData(defaultDevice.iden);
+    await syncAllSmsData(defaultDevice.iden, { incremental: true });
   } catch (error) {
     console.error('📱 [WebSocket] Failed to handle SMS changed:', error);
   }

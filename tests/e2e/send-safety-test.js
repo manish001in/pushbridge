@@ -3,23 +3,13 @@
 // is sent anywhere and timing can be controlled. Set PUPPETEER_EXECUTABLE_PATH if
 // needed.
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import puppeteer from 'puppeteer';
+import { launchExtension } from './launchExtension.js';
 
-const extensionPath = path.resolve('dist');
-const browser = await puppeteer.launch({
-  headless: true,
-  ignoreDefaultArgs: ['--disable-extensions'],
-  args: [
-    '--no-sandbox',
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
-    '--enable-unsafe-extension-debugging',
-    '--host-resolver-rules=MAP * 127.0.0.1:9',
-  ],
-});
+const { browser, target } = await launchExtension([
+  '--host-resolver-rules=MAP * 127.0.0.1:9',
+]);
 
 const message = (id, text) => ({
   id,
@@ -41,9 +31,6 @@ const threadA = thread('+1000', 'Person A', 'history of A');
 const threadB = thread('+2000', 'Person B', 'history of B');
 
 try {
-  const target = await browser.waitForTarget(
-    t => t.type() === 'service_worker'
-  );
   const base = target.url().replace('/background.js', '');
   const options = await browser.newPage();
   await options.goto(`${base}/options.html`);

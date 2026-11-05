@@ -10,6 +10,7 @@ import { currentAccountEpoch } from './accountEpoch';
 import { getDefaultSmsDevice } from './deviceManager';
 import { notificationBadge } from './notificationBadge';
 import { getNotificationPrefs } from './notificationPrefs';
+import { rateLimitManager } from './rateLimitManager';
 import { smsApiClient } from './smsApiClient';
 import { claimSmsContent } from './smsNotificationIdentity';
 import { getLocal, setLocal } from './storage';
@@ -49,33 +50,41 @@ function withCacheLock<T>(update: () => Promise<T>): Promise<T> {
  * The ONE function that does everything for SMS
  * Call this from: daily timer, popup open, sms_changed push
  */
-const syncsInFlight = new Map<
-  string,
-  { promise: Promise<SimpleSmsData>; rerun: boolean }
->();
+interface RunningSync {
+  promise: Promise<SimpleSmsData>;
+  rerun: boolean;
+  rerunIncremental: boolean;
+}
+
+const syncsInFlight = new Map<string, RunningSync>();
 
 /**
  * Run one sync per device at a time. Requests arriving during a sync share it, and
  * one more pass runs afterwards in case its fetches missed what they announced.
  */
-export function syncAllSmsData(deviceIden: string): Promise<SimpleSmsData> {
+export function syncAllSmsData(
+  deviceIden: string,
+  { incremental = false }: { incremental?: boolean } = {}
+): Promise<SimpleSmsData> {
   const running = syncsInFlight.get(deviceIden);
   if (running) {
+    // A pass that checks everything covers one that doesn't, not the other way round.
+    running.rerunIncremental =
+      incremental && (running.rerunIncremental || !running.rerun);
     running.rerun = true;
     return running.promise;
   }
 
-  const sync = { rerun: false } as {
-    promise: Promise<SimpleSmsData>;
-    rerun: boolean;
-  };
+  const sync = { rerun: false, rerunIncremental: incremental } as RunningSync;
   syncsInFlight.set(deviceIden, sync);
   sync.promise = (async () => {
     try {
       let result: SimpleSmsData;
       do {
+        const passIsIncremental = sync.rerunIncremental;
         sync.rerun = false;
-        result = await runSmsSync(deviceIden);
+        sync.rerunIncremental = false;
+        result = await runSmsSync(deviceIden, passIsIncremental);
       } while (sync.rerun);
       return result;
     } finally {
@@ -85,8 +94,20 @@ export function syncAllSmsData(deviceIden: string): Promise<SimpleSmsData> {
   return sync.promise;
 }
 
-async function runSmsSync(deviceIden: string): Promise<SimpleSmsData> {
+/**
+ * Each conversation costs a request. An incremental pass fetches only those whose
+ * latest message changed, so a new SMS doesn't refetch every conversation. A full
+ * pass also picks up changes further back, such as messages deleted on the phone.
+ */
+async function runSmsSync(
+  deviceIden: string,
+  incremental: boolean
+): Promise<SimpleSmsData> {
   const accountEpoch = currentAccountEpoch();
+  if (rateLimitManager.isQuotaLow()) {
+    console.log('[SimpleSMS] Quota is low, skipping this sync');
+    return getCachedSmsData(deviceIden);
+  }
   console.log(
     `🔄 [SimpleSMS] Starting complete SMS sync for device: ${deviceIden}`
   );
@@ -108,9 +129,17 @@ async function runSmsSync(deviceIden: string): Promise<SimpleSmsData> {
     const threadsResponse = await smsApiClient.getSmsThreadsList(deviceIden);
 
     const fetched = new Map<string, SmsThread>();
+    const known = incremental
+      ? (await getCachedSmsData(deviceIden)).threads
+      : [];
 
     // 2. For each thread, get all messages
     for (const apiThread of threadsResponse.threads) {
+      const previous = known.find(thread => thread.id === apiThread.id);
+      if (previous?.latestKey && previous.latestKey === latestKey(apiThread)) {
+        continue;
+      }
+
       console.log(
         `📨 [SimpleSMS] Fetching messages for thread: ${apiThread.id}`
       );
@@ -485,7 +514,16 @@ function buildThread(
     unreadCount: 0, // Set by mergeThread, which knows what was read
     deviceIden,
     recipients: apiThread.recipients,
+    latestKey: latestKey(apiThread),
   };
+}
+
+/** Changes whenever a conversation has something new. */
+function latestKey(apiThread: any): string | undefined {
+  const latest = apiThread.latest;
+  return latest
+    ? `${latest.id}|${latest.timestamp}|${latest.status ?? ''}`
+    : undefined;
 }
 
 /** True if this cached message is the phone's copy of one sent from here. */

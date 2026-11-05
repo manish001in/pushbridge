@@ -286,6 +286,14 @@ export class SmsApiClient {
    */
   async isDeviceOnline(deviceIden: string): Promise<boolean> {
     try {
+      // Every sync asks, and listing devices is expensive. The stream announces changes.
+      const cached = await getLocal<{ devices?: Array<{ iden: string; active?: boolean }> }>(
+        'pb_device_cache'
+      );
+      const known = cached?.devices?.find(d => d.iden === deviceIden);
+      if (known) {
+        return known.active === true;
+      }
       const device = await this.getDeviceById(deviceIden);
       return device ? device.active === true : false;
     } catch (error) {

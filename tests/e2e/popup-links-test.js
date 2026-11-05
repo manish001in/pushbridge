@@ -1,30 +1,17 @@
 // Run after npm run build. Uses a real unpacked extension and a real action
 // popup with Pushbullet requests blocked. Set PUPPETEER_EXECUTABLE_PATH if needed.
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import puppeteer from 'puppeteer';
+import { launchExtension } from './launchExtension.js';
 
-const extensionPath = path.resolve('dist');
 const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
-const browser = await puppeteer.launch({
-  headless: true,
-  ignoreDefaultArgs: ['--disable-extensions'],
-  args: [
-    '--no-sandbox',
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
-    '--enable-unsafe-extension-debugging',
-    // Keep opened links and API calls off the network.
+const { browser, target } = await launchExtension([
+  // Keep opened links and API calls off the network.
     '--host-resolver-rules=MAP * 127.0.0.1:9',
-  ],
-});
+]);
 
 try {
-  const target = await browser.waitForTarget(
-    t => t.type() === 'service_worker'
-  );
   const base = target.url().replace('/background.js', '');
   const options = await browser.newPage();
   await options.goto(`${base}/options.html`);

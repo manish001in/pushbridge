@@ -3,7 +3,7 @@
 // produce on demand can be tested without messaging anyone. Needs openssl. Set
 // PUPPETEER_EXECUTABLE_PATH if needed.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import https from 'node:https';
@@ -11,8 +11,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import puppeteer from 'puppeteer';
 import { WebSocketServer } from 'ws';
+
+import { launchExtension } from './launchExtension.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pushbridge-e2e-'));
 execFileSync(
@@ -234,22 +235,10 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const { port } = server.address();
 
 // ---- The browser ---------------------------------------------------------------
-const extensionPath = path.resolve('dist');
-const browser = await puppeteer.launch({
-  headless: true,
-  ignoreDefaultArgs: ['--disable-extensions'],
-  args: [
-    '--no-sandbox',
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
-    '--enable-unsafe-extension-debugging',
-    '--ignore-certificate-errors',
-    `--host-resolver-rules=MAP api.pushbullet.com 127.0.0.1:${port},MAP stream.pushbullet.com 127.0.0.1:${port},MAP * 127.0.0.1:9`,
-  ],
-});
-const workerTarget = await browser.waitForTarget(
-  t => t.type() === 'service_worker'
-);
+const { browser, target: workerTarget } = await launchExtension([
+  '--ignore-certificate-errors',
+  `--host-resolver-rules=MAP api.pushbullet.com 127.0.0.1:${port},MAP stream.pushbullet.com 127.0.0.1:${port},MAP * 127.0.0.1:9`,
+]);
 const base = workerTarget.url().replace('/background.js', '');
 const control = await browser.newPage();
 await control.goto(`${base}/options.html`);
@@ -421,7 +410,15 @@ const replyAndSend = (popup, text) =>
     await thread.sendMessage();
   }, text);
 
+// Chrome itself has occasionally died mid-run on an internal check. That says nothing
+// about the test it happened in, so the whole suite gets one more go.
+let chromeCrashed = false;
+let closing = false;
+browser.on('disconnected', () => {
+  chromeCrashed = !closing;
+});
 const closeOpenPages = async () => {
+  if (chromeCrashed) return;
   for (const page of await browser.pages()) {
     if (page !== control && page.url() !== 'about:blank') await page.close();
   }
@@ -429,7 +426,8 @@ const closeOpenPages = async () => {
 const TEST_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS ?? 150_000);
 const failures = [];
 const test = async (name, run) => {
-  if (process.env.ONLY && !name.includes(process.env.ONLY)) return;
+  if (process.env.ONLY && !new RegExp(process.env.ONLY).test(name)) return;
+  if (chromeCrashed) return;
   console.log(`Testing ${name}`);
   reset();
   try {
@@ -561,9 +559,10 @@ try {
     });
     await fill(popup, { to: 'phone', body: 'slow down' });
     await clickSend(popup);
+    // Told straight away, not left spinning through the backoff.
+    await composerSays(popup, 'will send automatically', 5000);
     // 15 seconds of backoff, then the quota returns on the next minute.
     await waitUntil(() => api.pushes.length === 1, 'the retried push', 90000);
-    await composerSays(popup, 'sent successfully');
     assert.equal(api.pushes.length, 1);
     assert.equal(posted('/v2/pushes').length, 2, 'One refused, one accepted');
     await popup.close();
@@ -799,6 +798,60 @@ try {
     assert.equal(Object.keys(await notifications()).length, 51, 'None repeat');
   });
 
+  await test('after the first scan, a tickle reads only what changed', async () => {
+    singlePhone();
+    await seed();
+    await restartWorker();
+    await setBaseline();
+    api.pushes = [newPush('first')];
+    stream({ type: 'tickle', subtype: 'push' });
+    await waitUntil(async () => (await notifications()).push_first, 'the first push');
+    await waitUntil(async () => await stored('pb_push_scan_watermark'), 'the watermark');
+    api.requests.length = 0;
+    await sleep(50);
+    api.pushes.unshift(newPush('second', { modified: Date.now() / 1000 + 60 }));
+    stream({ type: 'tickle', subtype: 'push' });
+    await waitUntil(async () => (await notifications()).push_second, 'the second push');
+    const scans = api.requests.filter(r => r.url.startsWith('/v2/pushes?'));
+    assert.ok(scans.length, 'It scanned');
+    assert.ok(
+      scans.every(r => r.url.includes('modified_after=')),
+      'Every scan asks only for changes'
+    );
+  });
+
+  await test('a new SMS fetches only the conversation that changed', async () => {
+    singlePhone();
+    const conversation = (id, latestId) => ({
+      id,
+      recipients: [{ name: id, number: id, address: id }],
+      latest: { id: latestId, timestamp: 1000, direction: 'incoming', body: 'x', type: 'sms' },
+    });
+    api.threads.phone = ['a', 'b', 'c'].map(id => conversation(id, `${id}1`));
+    await seed({ defaultSmsDevice: 'phone' });
+    await restartWorker();
+    await control.evaluate(() => chrome.runtime.sendMessage({ cmd: 'REFRESH_SMS_DATA' }).catch(() => {}));
+    const threadFetches = () =>
+      api.requests.filter(r => r.url.includes('_thread_')).map(r => r.url.split('_thread_')[1]);
+    const knowsAll = async () => (await stored('sms_data_phone'))?.threads?.length === 3;
+    if (!(await knowsAll())) {
+      stream({ type: 'push', push: { type: 'sms_changed', source_device_iden: 'phone', notifications: [] } });
+    }
+    await waitUntil(knowsAll, 'the first sync');
+    await waitUntil(
+      async () => (await stored('sms_data_phone')).threads.every(t => t.latestKey),
+      'all three conversations'
+    );
+    // Whatever pass that started may still be finishing.
+    await sleep(500);
+    api.requests.length = 0;
+    api.threads.phone[1] = conversation('b', 'b2');
+    stream({ type: 'push', push: { type: 'sms_changed', source_device_iden: 'phone', notifications: [] } });
+    await waitUntil(() => threadFetches().length, 'the changed conversation');
+    await sleep(500);
+    assert.deepEqual(threadFetches(), ['b']);
+  });
+
   await test('deleted pushes and paging work in the Messages tab', async () => {
     singlePhone();
     await seed();
@@ -1001,12 +1054,26 @@ try {
     assert.equal(answer.ok, false);
   });
 } finally {
+  closing = true;
   // A worker stuck on a held request shouldn't hold up the result.
   await Promise.race([browser.close(), sleep(5000)]);
   browser.process()?.kill('SIGKILL');
   server.close();
   server.closeAllConnections?.();
   fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+if (chromeCrashed) {
+  if (process.env.E2E_RETRIED) {
+    console.error('Chrome crashed again');
+    process.exit(1);
+  }
+  console.log('Chrome crashed. Running the suite again.');
+  const again = spawnSync(process.execPath, [process.argv[1]], {
+    stdio: 'inherit',
+    env: { ...process.env, E2E_RETRIED: '1' },
+  });
+  process.exit(again.status ?? 1);
 }
 
 if (failures.length) {

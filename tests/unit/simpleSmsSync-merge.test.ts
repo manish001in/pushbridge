@@ -162,6 +162,46 @@ describe('SMS cache', () => {
       ]);
     });
 
+    describe('incremental sync', () => {
+      const withLatest = (id: string, latestId: string) => ({
+        id,
+        recipients: [{ name: id, number: id, address: id }],
+        latest: { id: latestId, timestamp: 1, direction: 'incoming', body: 'x' },
+      });
+      const fetchedIds = () =>
+        api.getSmsThreadMessages.mock.calls.map(call => call[1]);
+
+      beforeEach(async () => {
+        api.getSmsThreadsList.mockResolvedValue({
+          threads: [withLatest('t1', 'a'), withLatest('t2', 'b')],
+        } as any);
+        api.getSmsThreadMessages.mockResolvedValue({
+          thread: [apiMsg('m', T)],
+        } as any);
+        await smsSync.syncAllSmsData(DEVICE);
+        api.getSmsThreadMessages.mockClear();
+      });
+
+      test('fetches nothing when nothing changed', async () => {
+        await smsSync.syncAllSmsData(DEVICE, { incremental: true });
+        expect(fetchedIds()).toEqual([]);
+        expect(cachedThread('t1').messages).toHaveLength(1);
+      });
+
+      test('fetches only the conversation that changed', async () => {
+        api.getSmsThreadsList.mockResolvedValue({
+          threads: [withLatest('t1', 'a'), withLatest('t2', 'new')],
+        } as any);
+        await smsSync.syncAllSmsData(DEVICE, { incremental: true });
+        expect(fetchedIds()).toEqual(['t2']);
+      });
+
+      test('a full sync still fetches everything', async () => {
+        await smsSync.syncAllSmsData(DEVICE);
+        expect(fetchedIds()).toEqual(['t1', 't2']);
+      });
+    });
+
     test('keeps a sent message the phone has not reported, behind newer ones', async () => {
       const now = Date.now();
       seedCache(

@@ -317,6 +317,7 @@ class OperationQueue {
         );
         // Processing keeps running: each tick skips until the backoff ends, and then
         // this retry goes out. Nothing else would restart it.
+        rateLimitManager.parseHeaders(response);
         rateLimitManager.startBackoff();
 
         // Re-queue the operation if retry count not exceeded

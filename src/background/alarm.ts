@@ -7,6 +7,7 @@ import { refreshChannelData } from './channelManager';
 import { reportError, PBError } from './errorManager';
 import { cleanupExpiredMirrors } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
+import { rateLimitManager } from './rateLimitManager';
 import {
   initializeWebSocket,
   isWebSocketHealthy,
@@ -193,6 +194,11 @@ export async function clearKeepAlive(): Promise<void> {
  */
 async function handleChannelRefresh(): Promise<void> {
   console.log('channel-refresh - refreshing channel data');
+
+  // It comes round again in a few hours.
+  if (rateLimitManager.isQuotaLow()) {
+    return;
+  }
 
   try {
     await refreshChannelData();

@@ -2,27 +2,14 @@
 // data, not a Pushbullet account. Set PUPPETEER_EXECUTABLE_PATH if needed.
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import path from 'node:path';
 
-import puppeteer from 'puppeteer';
+import { launchExtension } from './launchExtension.js';
 
-const extensionPath = path.resolve('dist');
-const browser = await puppeteer.launch({
-  headless: true,
-  ignoreDefaultArgs: ['--disable-extensions'],
-  args: [
-    '--no-sandbox',
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
-    '--enable-unsafe-extension-debugging',
-    '--host-resolver-rules=MAP * 127.0.0.1:9',
-  ],
-});
+const { browser, target } = await launchExtension([
+  '--host-resolver-rules=MAP * 127.0.0.1:9',
+]);
 
 try {
-  const target = await browser.waitForTarget(
-    t => t.type() === 'service_worker'
-  );
   const base = target.url().replace('/background.js', '');
   const workerCdp = await target.createCDPSession();
   await workerCdp.send('Network.enable');
