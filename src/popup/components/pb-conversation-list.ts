@@ -298,11 +298,50 @@ export class PbConversationList extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.loadConversations();
+    this.showSavedConversations().finally(() => this.loadConversations());
+    chrome.storage.onChanged?.addListener(this.handleStorageChange);
   }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    chrome.storage.onChanged?.removeListener(this.handleStorageChange);
+  }
+
+  /** Show conversations from storage without waiting on the worker. */
+  private savedDataKey: string | null = null;
+  private syncsSeen = 0;
+
+  private async showSavedConversations() {
+    const { defaultSmsDevice } =
+      await chrome.storage.local.get('defaultSmsDevice');
+    if (!defaultSmsDevice) return;
+    this.savedDataKey = `sms_data_${defaultSmsDevice}`;
+    const key = this.savedDataKey;
+    const stored = await chrome.storage.local.get(key);
+    if (stored?.[key]?.threads && !this.conversations.length) {
+      this.conversations = stored[key].threads;
+      this.filterConversations();
+    }
+  }
+
+  /** A background sync finished, so show the new data. */
+  private readonly handleStorageChange = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    area: string
+  ) => {
+    // Only this device's data: a sync for another phone must not replace the list.
+    if (area !== 'local' || !this.savedDataKey) return;
+    const threads = changes[this.savedDataKey]?.newValue?.threads;
+    if (threads) {
+      this.syncsSeen++;
+      this.conversations = threads;
+      this.filterConversations();
+    }
+  };
 
   async loadConversations() {
     this.isLoading = true;
+    const syncsAtStart = this.syncsSeen;
     try {
       console.log('[ConversationList] Starting to load conversations from API');
 
@@ -318,8 +357,6 @@ export class PbConversationList extends LitElement {
       // Handle case where response is undefined (communication failure)
       if (!response) {
         console.error('[ConversationList] No response from background script');
-        this.conversations = [];
-        this.filterConversations();
         return;
       }
 
@@ -327,8 +364,11 @@ export class PbConversationList extends LitElement {
         console.log(
           `[ConversationList] Successfully loaded ${response.conversations?.length || 0} conversations from API`
         );
-        this.conversations = response.conversations || [];
-        this.filterConversations();
+        // A sync that finished while waiting has newer data than this response.
+        if (this.syncsSeen === syncsAtStart) {
+          this.conversations = response.conversations || [];
+          this.filterConversations();
+        }
       } else {
         const errorMsg = response.error || 'Unknown error occurred';
         console.error(
@@ -336,16 +376,12 @@ export class PbConversationList extends LitElement {
           errorMsg
         );
         console.error('[ConversationList] Full error response:', response);
-        this.conversations = [];
-        this.filterConversations();
       }
     } catch (error) {
       console.error(
         '[ConversationList] Exception while loading conversations from API:',
         error
       );
-      this.conversations = [];
-      this.filterConversations();
     } finally {
       console.log(
         '[ConversationList] Loading complete, setting isLoading=false'
@@ -442,7 +478,7 @@ export class PbConversationList extends LitElement {
   }
 
   render() {
-    if (this.isLoading) {
+    if (this.isLoading && this.conversations.length === 0) {
       return html`
         <div class="loading">
           <div class="spinner"></div>

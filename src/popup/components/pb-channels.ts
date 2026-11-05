@@ -6,6 +6,8 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
+import { isSafeLinkUrl } from '../linkHandling';
+
 interface ChannelInfo {
   iden: string;
   tag: string;
@@ -654,6 +656,11 @@ export class PbChannels extends LitElement {
 
   async loadSubscriptions() {
     try {
+      // Show the saved list right away; the response below replaces it.
+      const stored = await chrome.storage.local.get('pb_channel_subs');
+      if (stored?.pb_channel_subs?.subscriptions && !this.subscriptions.length) {
+        this.subscriptions = stored.pb_channel_subs.subscriptions;
+      }
       this.isLoading = true;
       const response = await chrome.runtime.sendMessage({
         cmd: 'GET_CHANNEL_SUBSCRIPTIONS',
@@ -908,7 +915,7 @@ export class PbChannels extends LitElement {
   }
 
   private renderSubscriptions() {
-    if (this.isLoading) {
+    if (this.isLoading && this.subscriptions.length === 0) {
       return html`<div class="loading">Loading subscriptions...</div>`;
     }
 
@@ -998,7 +1005,7 @@ export class PbChannels extends LitElement {
                         ${post.body
                           ? html`<p class="post-body">${post.body}</p>`
                           : ''}
-                        ${post.url
+                        ${isSafeLinkUrl(post.url)
                           ? html`<a
                               href="${post.url}"
                               target="_blank"

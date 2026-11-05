@@ -4,8 +4,9 @@ console.log('Pushbridge background service worker started');
 // Import modules
 import { TransferRecord } from '../types/pushbullet';
 
-import { initializeKeepAlive } from './alarm';
+import { initializeKeepAlive, registerKeepAliveListener } from './alarm';
 import {
+  clearAllChannelCaches,
   initializeChannelManager,
   getOwnedChannels,
   refreshChannelData,
@@ -32,12 +33,15 @@ import {
 import { httpClient } from './httpClient';
 import {
   handleUserDismissal,
+  isMirrorNotificationId,
   reconstructMirrors,
   cleanupExpiredMirrors,
   getActiveMirrors,
 } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
+import { getNotificationPrefs } from './notificationPrefs';
 import { formatToThreeDecimals } from './numberUtils';
+import { operationQueue } from './operationQueue';
 import {
   createPush,
   getPushHistory,
@@ -49,7 +53,7 @@ import {
   createFilePush,
 } from './pushManager';
 import { initializeQueue, enqueue, getQueueStatus, clearQueue } from './queue';
-import { initializeQuotaMonitor } from './quotaMonitor';
+import { initializeQuotaMonitor, registerQuotaListener } from './quotaMonitor';
 import { rateLimitManager } from './rateLimitManager';
 // SMS imports moved to simple system
 import {
@@ -61,12 +65,17 @@ import {
 import { sendSms } from './smsBridge';
 import {
   initializeWebSocket,
+  connectOnWorkerStart,
+  disconnectWebSocket,
   isWebSocketHealthy,
   getConnectionStatus,
 } from './socket';
 import { setLocal, getLocal } from './storage';
 import { tokenBucket } from './tokenBucket';
-import { initializeTokenHealthMonitor } from './tokenHealth';
+import {
+  initializeTokenHealthMonitor,
+  registerTokenHealthListener,
+} from './tokenHealth';
 import { unifiedNotificationTracker } from './unifiedNotificationTracker';
 
 // Storage key for tracking popup open time
@@ -113,10 +122,18 @@ async function initializeSmsSync(): Promise<void> {
   }
 }
 
-// Initialize background services
-chrome.runtime.onInstalled.addListener(async () => {
-  console.log('Pushbridge extension installed');
+let workerRuntime: Promise<void> | null = null;
 
+/**
+ * Start what must be running whenever the worker is alive. Chrome stops and
+ * restarts the worker, and each restart begins with empty memory.
+ */
+function ensureWorkerRuntime(): Promise<void> {
+  if (!workerRuntime) workerRuntime = initializeWorkerRuntime();
+  return workerRuntime;
+}
+
+async function initializeWorkerRuntime(): Promise<void> {
   try {
     // Initialize HTTP client with rate limiting
     await httpClient.initialize();
@@ -164,28 +181,8 @@ chrome.runtime.onInstalled.addListener(async () => {
       5 * 60 * 1000
     ); // Every 5 minutes
 
-    // Initialize keep-alive alarm
-    await initializeKeepAlive();
-
-    // Initialize monitoring systems
-    await initializeQuotaMonitor();
-    await initializeTokenHealthMonitor();
-
     // Initialize queue system
     initializeQueue();
-
-    // Initialize SMS functionality  
-    // SMS bridge initialization removed - using simple system
-    // Contact manager initialization is handled automatically via API calls
-
-    // Initialize channel functionality
-    await initializeChannelManager();
-
-    // Initialize SMS sync
-    await initializeSmsSync();
-
-    // SMS history sync now handled by simple system
-    console.log('[Background] SMS sync using simple system');
 
     // Initialize context manager
     await contextManager.loadContext();
@@ -195,9 +192,35 @@ chrome.runtime.onInstalled.addListener(async () => {
     await unifiedNotificationTracker.initialize();
 
     // Initialize WebSocket connection
-    await initializeWebSocket();
+    await connectOnWorkerStart();
+  } catch (error) {
+    console.error('Failed to initialize worker runtime:', error);
+  }
+}
 
-    // Reconstruct mirror notifications after restart
+/**
+ * Start what only needs to run once per install or browser start: alarms,
+ * network checks, restoring notifications, and context menus.
+ */
+async function initializeStartupServices(): Promise<void> {
+  await ensureWorkerRuntime();
+
+  try {
+    // Initialize keep-alive alarm
+    await initializeKeepAlive();
+
+    // Initialize monitoring systems
+    await initializeQuotaMonitor();
+    await initializeTokenHealthMonitor();
+
+    // Initialize channel functionality
+    await initializeChannelManager();
+
+    // Initialize SMS sync
+    await initializeSmsSync();
+
+    // Clean up expired mirrors, then restore the rest after a restart
+    await cleanupExpiredMirrors();
     await reconstructMirrors();
 
     // Resume interrupted uploads
@@ -214,24 +237,24 @@ chrome.runtime.onInstalled.addListener(async () => {
   } catch (error) {
     console.error('Failed to initialize background services:', error);
   }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('Pushbridge extension installed');
+  void initializeStartupServices();
 });
 
-// Handle service worker startup
-chrome.runtime.onStartup.addListener(async () => {
-  console.log('Pushbridge service worker started');
-
-  try {
-    // Reconstruct mirror notifications after startup
-    await reconstructMirrors();
-
-    // Clean up expired mirrors
-    await cleanupExpiredMirrors();
-
-    // SMS history sync now handled by simple system via periodic timer
-  } catch (error) {
-    console.error('Failed to handle service worker startup:', error);
-  }
+chrome.runtime.onStartup.addListener(() => {
+  console.log('Pushbridge browser startup');
+  void initializeStartupServices();
 });
+
+// Runs on every worker start. Listeners must be registered synchronously or
+// Chrome won't deliver the event that woke the worker.
+registerKeepAliveListener();
+registerQuotaListener();
+registerTokenHealthListener();
+void ensureWorkerRuntime();
 
 // Handle notification clicks
 chrome.notifications.onClicked.addListener(async notificationId => {
@@ -291,8 +314,7 @@ chrome.notifications.onButtonClicked.addListener(
 // Handle mirror notification clicks and dismissals
 chrome.notifications.onClicked.addListener(async notificationId => {
   // Check if this is a mirror notification
-  const isMirrorNotification =
-    notificationId.includes('-') && notificationId.length === 36;
+  const isMirrorNotification = await isMirrorNotificationId(notificationId);
 
   if (isMirrorNotification) {
     // Handle mirror notification click (dismiss)
@@ -331,8 +353,7 @@ chrome.notifications.onClicked.addListener(async notificationId => {
 chrome.notifications.onClosed.addListener(async (notificationId, byUser) => {
   if (byUser) {
     // Check if this is a mirror notification
-    const isMirrorNotification =
-      notificationId.includes('-') && notificationId.length === 36;
+    const isMirrorNotification = await isMirrorNotificationId(notificationId);
 
     if (isMirrorNotification) {
       // Handle mirror notification dismissal
@@ -342,7 +363,8 @@ chrome.notifications.onClosed.addListener(async (notificationId, byUser) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  console.log('📨 [Background] Received message:', message);
+  // Messages can hold tokens and message text, so only the command is logged.
+  console.log('📨 [Background] Received message:', message?.cmd);
 
   // Handle different message types
   switch (message.cmd) {
@@ -1231,13 +1253,17 @@ async function showPushNotification(push: any): Promise<boolean> {
 
     const notificationId = `push_${push.iden}`;
 
-    await chrome.notifications.create(notificationId, {
-      type: 'basic',
-      iconUrl: iconUrl,
-      title: title,
-      message: message,
-      requireInteraction: true,
-    });
+    const prefs = await getNotificationPrefs();
+    if (prefs.enabled) {
+      await chrome.notifications.create(notificationId, {
+        type: 'basic',
+        iconUrl: iconUrl,
+        title: title,
+        message: message,
+        requireInteraction: !prefs.autoDismiss,
+        silent: !prefs.sound,
+      });
+    }
 
     // Store notification mapping for click handling
     await setLocal(`notification_${notificationId}`, {
@@ -2510,7 +2536,13 @@ async function handleClearSmsNotifications(
 async function handleClearAllData(sendResponse: (response: any) => void) {
   try {
     console.log('🧹 [Background] Starting complete data clear...');
-    
+
+    // Stop the stream first, or it keeps delivering the old account's
+    // notifications and writing to storage after the reset.
+    disconnectWebSocket();
+    operationQueue.clearQueue();
+    await clearAllChannelCaches();
+
     // Clear ALL storage from chrome.storage.local (this clears everything)
     await chrome.storage.local.clear();
     console.log('🧹 [Background] All chrome.storage.local data cleared');

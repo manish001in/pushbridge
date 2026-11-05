@@ -2,6 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 
 import { EnhancedPush } from '../../types/api-interfaces';
+import { isSafeLinkUrl, openLink } from '../linkHandling';
 
 // Legacy interface for backward compatibility
 interface PushbulletPush {
@@ -54,6 +55,12 @@ export class RecentPushes extends LitElement {
 
   @state()
   private isLoading = false;
+
+  @state()
+  private isRefreshing = false;
+
+  @state()
+  private isRestoring = true;
 
   @state()
   private errorMessage = '';
@@ -813,21 +820,27 @@ export class RecentPushes extends LitElement {
     }
   `;
 
+  private readonly handleRuntimeMessage = (message: any): void =>
+    this.handleMessage(message);
+
   connectedCallback() {
     super.connectedCallback();
-    this.loadStoredState();
     this.loadDevices();
-    // Always refresh pushes when the component connects to ensure we have the latest data
-    this.loadPushes(true);
+    // Show saved pushes first, then refresh in the background. In this order, a slow
+    // read of the saved copy can't overwrite the fresh list.
+    this.loadStoredState().finally(() => {
+      this.isRestoring = false;
+      this.loadPushes(true);
+    });
 
     // Listen for WebSocket sync updates and push creation events
-    chrome.runtime.onMessage.addListener(this.handleMessage.bind(this));
+    chrome.runtime.onMessage.addListener(this.handleRuntimeMessage);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     // Remove message listener
-    chrome.runtime.onMessage.removeListener(this.handleMessage.bind(this));
+    chrome.runtime.onMessage.removeListener(this.handleRuntimeMessage);
   }
 
   private async loadStoredState(): Promise<void> {
@@ -900,6 +913,7 @@ export class RecentPushes extends LitElement {
 
     console.log('🔄 [RecentPushes] Setting isLoading to true');
     this.isLoading = true;
+    this.isRefreshing = refresh;
     this.errorMessage = '';
 
     try {
@@ -991,6 +1005,7 @@ export class RecentPushes extends LitElement {
     } finally {
       console.log('🔄 [RecentPushes] Setting isLoading to false');
       this.isLoading = false;
+      this.isRefreshing = false;
     }
   }
 
@@ -1248,7 +1263,7 @@ export class RecentPushes extends LitElement {
         });
       } else {
         // Fallback to opening URL
-        window.open(push.file_url, '_blank');
+        openLink(push.file_url);
       }
     }
   }
@@ -1262,7 +1277,8 @@ export class RecentPushes extends LitElement {
           ? html`
               <div
                 class="file-preview"
-                @click=${() => window.open(push.image_url, '_blank')}
+                @click=${(e: MouseEvent) => openLink(push.image_url, e)}
+                @auxclick=${(e: MouseEvent) => openLink(push.image_url, e)}
               >
                 <img
                   src="${push.image_url}"
@@ -1342,7 +1358,7 @@ export class RecentPushes extends LitElement {
 
         <div class="content-area">
           <div class="push-list">
-            ${filteredPushes.length === 0 && !this.isLoading
+            ${filteredPushes.length === 0 && !this.isLoading && !this.isRestoring
               ? html`
                   <div class="empty-state">
                     <div class="empty-state-icon">📭</div>
@@ -1398,13 +1414,15 @@ export class RecentPushes extends LitElement {
                   ${push.body
                     ? html` <div class="push-body">${push.body}</div> `
                     : ''}
-                  ${push.url
+                  ${isSafeLinkUrl(push.url)
                     ? html`
                         <a href=${push.url} class="push-url" target="_blank">
                           ${push.url}
                         </a>
                       `
-                    : ''}
+                    : push.url
+                      ? html`<span class="push-url">${push.url}</span>`
+                      : ''}
                   ${this.renderFileDisplay(push)}
 
                   <div class="push-meta">
@@ -1441,7 +1459,7 @@ export class RecentPushes extends LitElement {
                 </div>
               `
             )}
-            ${this.isLoading
+            ${this.isLoading && filteredPushes.length === 0
               ? html`
                   <div class="loading">
                     <span class="loading-spinner"></span>
@@ -1450,17 +1468,21 @@ export class RecentPushes extends LitElement {
                 `
               : ''}
           </div>
-          ${this.hasMore && !this.isLoading
+          ${this.hasMore && (!this.isLoading || this.isRefreshing)
             ? html`
                 <div class="load-more-container">
-                  <button class="load-more" @click=${this.handleLoadMore}>
+                  <button
+                    class="load-more"
+                    ?disabled=${this.isLoading}
+                    @click=${this.handleLoadMore}
+                  >
                     <span class="load-more-icon">📄</span>
                     Load More Pushes
                   </button>
                 </div>
               `
             : ''}
-          ${this.isLoading && this.hasMore
+          ${this.isLoading && !this.isRefreshing && this.hasMore
             ? html`
                 <div class="load-more-container">
                   <button class="load-more" disabled>

@@ -30,8 +30,7 @@ export async function initializeTokenHealthMonitor(): Promise<void> {
       `Token health monitor initialized with ${TOKEN_HEALTH_CHECK_INTERVAL_HOURS} hour interval`
     );
 
-    // Set up alarm listener
-    chrome.alarms.onAlarm.addListener(handleTokenHealthAlarm);
+    registerTokenHealthListener();
 
     // Run initial check
     await checkTokenHealth();
@@ -43,6 +42,11 @@ export async function initializeTokenHealthMonitor(): Promise<void> {
 /**
  * Handle token health check alarm
  */
+/** Must run every time the worker starts; alarms outlive it. */
+export function registerTokenHealthListener(): void {
+  chrome.alarms.onAlarm.addListener(handleTokenHealthAlarm);
+}
+
 function handleTokenHealthAlarm(alarm: chrome.alarms.Alarm): void {
   if (alarm.name === TOKEN_HEALTH_ALARM_NAME) {
     checkTokenHealth();

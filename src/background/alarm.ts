@@ -12,6 +12,7 @@ import {
   isWebSocketHealthy,
   getConnectionStatus,
 } from './socket';
+import { getLocal } from './storage';
 import { tokenBucket } from './tokenBucket';
 
 const KEEPALIVE_ALARM_NAME = 'keepalive';
@@ -54,11 +55,18 @@ export async function initializeKeepAlive(): Promise<void> {
       `Token bucket refill alarm created with ${TOKEN_BUCKET_REFILL_INTERVAL_MINUTES} minute interval`
     );
 
-    // Set up alarm listener
-    chrome.alarms.onAlarm.addListener(handleAlarm);
+    registerKeepAliveListener();
   } catch (error) {
     console.error('Failed to initialize alarms:', error);
   }
+}
+
+/**
+ * Alarms outlive the worker, so this must run every time the worker starts.
+ * Adding the same listener twice has no effect.
+ */
+export function registerKeepAliveListener(): void {
+  chrome.alarms.onAlarm.addListener(handleAlarm);
 }
 
 /**
@@ -89,12 +97,13 @@ async function handleKeepAlive(): Promise<void> {
 
     console.log('WebSocket status:', connectionStatus);
 
-    // If WebSocket is unhealthy (no heartbeat for >60s), attempt reconnection
-    if (!isHealthy && connectionStatus.lastHeartbeat > 0) {
+    // Reconnect if the socket never started in this worker (heartbeat 0) or has
+    // gone quiet for over 60s, unless the user turned auto-reconnect off.
+    const settings = await getLocal<any>('pb_settings');
+    if (!isHealthy && settings?.autoReconnect !== false) {
       const timeSinceHeartbeat = Date.now() - connectionStatus.lastHeartbeat;
-      if (timeSinceHeartbeat > 60000) {
-        // 60 seconds
-        console.log('WebSocket heartbeat stale, attempting reconnection');
+      if (connectionStatus.lastHeartbeat === 0 || timeSinceHeartbeat > 60000) {
+        console.log('WebSocket not healthy, attempting reconnection');
         await initializeWebSocket();
       }
     }

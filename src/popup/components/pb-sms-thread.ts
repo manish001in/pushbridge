@@ -8,6 +8,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
 import { SmsThread } from '../../types/pushbullet';
+import { openLink } from '../linkHandling';
 
 interface Recipient {
   number: string;
@@ -1361,8 +1362,8 @@ export class PbSmsThread extends LitElement {
     }
   }
 
-  openImage(url: string) {
-    chrome.tabs.create({ url });
+  openImage(url: string, event?: MouseEvent) {
+    openLink(url, event);
   }
 
   render() {
@@ -1462,7 +1463,9 @@ export class PbSmsThread extends LitElement {
                         class="message-image"
                         src="${msg.image_url}"
                         alt="Message attachment"
-                        @click=${() => this.openImage(msg.image_url!)}
+                        @click=${(e: MouseEvent) => this.openImage(msg.image_url!, e)}
+                        @auxclick=${(e: MouseEvent) =>
+                          this.openImage(msg.image_url!, e)}
                       />
                     `
                   : ''}

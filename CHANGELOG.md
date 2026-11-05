@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.2] - 2026-11-06
+
+### Added
+- Cmd+click (macOS), Ctrl+click (Windows/Linux) and middle click open links in a background tab and keep the popup open
+- "Show mirrored notifications" and "Auto-dismiss notifications" settings
+- Move up/down buttons for reordering tabs with the keyboard
+
+### Fixed
+- Popup draws immediately instead of waiting on the network, then loads the other tabs in the background
+- Tabs show saved data straight away and refresh quietly, instead of showing a loading state
+- SMS conversations update in the popup when a background sync finishes
+- Live pushes stopped after a browser restart or worker restart
+- Pushes sent while the computer was asleep are now caught up on reconnect, including auto-opening links
+- "Enable notifications", "Play notification sound" and "Auto-reconnect" settings had no effect
+- The default target device setting was ignored when sending a push
+- Queued pushes could be sent twice, and operations added during processing could be lost
+- "Reset All Data" left the old account's stream connected
+- Mirrored notifications could not be recognized on click or close, and stayed on screen after expiring
+- SMS and last-seen timestamp handling that showed old messages or hid new pushes
+- Auto-open only opens web links meant for this browser
+
+### Security
+- Access tokens and message contents are no longer written to the console
+- Removed the unused content script and web-accessible resources, so websites can no longer detect the extension
 ## [1.3.1] - 2026-11-05
 
 ### Added

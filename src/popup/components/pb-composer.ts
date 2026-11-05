@@ -488,6 +488,17 @@ export class PushComposer extends LitElement {
       ];
 
       console.log('Total send targets:', this.sendTargets.length);
+
+      // Start from the default device chosen in settings, unless the user has
+      // already picked a target while the list was loading.
+      const stored = await chrome.storage.local.get('pb_settings');
+      const defaultTarget = stored?.pb_settings?.defaultDevice;
+      if (
+        this.sendTo === 'all' &&
+        this.sendTargets.some(target => target.id === defaultTarget)
+      ) {
+        this.sendTo = defaultTarget;
+      }
     } catch (error) {
       console.error('Failed to load send targets:', error);
     }

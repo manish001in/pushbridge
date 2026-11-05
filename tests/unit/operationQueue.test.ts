@@ -51,6 +51,9 @@ describe('OperationQueue Deduplication', () => {
       status: 200,
       statusText: 'OK',
       headers: new Map(),
+      clone() {
+        return this;
+      },
     });
   });
 

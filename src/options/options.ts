@@ -18,6 +18,8 @@ interface Settings {
   optionOrder: OptionKey[];
   hiddenTabs: OptionKey[];
   systemTheme: boolean;
+  mirrorNotificationsEnabled: boolean;
+  autoDismissNotifications: boolean;
 }
 
 class OptionsPage {
@@ -31,6 +33,8 @@ class OptionsPage {
     optionOrder: DEFAULT_OPTION_ORDER.slice(),
     hiddenTabs: [],
     systemTheme: false,
+    mirrorNotificationsEnabled: true,
+    autoDismissNotifications: false,
   };
 
   private devices: Array<{ iden: string; nickname: string; type: string }> = [];
@@ -350,6 +354,20 @@ class OptionsPage {
       });
     }
 
+    for (const [id, key] of [
+      ['mirror-notifications-toggle', 'mirrorNotificationsEnabled'],
+      ['auto-dismiss-toggle', 'autoDismissNotifications'],
+    ] as const) {
+      const toggle = document.getElementById(id) as HTMLInputElement | null;
+      if (toggle) {
+        toggle.checked = this.settings[key];
+        toggle.addEventListener('change', () => {
+          this.settings[key] = toggle.checked;
+          this.saveSettings();
+        });
+      }
+    }
+
     // Navigation order
     const ul = document.getElementById(
       'option-order'
@@ -361,13 +379,18 @@ class OptionsPage {
           k => k !== 'SMS/MMS' || this.smsDevices.length > 0
         );
         ul.innerHTML = eligible
-          .map(k => {
+          .map((k, index) => {
             const isHidden = this.settings.hiddenTabs?.includes(k);
 
             return `
               <li draggable="true" data-key="${k}" class="dnd-item">
                 <span class="handle" aria-hidden="true">⋮⋮</span>
                 <span class="label">${k}</span>
+                <span class="dnd-actions">
+                  <button type="button" class="move-tab" data-key="${k}" data-direction="-1"
+                          aria-label="Move ${k} up" ${index === 0 ? 'disabled' : ''}>↑</button>
+                  <button type="button" class="move-tab" data-key="${k}" data-direction="1"
+                          aria-label="Move ${k} down" ${index === eligible.length - 1 ? 'disabled' : ''}>↓</button>
                 <button type="button"
                         class="toggle-visibility"
                         data-key="${k}"
@@ -375,12 +398,48 @@ class OptionsPage {
                         data-state="${isHidden ? 'show' : 'hide'}">
                   ${isHidden ? 'Show' : 'Hide'}
                 </button>
+                </span>
               </li>
             `;
           })
           .join('');
       };
       renderOrder();
+
+      // Tabs left out of the list (SMS with no device) keep their saved position.
+      const withUnlistedTabs = (order: OptionKey[]) => {
+        this.settings.optionOrder.forEach((key, index) => {
+          if (!order.includes(key)) order.splice(index, 0, key);
+        });
+        return order;
+      };
+      const listedOrder = () =>
+        Array.from(ul.querySelectorAll('li')).map(
+          li => li.getAttribute('data-key') as OptionKey
+        );
+
+      // Keyboard alternative to dragging
+      ul.addEventListener('click', async e => {
+        const moveBtn = (e.target as HTMLElement).closest<HTMLButtonElement>(
+          '.move-tab'
+        );
+        if (!moveBtn) return;
+        const key = moveBtn.dataset.key as OptionKey;
+        const direction = Number(moveBtn.dataset.direction);
+        const order = listedOrder();
+        const from = order.indexOf(key);
+        order.splice(from, 1);
+        order.splice(from + direction, 0, key);
+        await this.setOptionOrder(withUnlistedTabs(order));
+        renderOrder();
+        // Stay on the same control, or its partner at the end of the list.
+        const row = `.move-tab[data-key="${key}"]`;
+        (
+          ul.querySelector<HTMLButtonElement>(
+            `${row}[data-direction="${direction}"]:not([disabled])`
+          ) ?? ul.querySelector<HTMLButtonElement>(`${row}:not([disabled])`)
+        )?.focus();
+      });
 
       ul.addEventListener('click', async e => {
         const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(
@@ -430,7 +489,7 @@ class OptionsPage {
       let draggingEl: HTMLElement | null = null;
 
       ul.addEventListener('dragstart', e => {
-        if ((e.target as HTMLElement).closest('.toggle-visibility')) {
+        if ((e.target as HTMLElement).closest('.dnd-actions')) {
           e.preventDefault(); // don't drag when clicking the button
           return;
         }
@@ -455,14 +514,7 @@ class OptionsPage {
       ul.addEventListener('dragend', async () => {
         if (draggingEl) draggingEl.classList.remove('dragging');
         draggingEl = null;
-        const order = Array.from(ul.querySelectorAll('li')).map(
-          li => li.getAttribute('data-key') as OptionKey
-        );
-        // Tabs left out of the list (SMS with no device) keep their saved position.
-        this.settings.optionOrder.forEach((key, index) => {
-          if (!order.includes(key)) order.splice(index, 0, key);
-        });
-        await this.setOptionOrder(order);
+        await this.setOptionOrder(withUnlistedTabs(listedOrder()));
         renderOrder(); // rehydrate DOM to avoid any ghost states
       });
 
@@ -611,6 +663,8 @@ class OptionsPage {
         optionOrder: DEFAULT_OPTION_ORDER.slice(),
         hiddenTabs: [],
         systemTheme: false,
+        mirrorNotificationsEnabled: true,
+        autoDismissNotifications: false,
       };
       this.pendingSmsDeviceChange = null;
       await this.saveSettings();
@@ -645,6 +699,8 @@ class OptionsPage {
           optionOrder: DEFAULT_OPTION_ORDER.slice(),
           hiddenTabs: [],
           systemTheme: false,
+          mirrorNotificationsEnabled: true,
+          autoDismissNotifications: false,
         };
         this.pendingSmsDeviceChange = null;
         await this.saveSettings();
@@ -693,6 +749,26 @@ class OptionsPage {
           </div>
           <div class="setting-control">
             <input type="checkbox" id="sound-toggle" class="toggle">
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="mirror-notifications-toggle">Show mirrored notifications</label>
+            <p>Show desktop notifications for notifications mirrored from your phone. They still appear in the popup when this is off</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="mirror-notifications-toggle" class="toggle">
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label for="auto-dismiss-toggle">Auto-dismiss notifications</label>
+            <p>Let notifications disappear after a few seconds instead of staying until you close them</p>
+          </div>
+          <div class="setting-control">
+            <input type="checkbox" id="auto-dismiss-toggle" class="toggle">
           </div>
         </div>
       </div>
@@ -838,7 +914,7 @@ class OptionsPage {
       </div>
 
       <div class="footer">
-        <p>Pushbridge v1.3.1 · <a href="https://github.com/manish001in/pushbridge" target="_blank">GitHub</a> · <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a></p>
+        <p>Pushbridge v${chrome.runtime.getManifest().version} · <a href="https://github.com/manish001in/pushbridge" target="_blank">GitHub</a> · <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a></p>
         <p class="disclaimer">This is an unofficial extension and is not affiliated with Pushbullet Inc.</p>
       </div>
     `;

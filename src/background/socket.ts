@@ -11,7 +11,7 @@ import { notificationBadge } from './notificationBadge';
 import { formatToThreeDecimals } from './numberUtils';
 import { getPushHistory } from './pushManager';
 import { syncAllSmsData } from './simpleSmsSync';
-import { getLocal } from './storage';
+import { getLocal, getSession, setSession } from './storage';
 import { unifiedNotificationTracker } from './unifiedNotificationTracker';
 
 interface WebSocketMessage {
@@ -43,6 +43,11 @@ const wsState: WebSocketState = {
 
 // Constants
 const MAX_RETRY_COUNT = 10;
+const STREAM_STARTED_KEY = 'pb_stream_started';
+// Limit tabs opened at once when catching up after sleep; the rest stay in Messages.
+const MAX_CATCH_UP_TABS = 10;
+// Enough for a long absence without paging through a whole account's history.
+const MAX_CATCH_UP_PAGES = 5;
 const RECONNECT_DELAYS = [2000, 4000, 8000, 16000, 32000]; // Exponential backoff
 const HEARTBEAT_TIMEOUT = 60000; // 60 seconds
 const POLL_INTERVAL = 60000; // 60 seconds
@@ -50,6 +55,22 @@ const POLL_INTERVAL = 60000; // 60 seconds
 /**
  * Initialize WebSocket connection
  */
+/**
+ * Connect when the worker starts. With auto-reconnect off the user only wants the
+ * first connection of the browser session, and an alarm waking the worker later
+ * must not count as a new one.
+ */
+export async function connectOnWorkerStart(): Promise<void> {
+  const settings = await getLocal<any>('pb_settings');
+  const alreadyStarted = await getSession<boolean>(STREAM_STARTED_KEY);
+  if (settings?.autoReconnect === false && alreadyStarted) {
+    console.log('Auto-reconnect is off, not reconnecting on worker start');
+    return;
+  }
+  await setSession(STREAM_STARTED_KEY, true);
+  await initializeWebSocket();
+}
+
 export async function initializeWebSocket(): Promise<void> {
   try {
     const token = await getLocal<string>('pb_token');
@@ -78,8 +99,10 @@ async function connectWebSocket(): Promise<void> {
       throw new Error('No token available');
     }
 
-    // Close existing connection if any
+    // Close existing connection if any, without triggering a reconnect
     if (wsState.socket) {
+      wsState.socket.onopen = null;
+      wsState.socket.onclose = null;
       wsState.socket.close();
     }
 
@@ -95,8 +118,9 @@ async function connectWebSocket(): Promise<void> {
     }
 
     // Create new WebSocket connection
+    // The URL contains the access token, so it must never be logged.
     const wsUrl = `wss://stream.pushbullet.com/websocket/${token}`;
-    console.log('Connecting to WebSocket:', wsUrl);
+    console.log('Connecting to WebSocket');
 
     wsState.socket = new WebSocket(wsUrl);
     wsState.socket.onopen = onWebSocketOpen;
@@ -124,6 +148,9 @@ function onWebSocketOpen(): void {
     clearInterval(wsState.pollInterval);
     wsState.pollInterval = null;
   }
+
+  // Nothing is delivered while the socket is down, such as during sleep.
+  void schedulePushSync(true);
 }
 
 /**
@@ -147,7 +174,7 @@ function onWebSocketMessage(event: MessageEvent): void {
       case 'tickle':
         if (message.subtype === 'push') {
           console.log('Push tickle received, syncing history');
-          handlePushTickle();
+          schedulePushSync();
         } else if (message.subtype === 'device') {
           console.log('Device tickle received, syncing history');
           handleDeviceTickle();
@@ -178,6 +205,12 @@ async function onWebSocketClose(event: CloseEvent): Promise<void> {
   console.log('WebSocket closed:', event.code, event.reason);
   wsState.isConnected = false;
   wsState.socket = null;
+
+  const settings = await getLocal<any>('pb_settings');
+  if (settings?.autoReconnect === false) {
+    console.log('Auto-reconnect is off, staying disconnected');
+    return;
+  }
 
   // Attempt to reconnect unless we've exceeded max retries
   if (wsState.retryCount < MAX_RETRY_COUNT) {
@@ -234,31 +267,83 @@ async function switchToPollingMode(): Promise<void> {
 
   // Start polling
   wsState.pollInterval = setInterval(() => {
-    handlePushTickle();
+    schedulePushSync();
   }, POLL_INTERVAL) as any;
+}
+
+let pushSyncChain: Promise<void> = Promise.resolve();
+
+/**
+ * Run one history scan at a time. Overlapping scans would both see the same push
+ * as new before either marks it processed, and open its link twice.
+ */
+function schedulePushSync(catchUp = false): Promise<void> {
+  pushSyncChain = pushSyncChain.then(() => handlePushTickle(catchUp));
+  return pushSyncChain;
+}
+
+/**
+ * Pushes to look at, oldest first. The API sorts by modified time, so paging stops
+ * only once a page has nothing modified since the user last looked, and creation
+ * order comes from sorting.
+ */
+async function fetchPushesToProcess(catchUp: boolean): Promise<any[]> {
+  const pushes: any[] = [];
+  let cursor: string | undefined = '';
+
+  for (let page = 0; page < (catchUp ? MAX_CATCH_UP_PAGES : 1); page++) {
+    const history: { pushes?: any[]; cursor?: string } = await getPushHistory(
+      50,
+      0,
+      cursor
+    );
+    const batch = history.pushes ?? [];
+    pushes.push(...batch);
+    cursor = history.cursor;
+
+    const oldest = batch[batch.length - 1];
+    if (
+      !cursor ||
+      !oldest ||
+      !(await unifiedNotificationTracker.isNewerThanLastSeen(oldest.modified))
+    ) {
+      break;
+    }
+  }
+
+  return pushes.sort((a, b) => a.created - b.created);
 }
 
 /**
  * Handle push tickle by syncing history using unified tracker
  */
-async function handlePushTickle(): Promise<void> {
+async function handlePushTickle(catchUp = false): Promise<void> {
   try {
     console.log(
-      '🔄 [WebSocket] Push tickle received, syncing history with unified tracker'
+      catchUp
+        ? '🔄 [WebSocket] Connected, catching up on missed pushes'
+        : '🔄 [WebSocket] Push tickle received, syncing history with unified tracker'
     );
 
-    // Get recent pushes and process them
-    const history = await getPushHistory(50, 0, '');
+    // With no baseline, everything looks new. Start from now rather than opening
+    // a tab for every old link in the account.
+    if (catchUp && !(await unifiedNotificationTracker.hasBaseline())) {
+      await unifiedNotificationTracker.markAsSeen();
+      return;
+    }
 
-    if (history.pushes && history.pushes.length > 0) {
-      console.log(
-        `🔄 [WebSocket] Found ${history.pushes.length} pushes to process`
-      );
+    let tabsOpened = 0;
+
+    // Get recent pushes and process them
+    const pushes = await fetchPushesToProcess(catchUp);
+
+    if (pushes.length > 0) {
+      console.log(`🔄 [WebSocket] Found ${pushes.length} pushes to process`);
 
       let processedCount = 0;
       let newPushesCount = 0;
 
-      for (const push of history.pushes) {
+      for (const push of pushes) {
         // Only process non-dismissed pushes that are for this user/device
         if (
           !push.dismissed &&
@@ -290,7 +375,9 @@ async function handlePushTickle(): Promise<void> {
             // Handle specific push types
             if (push.type === 'link') {
               console.log('🔗 [WebSocket] Processing link push from history');
-              await handleLinkPush(push);
+              if (!catchUp || tabsOpened < MAX_CATCH_UP_TABS) {
+                if (await handleLinkPush(push)) tabsOpened++;
+              }
             }
             
             await notificationBadge.addPushNotifications(1);
@@ -422,7 +509,7 @@ async function handleSmsChanged(_push: any): Promise<void> {
 /**
  * Handle link push by opening URL in new tab
  */
-async function handleLinkPush(push: any): Promise<void> {
+async function handleLinkPush(push: any): Promise<boolean> {
   try {
     console.log('🔗 [WebSocket] Link push received:', push);
     
@@ -430,22 +517,37 @@ async function handleLinkPush(push: any): Promise<void> {
     const settings = await getLocal<any>('pb_settings');
     if (!settings?.autoOpenPushLinksAsTab) {
       console.log('🔗 [WebSocket] Auto-open links disabled, skipping tab creation');
-      return;
+      return false;
+    }
+
+    // Only open links meant for this browser, not ones sent to another device
+    // or sent from here.
+    const deviceIden = await getLocal<string>('pb_device_iden');
+    if (
+      push.direction === 'outgoing' || // Sent to another person
+      (push.target_device_iden && push.target_device_iden !== deviceIden) ||
+      (deviceIden && push.source_device_iden === deviceIden)
+    ) {
+      console.log('🔗 [WebSocket] Link push is not for this browser, skipping');
+      return false;
     }
     
     // Extract URL from the push
     const url = push.url;
     if (!url) {
       console.warn('⚠️ [WebSocket] Link push missing URL');
-      return;
+      return false;
     }
 
-    // Validate URL format
+    // Validate URL format; pushes can come from other people
     try {
-      new URL(url);
+      if (!['http:', 'https:'].includes(new URL(url).protocol)) {
+        console.warn('⚠️ [WebSocket] Refusing non-web link push');
+        return false;
+      }
     } catch (error) {
       console.warn('⚠️ [WebSocket] Invalid URL format:', url, error);
-      return;
+      return false;
     }
 
     console.log(`🔗 [WebSocket] Opening URL in new tab: ${url}`);
@@ -457,12 +559,14 @@ async function handleLinkPush(push: any): Promise<void> {
     });
 
     console.log('✅ [WebSocket] Successfully opened link in new tab');
+    return true;
   } catch (error) {
     console.error('🔗 [WebSocket] Failed to handle link push:', error);
     await reportError(PBError.Unknown, {
       message: 'Failed to open link in new tab',
       code: error instanceof Error ? undefined : 500,
     });
+    return false;
   }
 }
 
@@ -500,7 +604,10 @@ export function getConnectionStatus(): {
  */
 export function disconnectWebSocket(): void {
   if (wsState.socket) {
+    // Stop the close handler from scheduling a reconnect.
+    wsState.socket.onclose = null;
     wsState.socket.close();
+    wsState.socket = null;
   }
 
   if (wsState.reconnectTimer) {

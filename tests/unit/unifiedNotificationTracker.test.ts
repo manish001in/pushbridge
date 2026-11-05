@@ -486,4 +486,58 @@ describe('UnifiedNotificationTracker', () => {
       expect(counts).toEqual(storedCounts);
     });
   });
+
+  describe('timestamp units', () => {
+    const now = Date.now();
+    const seen = (seconds: number) => {
+      (unifiedNotificationTracker as any).timestamps.lastSeenTimestamp = seconds;
+    };
+    const check = (id: string, created: number, type = 'sms') =>
+      unifiedNotificationTracker.shouldShowNotification({
+        id,
+        type,
+        created,
+        metadata: {},
+      } as NotificationData);
+
+    beforeEach(async () => {
+      mockGetLocal.mockResolvedValue(null);
+      await unifiedNotificationTracker.initialize();
+    });
+
+    test('an old SMS given in milliseconds is rejected', async () => {
+      seen(now / 1000);
+      expect(await check('old-ms', now - 24 * 60 * 60 * 1000)).toBe(false);
+    });
+
+    test('a new SMS given in milliseconds is accepted', async () => {
+      seen(now / 1000 - 3600);
+      expect(await check('new-ms', now)).toBe(true);
+    });
+
+    test('pushes given in seconds still compare correctly', async () => {
+      seen(now / 1000 - 3600);
+      expect(await check('new-s', now / 1000, 'push')).toBe(true);
+      expect(await check('old-s', now / 1000 - 86400, 'push')).toBe(false);
+    });
+
+    test('a last-seen time wrongly saved in milliseconds does not hide everything', async () => {
+      seen(now - 3600 * 1000);
+      expect(await check('after-bad-seen', now / 1000, 'push')).toBe(true);
+    });
+
+    test('clearing everything stores last seen in seconds', async () => {
+      await unifiedNotificationTracker.clearAllNotifications();
+      expect(
+        (unifiedNotificationTracker as any).timestamps.lastSeenTimestamp
+      ).toBeLessThan(1e11);
+    });
+
+    test('hasBaseline is false until notifications are first seen', async () => {
+      seen(0);
+      expect(await unifiedNotificationTracker.hasBaseline()).toBe(false);
+      await unifiedNotificationTracker.markAsSeen();
+      expect(await unifiedNotificationTracker.hasBaseline()).toBe(true);
+    });
+  });
 });

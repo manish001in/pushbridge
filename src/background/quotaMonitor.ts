@@ -46,8 +46,7 @@ export async function initializeQuotaMonitor(): Promise<void> {
       `Quota monitor initialized with ${QUOTA_CHECK_INTERVAL_HOURS} hour interval`
     );
 
-    // Set up alarm listener
-    chrome.alarms.onAlarm.addListener(handleQuotaAlarm);
+    registerQuotaListener();
 
     // Run initial check
     await checkQuota();
@@ -59,6 +58,11 @@ export async function initializeQuotaMonitor(): Promise<void> {
 /**
  * Handle quota check alarm
  */
+/** Must run every time the worker starts; alarms outlive it. */
+export function registerQuotaListener(): void {
+  chrome.alarms.onAlarm.addListener(handleQuotaAlarm);
+}
+
 function handleQuotaAlarm(alarm: chrome.alarms.Alarm): void {
   if (alarm.name === QUOTA_ALARM_NAME) {
     checkQuota();
