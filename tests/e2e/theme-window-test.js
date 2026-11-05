@@ -184,7 +184,8 @@ try {
     const closed = once(action, 'close', {
       signal: AbortSignal.timeout(10000),
     });
-    await action.click('#open-window-btn');
+    // The popup closes as part of this click, sometimes before the mouse-up.
+    await action.click('#open-window-btn').catch(() => {});
     await closed;
     const standaloneTarget = await browser.waitForTarget(
       t => t.url() === `${base}/popup.html?windowMode=1`

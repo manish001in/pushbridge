@@ -228,7 +228,7 @@ describe('pushManager', () => {
             file_type: 'text/plain',
             file_url: 'https://example.com/file.txt',
             source_device_iden: 'test-device-id',
-            target_device_iden: 'target-device-id',
+            device_iden: 'target-device-id',
             title: 'Test Title',
             body: 'Test Body (File: test.txt)',
             channel_tag: 'test-channel',
@@ -278,7 +278,7 @@ describe('pushManager', () => {
             file_type: 'text/plain',
             file_url: 'https://files.pushbullet.com/file123',
             source_device_iden: 'device-123',
-            // No target_device_iden
+            // No device_iden
           }),
         })
       );

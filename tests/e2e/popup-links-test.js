@@ -129,7 +129,8 @@ try {
   popup.once('close', () => {
     closed = true;
   });
-  await link.click();
+  // The popup can close before the mouse-up is acknowledged.
+  await link.click().catch(() => {});
   await sleep(800);
   assert.equal(closed, true, 'plain click: the popup closes as before');
   const tabs = await openedTabs('https://github.com/*');

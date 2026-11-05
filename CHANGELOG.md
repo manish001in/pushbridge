@@ -10,6 +10,7 @@
 
 ### Fixed
 - An attachment or reply could go to the wrong SMS conversation if you switched conversations while it was sending or loading. Drafts now stay with their conversation
+- Choosing a device when sending had no effect: every push went to all your devices. Pushes now go only to the chosen device
 - Posts to a channel went to all your own devices instead of the channel
 - Pressing Cmd/Ctrl+Enter twice sent a push twice
 - A queued push could send twice after a worker restart or a failed storage write. One interrupted mid-send is now reported instead of being resent

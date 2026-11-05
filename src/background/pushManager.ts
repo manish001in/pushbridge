@@ -106,7 +106,9 @@ export async function createPush(
     if (payload.channel_tag) {
       pushData.channel_tag = payload.channel_tag;
     } else if (payload.targetDeviceIden) {
-      pushData.target_device_iden = payload.targetDeviceIden;
+      // `device_iden` is the request field; `target_device_iden` only appears in
+      // responses. The API ignores it here and sends to every device.
+      pushData.device_iden = payload.targetDeviceIden;
     } else if (payload.email) {
       pushData.email = payload.email;
     }
@@ -278,7 +280,7 @@ export async function createFilePush(
     };
 
     if (targetDeviceIden) {
-      pushData.target_device_iden = targetDeviceIden;
+      pushData.device_iden = targetDeviceIden;
     }
 
     if (email) {

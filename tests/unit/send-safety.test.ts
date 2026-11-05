@@ -45,7 +45,9 @@ describe('sending to the right place', () => {
       body: 'x',
       targetDeviceIden: 'd1',
     } as any);
-    expect(sentBody().target_device_iden).toBe('d1');
+    // The API ignores target_device_iden in a request and sends to every device.
+    expect(sentBody().device_iden).toBe('d1');
+    expect(sentBody().target_device_iden).toBeUndefined();
   });
 });
 
