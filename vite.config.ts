@@ -32,7 +32,12 @@ export default defineConfig(({ mode }) => ({
     'process.env.NODE_ENV': JSON.stringify(mode || 'development'),
   },
   esbuild: {
-    // Keep console logs for debugging - only drop debugger statements in production
     drop: mode === 'production' ? ['debugger'] : [],
+    // Routine logs include message contents, so they stay out of production builds.
+    // Warnings and errors remain for diagnosing problems.
+    pure:
+      mode === 'production'
+        ? ['console.log', 'console.debug', 'console.info']
+        : [],
   },
 }));

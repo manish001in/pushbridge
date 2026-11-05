@@ -18,6 +18,7 @@ jest.mock('../../src/background/unifiedNotificationTracker', () => ({
     markAsProcessed: jest.fn(),
     getLastSeenMs: jest.fn(),
     shouldShowNotification: jest.fn().mockResolvedValue(true),
+    claimNotification: jest.fn().mockResolvedValue(true),
   },
 }));
 jest.mock('../../src/background/smsBridge', () => ({

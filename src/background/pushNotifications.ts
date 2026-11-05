@@ -46,24 +46,22 @@ function webUrlOrUndefined(url: unknown): string | undefined {
   }
 }
 
-export async function addTransferRecord(
-  transfer: TransferRecord
-): Promise<void> {
-  try {
-    const transfers = (await getLocal<TransferRecord[]>('pb_transfers')) || [];
+let transferWrites: Promise<unknown> = Promise.resolve();
 
-    // Add new transfer at the beginning
-    transfers.unshift(transfer);
-
-    // Keep only last 50 transfers
-    if (transfers.length > 50) {
-      transfers.splice(50);
+/** One write at a time, so overlapping uploads can't overwrite each other's record. */
+export function addTransferRecord(transfer: TransferRecord): Promise<void> {
+  const write = transferWrites.then(async () => {
+    try {
+      const transfers =
+        (await getLocal<TransferRecord[]>('pb_transfers')) || [];
+      transfers.unshift(transfer);
+      await setLocal('pb_transfers', transfers.slice(0, 50));
+    } catch (error) {
+      console.error('Failed to add transfer record:', error);
     }
-
-    await setLocal('pb_transfers', transfers);
-  } catch (error) {
-    console.error('Failed to add transfer record:', error);
-  }
+  });
+  transferWrites = write;
+  return write;
 }
 
 /**

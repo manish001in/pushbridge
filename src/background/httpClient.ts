@@ -165,10 +165,6 @@ class HttpClient {
             keys: !Array.isArray(responseData)
               ? Object.keys(responseData)
               : undefined,
-            sample:
-              Array.isArray(responseData) && responseData.length > 0
-                ? responseData[0]
-                : responseData,
           });
 
           return clonedResponse;
@@ -222,9 +218,8 @@ class HttpClient {
     console.log(`[HTTP] Backoff duration: ${backoffSeconds}s`);
     await userFeedback.showRateLimitNotification(backoffSeconds);
 
-    // Stop queue processing (it will resume when backoff expires)
-    operationQueue.stopProcessing();
-    console.log('[HTTP] Queue processing stopped due to 429 error');
+    // Queue processing keeps running: each tick skips until the backoff ends, and
+    // nothing else would restart it.
   }
 
   /**

@@ -81,6 +81,7 @@ describe('SMS cache', () => {
     });
 
   beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(T + 60_000);
     jest.clearAllMocks();
     stored = {};
     api.isDeviceOnline.mockResolvedValue(true);

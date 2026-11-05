@@ -22,6 +22,17 @@ interface Settings {
   autoDismissNotifications: boolean;
 }
 
+/** Device names are user-controlled text, and this page renders through innerHTML. */
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    char =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
+        char
+      ] as string
+  );
+}
+
 class OptionsPage {
   private settings: Settings = {
     soundEnabled: true,
@@ -812,7 +823,7 @@ class OptionsPage {
               ${this.devices
                 .map(
                   device =>
-                    `<option value="${device.iden}">${this.getDeviceDisplayName(device)} (${device.type})</option>`
+                    `<option value="${escapeHtml(device.iden)}">${escapeHtml(this.getDeviceDisplayName(device))} (${escapeHtml(device.type)})</option>`
                 )
                 .join('')}
             </select>
@@ -830,7 +841,7 @@ class OptionsPage {
               ${this.smsDevices
                 .map(
                   device =>
-                    `<option value="${device.iden}">${this.getDeviceDisplayName(device)} (${device.type})</option>`
+                    `<option value="${escapeHtml(device.iden)}">${escapeHtml(this.getDeviceDisplayName(device))} (${escapeHtml(device.type)})</option>`
                 )
                 .join('')}
             </select>

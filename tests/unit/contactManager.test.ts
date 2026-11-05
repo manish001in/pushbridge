@@ -362,30 +362,30 @@ describe('Contact Manager', () => {
   });
 
   describe('cursor handling', () => {
-    it('should handle cursor-based pagination', async () => {
+    it('should fetch every page from the start, ignoring any saved cursor', async () => {
       mockGetLocal.mockImplementation((key: string) => {
         if (key === 'pb_token') return Promise.resolve(mockToken);
-        if (key === 'pb_contacts_cursor') return Promise.resolve('test-cursor');
+        if (key === 'pb_contacts_cursor') return Promise.resolve('stale-cursor');
         return Promise.resolve(undefined);
       });
 
-      mockHttpClientFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({
-          ...mockContactsApiResponse,
-          cursor: 'next-cursor',
-        }),
-      } as Response);
+      mockHttpClientFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ ...mockContactsApiResponse, cursor: 'next-cursor' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ chats: [] }),
+        } as Response);
 
       await getContacts();
 
-      expect(mockHttpClientFetch).toHaveBeenCalledWith(
-        'https://api.pushbullet.com/v2/chats?cursor=test-cursor',
-        expect.any(Object)
-      );
-      
-      expect(mockSetLocal).toHaveBeenCalledWith('pb_contacts_cursor', 'next-cursor');
-      expect(mockSetLocal).toHaveBeenCalledWith('pb_contacts_has_more', true);
+      expect(mockHttpClientFetch.mock.calls.map(call => call[0])).toEqual([
+        'https://api.pushbullet.com/v2/chats',
+        'https://api.pushbullet.com/v2/chats?cursor=next-cursor',
+      ]);
     });
 
     it('should clear cursor when no more data', async () => {

@@ -1,3 +1,12 @@
+/** Storage callbacks report failure through lastError, which must not read as success. */
+function settle(resolve: () => void, reject: (error: Error) => void) {
+  return () => {
+    const error = chrome.runtime?.lastError;
+    if (error) reject(new Error(error.message));
+    else resolve();
+  };
+}
+
 /**
  * Storage helper utility for chrome.storage.local and session access
  * Provides typed generics for type-safe storage operations
@@ -28,8 +37,8 @@ export async function setLocal<T = unknown>(
   key: string,
   value: T
 ): Promise<void> {
-  return new Promise(resolve => {
-    chrome.storage.local.set({ [key]: value }, resolve);
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [key]: value }, settle(resolve, reject));
   });
 }
 
@@ -39,8 +48,8 @@ export async function setLocal<T = unknown>(
  * @returns Promise that resolves when removal is complete
  */
 export async function removeLocal(key: string): Promise<void> {
-  return new Promise(resolve => {
-    chrome.storage.local.remove(key, resolve);
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.remove(key, settle(resolve, reject));
   });
 }
 
@@ -69,8 +78,8 @@ export async function setSession<T = unknown>(
   key: string,
   value: T
 ): Promise<void> {
-  return new Promise(resolve => {
-    chrome.storage.session.set({ [key]: value }, resolve);
+  return new Promise((resolve, reject) => {
+    chrome.storage.session.set({ [key]: value }, settle(resolve, reject));
   });
 }
 
@@ -80,8 +89,8 @@ export async function setSession<T = unknown>(
  * @returns Promise that resolves when removal is complete
  */
 export async function removeSession(key: string): Promise<void> {
-  return new Promise(resolve => {
-    chrome.storage.session.remove(key, resolve);
+  return new Promise((resolve, reject) => {
+    chrome.storage.session.remove(key, settle(resolve, reject));
   });
 }
 

@@ -798,8 +798,51 @@ export class PbSmsThread extends LitElement {
     }
   `;
 
+  private readonly drafts = new Map<string, string>();
+  private latestLoad = 0;
+
+  /** Keep typed text with its conversation; attachments never carry over. */
+  private switchDraft(previousConversationId: string | undefined) {
+    if (previousConversationId && this.messageText) {
+      this.drafts.set(previousConversationId, this.messageText);
+    }
+    this.messageText = this.drafts.get(this.conversationId) ?? '';
+    this.selectedFile = null;
+    const input = this.shadowRoot?.querySelector<HTMLInputElement>('.file-input');
+    if (input) input.value = '';
+  }
+
+  /** Messages synced in the background appear in the open conversation. */
+  private readonly handleStorageChange = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    area: string
+  ) => {
+    if (area !== 'local' || !this.deviceIden || !this.conversationId) return;
+    const threads = changes[`sms_data_${this.deviceIden}`]?.newValue?.threads;
+    const updated = threads?.find(
+      (thread: SmsThread) => thread.id === this.conversationId
+    );
+    if (!updated || this.isLoading) return;
+
+    // Keep older pages the user has scrolled back through.
+    const oldest = updated.messages[0]?.timestamp ?? Infinity;
+    const olderLoaded = (this.thread?.messages ?? []).filter(
+      message => message.timestamp < oldest
+    );
+    this.thread = {
+      ...updated,
+      messages: [...olderLoaded, ...updated.messages],
+    };
+  };
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    chrome.storage.onChanged?.removeListener(this.handleStorageChange);
+  }
+
   connectedCallback() {
     super.connectedCallback();
+    chrome.storage.onChanged?.addListener(this.handleStorageChange);
     this.loadThread();
     this.initializeRecipients();
 
@@ -808,7 +851,14 @@ export class PbSmsThread extends LitElement {
   }
 
   updated(changedProperties: Map<string, unknown>) {
+    if (changedProperties.has('conversationId')) {
+      this.switchDraft(changedProperties.get('conversationId') as string);
+    }
+
     if (changedProperties.has('conversationId') && this.conversationId) {
+      // The old messages must not stay on screen above the new reply box.
+      this.thread = null;
+      this.messageCursor = null;
       this.loadThread();
       this.initializeRecipients();
     }
@@ -846,6 +896,8 @@ export class PbSmsThread extends LitElement {
       return;
     }
 
+    const requestedConversationId = this.conversationId;
+    const load = ++this.latestLoad;
     this.isLoading = true;
     try {
       console.log(
@@ -898,9 +950,15 @@ export class PbSmsThread extends LitElement {
       // Send message to background script to load full thread
       const response = await chrome.runtime.sendMessage({
         cmd: 'LOAD_FULL_SMS_THREAD',
-        conversationId: this.conversationId,
+        conversationId: requestedConversationId,
         deviceIden: deviceIden,
       });
+
+      // Another conversation was opened meanwhile. Showing this response would
+      // put its history above a reply box that sends to the other conversation.
+      if (load !== this.latestLoad) {
+        return;
+      }
 
       if (response.success) {
         this.thread = response.thread;
@@ -942,7 +1000,9 @@ export class PbSmsThread extends LitElement {
     } catch (error) {
       console.error('💬 [SmsThread] Failed to load thread from API:', error);
     } finally {
-      this.isLoading = false;
+      if (load === this.latestLoad) {
+        this.isLoading = false;
+      }
     }
   }
 
@@ -951,13 +1011,18 @@ export class PbSmsThread extends LitElement {
       return;
     }
 
+    const requestedConversationId = this.conversationId;
     this.isLoadingOlder = true;
     try {
       const response = await chrome.runtime.sendMessage({
         cmd: 'GET_SMS_THREAD_PAGED',
-        conversationId: this.conversationId,
+        conversationId: requestedConversationId,
         cursor: this.messageCursor,
       });
+
+      if (requestedConversationId !== this.conversationId) {
+        return;
+      }
 
       if (response.success && this.thread) {
         // Prepend older messages to the thread
@@ -1198,7 +1263,6 @@ export class PbSmsThread extends LitElement {
 
   async sendMessage() {
     console.log('💬 [SmsThread] sendMessage called', {
-      messageText: this.messageText,
       selectedFile: !!this.selectedFile,
       conversationId: this.conversationId,
       deviceIden: this.deviceIden,
@@ -1217,6 +1281,13 @@ export class PbSmsThread extends LitElement {
       return;
     }
 
+    // The user can switch conversations during an upload. Everything about this
+    // send is fixed now, so it can only go where the user was looking.
+    const conversationId = this.conversationId;
+    const deviceIden = this.deviceIden;
+    const messageText = this.messageText;
+    const selectedFile = this.selectedFile;
+
     this.isSending = true;
     try {
       let attachments:
@@ -1224,14 +1295,14 @@ export class PbSmsThread extends LitElement {
         | undefined;
 
       // Handle file attachment if present
-      if (this.selectedFile) {
+      if (selectedFile) {
         // Convert File to ArrayBuffer to preserve data through message passing
-        const fileBuffer = await this.selectedFile.arrayBuffer();
+        const fileBuffer = await selectedFile.arrayBuffer();
         const fileData = {
-          name: this.selectedFile.name,
-          type: this.selectedFile.type,
-          size: this.selectedFile.size,
-          lastModified: this.selectedFile.lastModified,
+          name: selectedFile.name,
+          type: selectedFile.type,
+          size: selectedFile.size,
+          lastModified: selectedFile.lastModified,
           buffer: Array.from(new Uint8Array(fileBuffer)), // Convert to regular array for serialization
         };
 
@@ -1240,7 +1311,7 @@ export class PbSmsThread extends LitElement {
           cmd: 'UPLOAD_FILE_FOR_SMS',
           payload: {
             fileData,
-            targetDeviceIden: this.deviceIden,
+            targetDeviceIden: deviceIden,
           },
         });
 
@@ -1253,8 +1324,8 @@ export class PbSmsThread extends LitElement {
         // Create attachment object
         attachments = [
           {
-            content_type: this.selectedFile.type,
-            name: this.selectedFile.name,
+            content_type: selectedFile.type,
+            name: selectedFile.name,
             url: uploadResponse.fileUrl,
           },
         ];
@@ -1264,15 +1335,20 @@ export class PbSmsThread extends LitElement {
       const response = await chrome.runtime.sendMessage({
         cmd: 'SEND_SMS',
         payload: {
-          conversationId: this.conversationId,
-          message: this.messageText,
-          deviceIden: this.deviceIden,
+          conversationId,
+          message: messageText,
+          deviceIden,
           attachments,
         },
       });
 
       if (response.success) {
-        // Clear the message and file
+        // Clear the message and file, unless the user has moved on to another
+        // conversation, whose draft isn't this one.
+        this.drafts.delete(conversationId);
+        if (this.conversationId !== conversationId) {
+          return;
+        }
         this.messageText = '';
         this.selectedFile = null;
         this.requestUpdate();

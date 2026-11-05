@@ -3,6 +3,7 @@
  * Handles real-time connection to Pushbullet stream API
  */
 
+import { currentAccountEpoch } from './accountEpoch';
 import { getContacts } from './contactManager';
 import { getDevices, getDefaultSmsDevice } from './deviceManager';
 import { reportError, PBError } from './errorManager';
@@ -339,6 +340,8 @@ async function handlePushTickle(catchUp = false): Promise<void> {
     let notificationsShown = 0;
 
     // Get recent pushes and process them
+    const accountEpoch = currentAccountEpoch();
+    const deviceIden = await getLocal<string>('pb_device_iden');
     const pushes = await fetchPushesToProcess(catchUp);
 
     if (pushes.length > 0) {
@@ -348,6 +351,11 @@ async function handlePushTickle(catchUp = false): Promise<void> {
       let newPushesCount = 0;
 
       for (const push of pushes) {
+        // Signed out meanwhile: nothing from this scan should show or open.
+        if (accountEpoch !== currentAccountEpoch()) {
+          return;
+        }
+
         // Only process non-dismissed pushes that are for this user/device
         if (
           !push.dismissed &&
@@ -395,7 +403,10 @@ async function handlePushTickle(catchUp = false): Promise<void> {
               notificationsShown++;
             }
 
-            await notificationBadge.addPushNotifications(1);
+            // Only count what was meant for this browser.
+            if (isPushForThisBrowser(push, deviceIden)) {
+              await notificationBadge.addPushNotifications(1);
+            }
             await unifiedNotificationTracker.markAsProcessed(
               'push',
               push.iden,

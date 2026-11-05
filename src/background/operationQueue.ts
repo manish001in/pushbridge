@@ -12,7 +12,7 @@ interface RequestInit {
 }
 
 import { rateLimitManager } from './rateLimitManager';
-import { getLocal, setLocal } from './storage';
+import { setLocal } from './storage';
 import { tokenBucket } from './tokenBucket';
 
 export interface QueuedOperation {
@@ -407,56 +407,22 @@ class OperationQueue {
   /**
    * Persist queue to storage
    */
-  private async persistQueue(): Promise<void> {
-    try {
-      // Only persist operation data, not resolve/reject functions
-      const queueData = this.queue.map(op => ({
-        id: op.id,
-        url: op.url,
-        options: op.options,
-        timestamp: op.timestamp,
-        retryCount: op.retryCount,
-      }));
-
-      await setLocal('pb_operation_queue', queueData);
-    } catch (error) {
-      console.error('Failed to persist operation queue:', error);
-    }
-  }
+  /**
+   * Requests aren't kept across worker restarts. A restored request has no caller
+   * waiting on it, so its follow-up work never runs, and a queued send would go out
+   * twice because `pb_pending_ops` is already its durable record. Callers whose
+   * worker stopped see the failure and can retry.
+   */
+  private async persistQueue(): Promise<void> {}
 
   /**
-   * Load queue from storage
+   * Clear anything an older version saved.
    */
   async loadQueue(): Promise<void> {
     try {
-      const queueData =
-        await getLocal<Array<Omit<QueuedOperation, 'resolve' | 'reject'>>>(
-          'pb_operation_queue'
-        );
-
-      if (queueData && Array.isArray(queueData)) {
-        // Convert back to QueuedOperation format (without resolve/reject)
-        // Keep anything queued while storage was being read; it has live callers.
-        this.queue = [
-          ...queueData.map(op => ({
-            ...op,
-            resolve: () => {}, // Placeholder - these operations will be lost on restart
-            reject: () => {}, // This is expected behavior for service worker restarts
-          })),
-          ...this.queue.filter(
-            current => !queueData.some(stored => stored.id === current.id)
-          ),
-        ];
-
-        console.log(`Loaded ${this.queue.length} operations from storage`);
-
-        // Start processing if there are operations
-        if (this.queue.length > 0) {
-          this.startProcessing();
-        }
-      }
+      await setLocal('pb_operation_queue', null);
     } catch (error) {
-      console.error('Failed to load operation queue:', error);
+      console.error('Failed to clear saved operation queue:', error);
     }
   }
 

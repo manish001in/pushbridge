@@ -11,6 +11,7 @@ import { httpClient } from './httpClient';
 import { notificationBadge } from './notificationBadge';
 import { getNotificationPrefs } from './notificationPrefs';
 import { addMessageToThread } from './smsBridge';
+import { claimSmsContent } from './smsNotificationIdentity';
 import { getLocal, setLocal, removeLocal } from './storage';
 import { fromPushbulletTime } from './timestampUtils';
 import { unifiedNotificationTracker } from './unifiedNotificationTracker';
@@ -484,8 +485,10 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
     );
 
     // Check if we should show this notification based on last seen time
-    const shouldShow = await unifiedNotificationTracker.shouldShowNotification({
-      id: push.notification_id || `sms_${Date.now()}`,
+    // Phones reuse notification IDs, so the time makes each message its own.
+    const smsNotificationId = `${push.notification_id || 'sms'}_${messageTimestamp}`;
+    const shouldShow = await unifiedNotificationTracker.claimNotification({
+      id: smsNotificationId,
       type: 'sms',
       created: messageTimestamp,
       metadata: {
@@ -512,7 +515,7 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
     });
 
     const prefs = await getNotificationPrefs();
-    if (prefs.enabled) {
+    if (prefs.enabled && claimSmsContent(push.title, push.body)) {
       await chrome.notifications.create(chromeNotifId, {
         type: 'basic' as const,
         title: push.title,
@@ -544,7 +547,7 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
     // Mark as processed in unified tracker
     await unifiedNotificationTracker.markAsProcessed(
       'sms',
-      message.id,
+      smsNotificationId,
       messageTimestamp
     );
 

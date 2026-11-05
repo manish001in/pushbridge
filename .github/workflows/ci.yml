@@ -38,6 +38,14 @@ jobs:
           test -f dist/popup.js
           echo "Build verification passed"
 
+      - name: Run browser tests
+        run: |
+          npm run test:e2e
+          npm run test:e2e:tabs
+          npm run test:e2e:send-safety
+          npm run test:e2e:popup-links
+          npm run test:e2e:theme-window
+
   build-and-release:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -104,6 +112,11 @@ jobs:
           TAG="v${{ steps.get_version.outputs.version }}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           if [ "${{ steps.check_release.outputs.tagged }}" = "true" ]; then
+            # Finishing a failed release is only honest if this is the tagged code.
+            if [ "$(git rev-parse "refs/tags/$TAG^{commit}")" != "$GITHUB_SHA" ]; then
+              echo "::error::$TAG points at a different commit; bump the version to release this one."
+              exit 1
+            fi
             exit 0
           fi
           git config --local user.email "action@github.com"

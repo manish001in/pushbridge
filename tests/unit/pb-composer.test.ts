@@ -1,30 +1,6 @@
-// Test the push type detection logic without instantiating the LitElement component
+import { determinePushType } from '../../src/popup/pushType';
+
 describe('Push Type Detection Logic', () => {
-  // Extract the determinePushType logic for testing
-  const determinePushType = (
-    message: string,
-    file?: File
-  ): 'note' | 'link' | 'file' => {
-    if (file) return 'file';
-
-    // Strip whitespace from message
-    const trimmedMessage = message.trim();
-
-    if (!trimmedMessage) return 'note';
-
-    // Extract URLs from message using improved regex
-    const urlRegex = /https?:\/\/[^\s]+/g;
-    const urls = trimmedMessage.match(urlRegex);
-
-    // If exactly one URL and message is just that URL (after trimming), it's a link
-    if (urls?.length === 1 && trimmedMessage === urls[0]) {
-      return 'link';
-    }
-
-    // Otherwise it's a note (including multiple URLs or text with URLs)
-    return 'note';
-  };
-
   describe('Push Type Detection', () => {
     it('should detect file type when file is attached', () => {
       const file = new File(['test content'], 'test.txt', {

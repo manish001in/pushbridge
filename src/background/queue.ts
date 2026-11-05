@@ -13,6 +13,9 @@ export interface PushbridgeOp {
   payload: any;
   timestamp: number;
   retryCount: number;
+  /** Set while a send is in flight; survives if the worker stops mid-send. */
+  attemptStartedAt?: number;
+  nextAttemptAt?: number;
 }
 
 interface QueueState {
@@ -30,7 +33,9 @@ const queueState: QueueState = {
 
 // Constants
 const PROCESSING_INTERVAL = 5000; // 5 seconds between operations (rate limiting)
-const MAX_RETRY_COUNT = 3;
+const RETRY_BASE_DELAY = 30 * 1000;
+const RETRY_MAX_DELAY = 60 * 60 * 1000;
+const MAX_OP_AGE = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Enqueue an operation for later processing
@@ -82,6 +87,92 @@ function updatePendingOps(
   return write;
 }
 
+// Sent, but the removal from storage may not have saved. Never send these again.
+const deliveredOps = new Set<string>();
+// Started by this worker. A marked operation not listed here was in flight when an
+// earlier worker stopped, so it may already have been delivered.
+const startedOps = new Set<string>();
+
+async function discardOp(op: PushbridgeOp, message: string): Promise<void> {
+  await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
+  await reportError(PBError.Unknown, { message, code: 1002 });
+}
+
+/** Rejected by the server or unsupported, so trying again can't help. */
+function isPermanentFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /not yet implemented|unknown operation|required/i.test(message) ||
+    /\b4(?!29)\d\d\b/.test(message)
+  );
+}
+
+async function processPendingOp(op: PushbridgeOp): Promise<void> {
+  if (deliveredOps.has(op.id)) {
+    await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
+    return;
+  }
+  if (op.nextAttemptAt && Date.now() < op.nextAttemptAt) {
+    return;
+  }
+
+  const age = Date.now() - op.timestamp;
+  if (age > MAX_OP_AGE) {
+    await discardOp(op, `A queued ${op.type} was too old to send and was dropped`);
+    return;
+  }
+
+  // Better to report a possibly unsent message than to risk sending it twice.
+  if (op.attemptStartedAt && !startedOps.has(op.id)) {
+    await discardOp(
+      op,
+      'A queued message was interrupted while sending and may not have been delivered. Please check and send it again if needed.'
+    );
+    return;
+  }
+
+  startedOps.add(op.id);
+  const attemptStartedAt = Date.now();
+  await updatePendingOps(ops =>
+    ops.map(p => (p.id === op.id ? { ...p, attemptStartedAt } : p))
+  );
+
+  try {
+    await processOperation(op);
+  } catch (error) {
+    console.error('Failed to process operation:', op.id, error);
+    startedOps.delete(op.id);
+
+    if (isPermanentFailure(error)) {
+      await discardOp(op, `A queued ${op.type} could not be sent`);
+      return;
+    }
+
+    // Being offline isn't the message's fault: keep it and try again later.
+    const retryCount = op.retryCount + 1;
+    const delay = Math.min(RETRY_BASE_DELAY * 2 ** retryCount, RETRY_MAX_DELAY);
+    await updatePendingOps(ops =>
+      ops.map(p =>
+        p.id === op.id
+          ? {
+              ...p,
+              retryCount,
+              nextAttemptAt: Date.now() + delay,
+              attemptStartedAt: undefined,
+            }
+          : p
+      )
+    );
+    return;
+  }
+
+  deliveredOps.add(op.id);
+  await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
+
+  // Rate limiting delay
+  await new Promise(resolve => setTimeout(resolve, PROCESSING_INTERVAL));
+}
+
 /**
  * Process all pending operations in the queue
  */
@@ -103,38 +194,7 @@ export async function processQueue(): Promise<void> {
 
     // Process operations one by one with rate limiting
     for (const op of pendingOps) {
-      try {
-        await processOperation(op);
-
-        // Remove successful operation from queue
-        await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
-
-        // Rate limiting delay
-        await new Promise(resolve => setTimeout(resolve, PROCESSING_INTERVAL));
-      } catch (error) {
-        console.error('Failed to process operation:', op.id, error);
-
-        // Increment retry count
-        op.retryCount++;
-
-        if (op.retryCount >= MAX_RETRY_COUNT) {
-          console.log(
-            'Operation exceeded max retries, removing from queue:',
-            op.id
-          );
-          await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
-
-          await reportError(PBError.Unknown, {
-            message: `Operation failed after ${MAX_RETRY_COUNT} retries: ${op.type}`,
-            code: 1002,
-          });
-        } else {
-          // Update operation in queue with new retry count
-          await updatePendingOps(ops =>
-            ops.map(p => (p.id === op.id ? op : p))
-          );
-        }
-      }
+      await processPendingOp(op);
     }
   } catch (error) {
     console.error('Failed to process queue:', error);

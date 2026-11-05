@@ -116,61 +116,38 @@ describe('Channel Manager', () => {
       });
     });
 
-    it('should use cursor when available for pagination', async () => {
-      const mockSubscriptions = [
-        {
-          iden: 'sub1',
-          created: 1412047948.579029,
-          modified: 1412047948.5790315,
-          active: true,
-          channel: {
-            iden: 'chan1',
-            tag: 'test-channel',
-            name: 'Test Channel',
-            description: 'A test channel',
-            image_url: 'https://example.com/image.png',
-          },
-        },
-      ];
-
-      const mockResponse = new Response(
-        JSON.stringify({
-          subscriptions: mockSubscriptions,
-          cursor: 'next-cursor',
-        }),
-        {
-          status: 200,
-          statusText: 'OK',
-          headers: {},
-        }
+    it('should fetch every page and cache them together', async () => {
+      const sub = (iden: string) => ({
+        iden,
+        created: 1,
+        modified: 1,
+        active: true,
+        channel: { iden: `c-${iden}`, tag: iden, name: iden },
+      });
+      const { getLocal } = require('../../src/background/storage');
+      getLocal.mockImplementation(async (key: string) =>
+        key === 'pb_token' ? 'test-token' : 'stale-cursor'
       );
+      mockFetch
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ subscriptions: [sub('a')], cursor: 'next' }),
+            { status: 200 }
+          )
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ subscriptions: [sub('b')] }), {
+            status: 200,
+          })
+        );
 
-      mockFetch.mockResolvedValue(mockResponse);
+      const result = await fetchSubscriptions(true);
 
-      // Mock getLocal to return a token and cursor
-      const { getLocal, setLocal } = require('../../src/background/storage');
-      getLocal.mockResolvedValueOnce('test-token'); // token
-      getLocal.mockResolvedValueOnce('test-cursor'); // pb_subscriptions_cursor
-
-      const result = await fetchSubscriptions();
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.pushbullet.com/v2/subscriptions?cursor=test-cursor',
-        {
-          method: 'GET',
-          headers: {
-            'Access-Token': 'test-token',
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      expect(result).toEqual(mockSubscriptions);
-      expect(setLocal).toHaveBeenCalledWith(
-        'pb_subscriptions_cursor',
-        'next-cursor'
-      );
-      expect(setLocal).toHaveBeenCalledWith('pb_subscriptions_has_more', true);
+      expect(result.map(s => s.iden)).toEqual(['a', 'b']);
+      expect(mockFetch.mock.calls.map(call => call[0])).toEqual([
+        'https://api.pushbullet.com/v2/subscriptions',
+        'https://api.pushbullet.com/v2/subscriptions?cursor=next',
+      ]);
     });
 
     it('should force refresh and ignore cursor', async () => {

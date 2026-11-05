@@ -9,11 +9,29 @@
 - Received files only notify, and are downloaded from Messages. The old auto-download code never ran in practice and has been removed
 
 ### Fixed
+- An attachment or reply could go to the wrong SMS conversation if you switched conversations while it was sending or loading. Drafts now stay with their conversation
+- Posts to a channel went to all your own devices instead of the channel
+- Pressing Cmd/Ctrl+Enter twice sent a push twice
+- A queued push could send twice after a worker restart or a failed storage write. One interrupted mid-send is now reported instead of being resent
+- Queued pushes are no longer dropped after repeated network failures
+- Signing out or changing account stops work already running for the old account, and clears its notifications
+- Refreshing devices, contacts or channels could lose everything on earlier pages
+- Device names can no longer inject markup into the settings page
+- SMS notifications: fewer duplicates, and a reply from your phone no longer hides a new incoming message
+- Open SMS conversations update when a sync finishes, and the 6-hour SMS sync survives worker restarts
+- Interrupted uploads are reported instead of silently disappearing
+- A rate limit on any request no longer stalls other queued requests
+- Far fewer API calls when pushes come from sources the extension doesn't recognize
+- Pushes meant for another device no longer raise the badge count
+- SMS conversations can be opened from the keyboard
 - Updates to a mirrored notification replace it instead of adding another, and count once on the badge
 - SMS sync no longer loses newer messages, or threads it failed to fetch
 - Opening an SMS conversation now marks it read, and it stays read after a sync
 - A queued request that got HTTP 429 now retries by itself after the backoff
 - One click on a push notification opens one tab, and only web links can open
+
+### Security
+- Routine logs are removed from production builds, because they included message contents. The 1.3.2 notes said this was already done, which was wrong
 
 ## [1.3.2] - 2026-11-06
 
@@ -37,7 +55,7 @@
 - Auto-open only opens web links meant for this browser
 
 ### Security
-- Access tokens and message contents are no longer written to the console
+- Access tokens are no longer written to the console
 - Removed the unused content script and web-accessible resources, so websites can no longer detect the extension
 ## [1.3.1] - 2026-11-05
 

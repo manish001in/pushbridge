@@ -4,6 +4,7 @@ console.log('Pushbridge background service worker started');
 // Import modules
 import { TransferRecord } from '../types/pushbullet';
 
+import { bumpAccountEpoch, currentAccountEpoch } from './accountEpoch';
 import { initializeKeepAlive, registerKeepAliveListener } from './alarm';
 import {
   clearAllChannelCaches,
@@ -14,6 +15,7 @@ import {
 } from './channelManager';
 import { getContacts, clearContactCache, getContactByIden } from './contactManager';
 import { contextManager } from './contextManager';
+import { buildContextMenuPush } from './contextMenuPayload';
 import {
   ensureChromeDevice,
   getPushableDevices,
@@ -86,6 +88,8 @@ import { unifiedNotificationTracker } from './unifiedNotificationTracker';
 
 // Storage key for tracking popup open time
 const POPUP_LAST_OPENED_KEY = 'pb_last_popup_opened';
+const SMS_SYNC_ALARM = 'pb_sms_sync';
+const SMS_SYNC_INTERVAL_MINUTES = 6 * 60;
 const ONE_HOUR_MS = 3600000; // 1 hour in milliseconds
 
 
@@ -95,34 +99,11 @@ const ONE_HOUR_MS = 3600000; // 1 hour in milliseconds
  */
 async function initializeSmsSync(): Promise<void> {
   try {
-    console.log('[Background] Initializing SMS sync...');
-
-    const defaultDevice = await getDefaultSmsDevice();
-    if (defaultDevice) {
-      console.log(
-        `[Background] Default SMS device: ${defaultDevice.nickname} (${defaultDevice.iden})`
-      );
-
-      // Initial sync
-      // SMS sync now handled by simple system via triggerSmsSync()
-      console.log(
-        `[Background] SMS-capable device found: ${defaultDevice.nickname}`
-      );
-
-      // Periodic SMS sync every 6 hours using simple system
-      setInterval(
-        async () => {
-          await triggerSmsSync('periodic');
-        },
-        6 * 60 * 60 * 1000
-      ); // 6 hours
-
-      console.log('[Background] SMS sync initialized with 6-hour interval');
-    } else {
-      console.log(
-        '[Background] No SMS-capable device found, skipping SMS sync'
-      );
-    }
+    // An alarm, because a timer would be lost whenever the worker stops. It runs even
+    // with no phone yet: the sync skips quietly until there is one.
+    await chrome.alarms.create(SMS_SYNC_ALARM, {
+      periodInMinutes: SMS_SYNC_INTERVAL_MINUTES,
+    });
   } catch (error) {
     console.error('[Background] Failed to initialize SMS sync:', error);
   }
@@ -229,11 +210,8 @@ async function initializeStartupServices(): Promise<void> {
     await cleanupExpiredMirrors();
     await reconstructMirrors();
 
-    // Resume interrupted uploads
-    const resumedCount = await resumeInterruptedUploads();
-    if (resumedCount > 0) {
-      console.log(`Resumed ${resumedCount} interrupted uploads`);
-    }
+    // Tell the user about uploads a restart interrupted
+    await resumeInterruptedUploads();
 
     // Clean up old pending uploads
     await cleanupOldPendingUploads();
@@ -258,6 +236,11 @@ chrome.runtime.onStartup.addListener(() => {
 // Runs on every worker start. Listeners must be registered synchronously or
 // Chrome won't deliver the event that woke the worker.
 registerKeepAliveListener();
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === SMS_SYNC_ALARM) {
+    void triggerSmsSync('periodic');
+  }
+});
 registerQuotaListener();
 registerTokenHealthListener();
 void ensureWorkerRuntime();
@@ -417,7 +400,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       );
       break;
     case 'MARK_CONVERSATION_READ':
-      handleMarkConversationRead(message.conversationId, sendResponse);
+      handleMarkConversationRead(
+        message.conversationId,
+        message.deviceIden,
+        sendResponse
+      );
       break;
     case 'GET_DEFAULT_SMS_DEVICE':
       handleGetDefaultSmsDevice(sendResponse);
@@ -514,6 +501,7 @@ async function handleTokenVerification(
       console.log('Token verified successfully for user:', userData.name);
 
       // Store the token and user ID
+      bumpAccountEpoch();
       await setLocal('pb_token', token);
       await setLocal('pb_user_iden', userData.iden);
 
@@ -1211,6 +1199,7 @@ async function handleUploadFile(
     });
 
     // Request upload from Pushbullet
+    const accountEpoch = currentAccountEpoch();
     const uploadInfo = await requestUpload(file);
 
     // Upload file to S3 with progress tracking
@@ -1227,6 +1216,16 @@ async function handleUploadFile(
     };
 
     const uploadResult = await uploadFile(uploadInfo, file, progressCallback);
+
+    // A file uploaded for one account must not be sent from another.
+    if (accountEpoch !== currentAccountEpoch()) {
+      sendResponse({
+        ok: false,
+        success: false,
+        error: 'Account changed during upload',
+      });
+      return;
+    }
 
     if (uploadResult.success) {
       // Create file push after successful upload
@@ -1313,6 +1312,7 @@ async function handleUploadFileForSms(
     });
 
     // Request upload from Pushbullet
+    const accountEpoch = currentAccountEpoch();
     const uploadInfo = await requestUpload(file);
 
     // Upload file to S3 with progress tracking
@@ -1329,6 +1329,16 @@ async function handleUploadFileForSms(
     };
 
     const uploadResult = await uploadFile(uploadInfo, file, progressCallback);
+
+    // A file uploaded for one account must not be sent from another.
+    if (accountEpoch !== currentAccountEpoch()) {
+      sendResponse({
+        ok: false,
+        success: false,
+        error: 'Account changed during upload',
+      });
+      return;
+    }
 
     if (uploadResult.success) {
       // Return just the file URL without creating a push notification
@@ -1490,83 +1500,20 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   console.log('🔄 [Background] Context menu processing:', info, tab);
   try {
-    const menuId = info.menuItemId as string;
-    let payload: PushPayload;
-    let baseAction: string;
-
-    // Determine base payload based on menu ID prefix
-    if (menuId.startsWith('push-page')) {
-      baseAction = 'push-page';
-      payload = {
-        type: 'link',
-        url: tab.url!,
-        title: tab.title,
-        body: `Page shared from ${new URL(tab.url!).hostname}`,
-      };
-    } else if (menuId.startsWith('push-link')) {
-      baseAction = 'push-link';
-      payload = {
-        type: 'link',
-        url: info.linkUrl!,
-        title: (info as any).linkText || info.linkUrl,
-        body: `Link shared from ${new URL(tab.url!).hostname}`,
-      };
-    } else if (menuId.startsWith('push-image')) {
-      baseAction = 'push-image';
-      payload = {
-        type: 'link',
-        url: info.srcUrl!,
-        title: (info as any).altText || 'Image',
-        body: `Image shared from ${new URL(tab.url!).hostname}`,
-      };
-    } else if (menuId.startsWith('push-selection')) {
-      baseAction = 'push-selection';
-      payload = {
-        type: 'note',
-        body: info.selectionText!,
-        title: `Text from ${new URL(tab.url!).hostname}`,
-      };
-    } else {
-      console.warn('🔄 [Background] Unknown context menu ID:', menuId);
+    const push = buildContextMenuPush(info.menuItemId as string, info, tab);
+    if (!push) {
+      console.warn('🔄 [Background] Unknown context menu ID:', info.menuItemId);
       return;
     }
 
-    // Handle targeting based on menu ID structure
-    if (menuId.endsWith('-all')) {
-      // Send to all devices (default behavior) - no targeting needed
-      console.log('🔄 [Background] Sending to all devices');
-    } else if (menuId.includes('-device-')) {
-      // Extract device iden from menu ID
-      const deviceMatch = menuId.match(new RegExp(`${baseAction}-device-(.+)`));
-      if (deviceMatch && deviceMatch[1]) {
-        const deviceIden = deviceMatch[1];
-        payload.targetDeviceIden = deviceIden;
-        console.log('🔄 [Background] Sending to device:', deviceIden);
-      } else {
-        console.error('🔄 [Background] Failed to extract device ID from menu ID:', menuId);
+    const { payload, contactIden } = push;
+    if (contactIden) {
+      const contact = await getContactByIden(contactIden);
+      if (!contact) {
+        console.error('🔄 [Background] Contact not found for ID:', contactIden);
         return;
       }
-    } else if (menuId.includes('-contact-')) {
-      // Extract contact iden from menu ID
-      const contactMatch = menuId.match(new RegExp(`${baseAction}-contact-(.+)`));
-      if (contactMatch && contactMatch[1]) {
-        const contactIden = contactMatch[1];
-        const contact = await getContactByIden(contactIden);
-        if (contact) {
-          payload.email = contact.email;
-          console.log('🔄 [Background] Sending to contact:', contact.email);
-        } else {
-          console.error('🔄 [Background] Contact not found for ID:', contactIden);
-          return;
-        }
-      } else {
-        console.error('🔄 [Background] Failed to extract contact ID from menu ID:', menuId);
-        return;
-      }
-    } else {
-      // This is a parent menu item (like 'push-page' without suffix)
-      // Send to all devices by default
-      console.log('🔄 [Background] Parent menu clicked, sending to all devices');
+      payload.email = contact.email;
     }
 
     // Create the push
@@ -1708,17 +1655,18 @@ export async function triggerSmsSync(reason: string = 'manual'): Promise<void> {
  */
 async function handleMarkConversationRead(
   conversationId: string,
+  deviceIden: string | undefined,
   sendResponse: (response: any) => void
 ) {
   try {
     console.log(`[Background] Marking conversation ${conversationId} as read`);
-    const defaultDevice = await getDefaultSmsDevice();
-    if (!defaultDevice) {
+    const targetDevice = deviceIden ?? (await getDefaultSmsDevice())?.iden;
+    if (!targetDevice) {
       sendResponse({ success: false, error: 'No SMS device available' });
       return;
     }
 
-    await markConversationRead(defaultDevice.iden, conversationId);
+    await markConversationRead(targetDevice, conversationId);
     sendResponse({ success: true });
   } catch (error) {
     console.error('Failed to mark conversation as read:', error);
@@ -2317,9 +2265,18 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
 
     // Stop the stream first, or it keeps delivering the old account's
     // notifications and writing to storage after the reset.
+    bumpAccountEpoch();
     disconnectWebSocket();
     operationQueue.clearQueue();
     await clearAllChannelCaches();
+
+    // Notifications from the old account shouldn't stay on screen.
+    const visible = await new Promise<object>(resolve =>
+      chrome.notifications.getAll(resolve)
+    );
+    await Promise.all(
+      Object.keys(visible).map(id => chrome.notifications.clear(id))
+    );
 
     // Clear ALL storage from chrome.storage.local (this clears everything)
     await chrome.storage.local.clear();

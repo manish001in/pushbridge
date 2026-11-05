@@ -351,7 +351,17 @@ describe('ContextManager', () => {
         'unknown-channel'
       );
 
-      // Should have made additional API calls
+      // A source still unknown right after a refresh doesn't refresh again
+      expect(mockHttpClient.httpClient.fetch).toHaveBeenCalledTimes(4);
+      jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
+      mockStorage.getLocal
+        .mockResolvedValueOnce('test-token')
+        .mockResolvedValueOnce('device1');
+      await contextManager.handleUnknownSource(
+        'unknown-device',
+        'unknown-channel'
+      );
+      // After the interval it does
       expect(mockHttpClient.httpClient.fetch).toHaveBeenCalledTimes(8); // 4 initial + 4 for refresh (subscriptions, channels, devices, contacts)
     });
   });

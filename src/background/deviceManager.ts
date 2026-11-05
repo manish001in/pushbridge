@@ -43,6 +43,7 @@ interface DeviceApiResponse {
 
 // Cache duration: 24 hours in milliseconds
 const CACHE_DURATION = 24 * 60 * 60 * 1000;
+const MAX_PAGES = 20;
 
 /**
  * Register or get the Chrome device with Pushbullet
@@ -204,18 +205,14 @@ export async function getPushableDevices(
  * @returns Promise resolving to array of devices
  */
 async function fetchDevicesFromAPI(
-  forceRefresh = false
+  forceRefresh = false,
+  cursor?: string,
+  page = 0
 ): Promise<PushbulletDevice[]> {
   const token = await getLocal<string>('pb_token');
   if (!token) {
     console.log('No token available, skipping device fetch and returning empty list');
     return [];
-  }
-
-  // Get stored cursor for pagination (unless force refresh)
-  let cursor: string | undefined;
-  if (!forceRefresh) {
-    cursor = await getLocal<string>('pb_devices_cursor');
   }
 
   // Build query parameters
@@ -261,7 +258,14 @@ async function fetchDevicesFromAPI(
     await setLocal('pb_devices_has_more', false);
   }
 
-  return data.devices || [];
+  // The caller caches this as the whole list, so it has to be the whole list.
+  const devices = data.devices || [];
+  return data.cursor && page < MAX_PAGES
+    ? [
+        ...devices,
+        ...(await fetchDevicesFromAPI(forceRefresh, data.cursor, page + 1)),
+      ]
+    : devices;
 }
 
 /**

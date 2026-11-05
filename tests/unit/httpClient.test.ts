@@ -144,7 +144,8 @@ describe('HTTP Client', () => {
 
       expect(mockRateLimitManager.startBackoff).toHaveBeenCalled();
       expect(mockUserFeedback.showRateLimitNotification).toHaveBeenCalled();
-      expect(mockOperationQueue.stopProcessing).toHaveBeenCalled();
+      // Queued requests resume on their own when the backoff ends
+      expect(mockOperationQueue.stopProcessing).not.toHaveBeenCalled();
     });
 
     it('should clear rate limit notification on successful request', async () => {

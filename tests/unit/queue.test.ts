@@ -14,13 +14,17 @@ jest.mock('../../src/background/storage', () => ({
   setLocal: jest.fn(),
 }));
 
+jest.setTimeout(30000);
+
 describe('outgoing operation queue', () => {
   let ops: any[] = [];
+  let nextId = 0;
+  // Unique across tests, because the queue remembers delivered IDs.
   const op = (id: string) => ({
-    id,
+    id: `${id}#${nextId++}`,
     type: 'pushSend',
     payload: { id },
-    timestamp: 0,
+    timestamp: Date.now(),
     retryCount: 0,
   });
 
@@ -52,9 +56,96 @@ describe('outgoing operation queue', () => {
       return {};
     });
     await processQueue();
-    expect(ops.map(o => o.id)).toEqual(['late']);
+    expect(ops.map(o => o.id.split('#')[0])).toEqual(['late']);
   }, 15000);
 
+  describe('when sending fails', () => {
+    const { reportError } = jest.requireMock(
+      '../../src/background/errorManager'
+    );
+
+    test('a network failure keeps the push and retries later, not straight away', async () => {
+      ops = [op('a')];
+      (createPush as jest.Mock).mockRejectedValueOnce(new TypeError('offline'));
+      await processQueue();
+      expect(ops).toHaveLength(1);
+      expect(ops[0].retryCount).toBe(1);
+      expect(ops[0].nextAttemptAt).toBeGreaterThan(Date.now());
+      expect(ops[0].attemptStartedAt).toBeUndefined();
+
+      await processQueue();
+      expect(createPush).toHaveBeenCalledTimes(1);
+    });
+
+    test('never gives up on a push just from repeated network failures', async () => {
+      ops = [{ ...op('a'), retryCount: 50 }];
+      (createPush as jest.Mock).mockRejectedValueOnce(new TypeError('offline'));
+      await processQueue();
+      expect(ops).toHaveLength(1);
+    });
+
+    test('a request the server rejects is dropped and reported', async () => {
+      ops = [op('a')];
+      (createPush as jest.Mock).mockRejectedValueOnce(
+        new Error('Failed to create push: 400 Bad Request')
+      );
+      await processQueue();
+      expect(ops).toEqual([]);
+      expect(reportError).toHaveBeenCalled();
+    });
+
+    test('rate limiting is not treated as a rejection', async () => {
+      ops = [op('a')];
+      (createPush as jest.Mock).mockRejectedValueOnce(
+        new Error('Failed to create push: 429 Too Many Requests')
+      );
+      await processQueue();
+      expect(ops).toHaveLength(1);
+    });
+
+    test('a push interrupted mid-send by a worker restart is not sent again', async () => {
+      ops = [{ ...op('interrupted'), attemptStartedAt: Date.now() - 1000 }];
+      await processQueue();
+      expect(createPush).not.toHaveBeenCalled();
+      expect(ops).toEqual([]);
+      expect(reportError).toHaveBeenCalled();
+    });
+
+    test('the in-flight mark is saved before the request goes out', async () => {
+      ops = [op('a')];
+      (createPush as jest.Mock).mockImplementationOnce(async () => {
+        expect(ops[0].attemptStartedAt).toBeDefined();
+        return {};
+      });
+      await processQueue();
+      expect(createPush).toHaveBeenCalledTimes(1);
+    });
+
+    test('a push is not resent when its removal from storage fails', async () => {
+      ops = [op('a')];
+      const real = (setLocal as jest.Mock).getMockImplementation();
+      let writes = 0;
+      (setLocal as jest.Mock).mockImplementation(async (key, value) => {
+        // First write marks it in flight; the second, its removal, fails.
+        if (++writes === 2) throw new Error('storage full');
+        return real!(key, value);
+      });
+      await processQueue();
+      (setLocal as jest.Mock).mockImplementation(real!);
+      await processQueue();
+      expect(createPush).toHaveBeenCalledTimes(1);
+      expect(ops).toEqual([]);
+    });
+
+    test('an old push is dropped and reported rather than sent days late', async () => {
+      ops = [{ ...op('a'), timestamp: Date.now() - 8 * 24 * 60 * 60 * 1000 }];
+      await processQueue();
+      expect(createPush).not.toHaveBeenCalled();
+      expect(ops).toEqual([]);
+    });
+  });
+
+  // Last: its send never finishes, so the queue stays busy afterwards.
   test('concurrent additions are all kept', async () => {
     // Slow storage makes a lost update likely if writes aren't serialized.
     (getLocal as jest.Mock).mockImplementation(async () => {

@@ -182,6 +182,22 @@ class UnifiedNotificationTracker {
     return toMilliseconds(timestamp) > this.lastSeenMs() - BUFFER_TIME;
   }
 
+  /**
+   * Like shouldShowNotification, but also reserves the ID, so two overlapping
+   * callers can't both decide to show the same notification.
+   */
+  async claimNotification(notification: NotificationData): Promise<boolean> {
+    if (!(await this.shouldShowNotification(notification))) {
+      return false;
+    }
+    // Nothing can interleave from this check to the reservation.
+    if (this.isRecentlyProcessed(notification.id, notification.type)) {
+      return false;
+    }
+    this.addToCache(notification.type, notification.id);
+    return true;
+  }
+
   /** False until the user has opened the popup at least once. */
   async hasBaseline(): Promise<boolean> {
     await this.ensureInitialized();
@@ -550,7 +566,9 @@ class UnifiedNotificationTracker {
     const cacheKey = `${type}Ids` as keyof RecentlyProcessedCache;
     const cache = this.cache[cacheKey] as string[];
 
-    // Add to beginning of array
+    // Add to beginning of array, once
+    const existing = cache.indexOf(id);
+    if (existing !== -1) cache.splice(existing, 1);
     cache.unshift(id);
 
     // Keep only the most recent entries

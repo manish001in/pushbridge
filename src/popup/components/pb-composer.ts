@@ -1,6 +1,8 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
+import { determinePushType } from '../pushType';
+
 @customElement('pb-composer')
 export class PushComposer extends LitElement {
   @property({ type: String })
@@ -414,31 +416,6 @@ export class PushComposer extends LitElement {
     }
   }
 
-  // Smart push type detection
-  private determinePushType(
-    message: string,
-    file?: File
-  ): 'note' | 'link' | 'file' {
-    if (file) return 'file';
-
-    // Strip whitespace from message
-    const trimmedMessage = message.trim();
-
-    if (!trimmedMessage) return 'note';
-
-    // Extract URLs from message using improved regex
-    const urlRegex = /https?:\/\/[^\s]+/g;
-    const urls = trimmedMessage.match(urlRegex);
-
-    // If exactly one URL and message is just that URL (after trimming), it's a link
-    if (urls?.length === 1 && trimmedMessage === urls[0]) {
-      return 'link';
-    }
-
-    // Otherwise it's a note (including multiple URLs or text with URLs)
-    return 'note';
-  }
-
   // Load combined send targets (devices + owned channels + contacts)
   private async loadSendTargets() {
     try {
@@ -607,6 +584,11 @@ export class PushComposer extends LitElement {
   }
 
   private async handleSend() {
+    // The keyboard shortcut reaches here even while the button is disabled.
+    if (this.isSending) {
+      return;
+    }
+
     if (!this.validateForm()) {
       return;
     }
@@ -616,7 +598,7 @@ export class PushComposer extends LitElement {
 
     try {
       // Determine the actual push type using smart detection
-      const actualPushType = this.determinePushType(
+      const actualPushType = determinePushType(
         this.body,
         this.selectedFile || undefined
       );

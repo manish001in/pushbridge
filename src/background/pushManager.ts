@@ -101,8 +101,9 @@ export async function createPush(
       pushData.url = payload.url;
     }
 
-    // Handle broadcast vs regular push targeting
-    if (payload.type === 'broadcast') {
+    // A channel post can be a note or a link; without the tag it would go to all
+    // of the user's own devices instead.
+    if (payload.channel_tag) {
       pushData.channel_tag = payload.channel_tag;
     } else if (payload.targetDeviceIden) {
       pushData.target_device_iden = payload.targetDeviceIden;
