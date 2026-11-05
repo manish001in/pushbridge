@@ -64,7 +64,7 @@ describe('catching up when the stream connects', () => {
   const connect = async () => {
     await initializeWebSocket();
     socket.onopen();
-    for (let i = 0; i < 5; i++) await settle();
+    for (let i = 0; i < 40; i++) await settle();
   };
 
   beforeEach(() => {
@@ -77,6 +77,11 @@ describe('catching up when the stream connects', () => {
     (chrome.storage.local.get as jest.Mock).mockImplementation((key, cb) => {
       cb?.({ [key]: stored[key] });
       return Promise.resolve({ [key]: stored[key] });
+    });
+    (chrome.storage.local.set as jest.Mock).mockImplementation((values, cb) => {
+      Object.assign(stored, values);
+      cb?.();
+      return Promise.resolve();
     });
     (chrome as any).tabs = { create: jest.fn().mockResolvedValue({}) };
     global.WebSocket = jest.fn().mockImplementation(() => {

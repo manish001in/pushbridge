@@ -397,6 +397,10 @@ export class PbConversationList extends LitElement {
       cmd: 'MARK_CONVERSATION_READ',
       conversationId,
     });
+    this.conversations = this.conversations.map(c =>
+      c.id === conversationId ? { ...c, unreadCount: 0 } : c
+    );
+    this.filterConversations();
   }
 
   getInitials(name: string): string {

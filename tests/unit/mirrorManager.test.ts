@@ -128,7 +128,7 @@ describe('mirrorManager', () => {
 
       // Verify Chrome notification was created
       expect(mockChrome.notifications.create).toHaveBeenCalledWith(
-        '1234567890_4fzzzxjyl',
+        'device-123:com.test.app:123:test-tag',
         expect.objectContaining({
           type: 'basic',
           title: 'Test Notification',
@@ -141,7 +141,7 @@ describe('mirrorManager', () => {
 
       // Verify metadata was stored
       expect(mockSetLocal).toHaveBeenCalledWith(
-        'mirror_1234567890_4fzzzxjyl',
+        'mirror_device-123:com.test.app:123:test-tag',
         expect.objectContaining({
           package_name: 'com.test.app',
           notification_id: '123',
@@ -169,7 +169,7 @@ describe('mirrorManager', () => {
       await handleMirror(mockPush);
 
       expect(mockChrome.notifications.create).toHaveBeenCalledWith(
-        '1234567890_4fzzzxjyl',
+        'device-123:com.test.app:123:',
         expect.objectContaining({
           iconUrl: 'icons/48.png',
         })

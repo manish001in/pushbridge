@@ -164,6 +164,7 @@ export interface SmsThread {
   messages: SmsMsg[]; // chronological
   lastMessageTime: number;
   unreadCount: number;
+  readThroughTime?: number; // Messages up to this time (ms) were read here
   deviceIden?: string; // NEW: Device context
   recipients?: Array<{
     // NEW: Multiple recipients support
