@@ -453,3 +453,52 @@ body {
     font-size: 22px;
   }
 }
+
+.dnd-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.dnd-item {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+}
+
+.dnd-item.dragging {
+  opacity: 0.6;
+}
+.dnd-item .handle {
+  cursor: grab;
+  user-select: none;
+}
+.dnd-item .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggle-visibility {
+  appearance: none;
+  border: none;
+  border-radius: 9999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background-color: #e0e7ff;
+  color: #1e3a8a;
+}
+
+.toggle-visibility[data-state='hide'] {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
