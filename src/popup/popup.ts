@@ -16,6 +16,12 @@ import {
 } from '../background/deviceManager';
 import { getLocal } from '../background/storage';
 
+import {
+  getOptionOrder,
+  getHiddenTabs,
+  buildTabButtonsHTML,
+  activateInitialPane,
+} from './components/pb-nav';
 import { bootTheme } from './components/pb-theme';
 
 bootTheme();
@@ -70,17 +76,18 @@ async function initializePopup() {
       // Check if user has SMS-capable devices
       const hasSms = await hasSmsCapableDevices();
       const defaultSmsDevice = hasSms ? await getDefaultSmsDevice() : null;
+      const [order, hidden] = await Promise.all([
+        getOptionOrder(),
+        getHiddenTabs(),
+      ]);
+
       // Show main UI with tabs
       container.innerHTML = `
         <div class="popup-container">
           <div class="popup-header">
             <h2 class="popup-title">Pushbridge</h2>
             <div class="tab-navigation">
-              <button class="tab-button active" data-tab="composer">Send</button>
-              <button class="tab-button" data-tab="pushes">Messages</button>
-              <button class="tab-button" data-tab="notifications">Notifications Mirroring</button>
-              <button class="tab-button" data-tab="channels">Subscriptions</button>
-              ${hasSms ? '<button class="tab-button" data-tab="messages">SMS/MMS</button>' : ''}
+              ${buildTabButtonsHTML(order, hasSms, hidden)}
             </div>
           </div>
           <div class="tab-content">
@@ -128,6 +135,8 @@ async function initializePopup() {
             </div>
         </div>
       `;
+
+      activateInitialPane(container);
 
       // Initialize tab switching
       setupTabNavigation();
@@ -189,7 +198,9 @@ async function setupSmsInterface(): Promise<void> {
         `Device ${defaultDevice.iden.slice(0, 8)}`;
 
       // Update SMS tab header
-      const smsTab = document.querySelector('[data-tab="messages"]');
+      const smsTab = document.querySelector(
+        '.tab-button[data-tab="messages"]'
+      );
       if (smsTab) {
         smsTab.innerHTML = `
           <div class="sms-header">

@@ -200,7 +200,11 @@ try {
         innerWidth,
         innerHeight,
       }));
-      assert.equal(fill.width, fill.innerWidth, 'Window layout fills the width');
+      assert.equal(
+        fill.width,
+        fill.innerWidth,
+        'Window layout fills the width'
+      );
       assert.equal(
         Math.round(fill.footerBottom),
         fill.innerHeight,

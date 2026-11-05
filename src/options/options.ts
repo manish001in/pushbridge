@@ -1,6 +1,13 @@
 // Options page entry point
 console.log('Pushbridge options page loaded');
 
+import {
+  DEFAULT_ORDER as DEFAULT_OPTION_ORDER,
+  normalizeOrder,
+  normalizeHidden,
+  type OptionKey,
+} from '../popup/components/pb-nav';
+
 interface Settings {
   soundEnabled: boolean;
   defaultDevice: string;
@@ -8,6 +15,8 @@ interface Settings {
   autoReconnect: boolean;
   defaultSmsDevice: string;
   autoOpenPushLinksAsTab: boolean;
+  optionOrder: OptionKey[];
+  hiddenTabs: OptionKey[];
   systemTheme: boolean;
 }
 
@@ -19,6 +28,8 @@ class OptionsPage {
     autoReconnect: true,
     defaultSmsDevice: '',
     autoOpenPushLinksAsTab: false,
+    optionOrder: DEFAULT_OPTION_ORDER.slice(),
+    hiddenTabs: [],
     systemTheme: false,
   };
 
@@ -101,9 +112,34 @@ class OptionsPage {
       if (defaultSmsDevice.defaultSmsDevice) {
         this.settings.defaultSmsDevice = defaultSmsDevice.defaultSmsDevice;
       }
+
+      const storedOrder =
+        stored.pb_settings?.optionOrder ?? this.settings.optionOrder;
+      const storedHidden =
+        stored.pb_settings?.hiddenTabs ?? this.settings.hiddenTabs ?? [];
+
+      const normalizedOrder = normalizeOrder(storedOrder);
+      const normalizedHidden = normalizeHidden(storedHidden);
+
+      const orderChanged =
+        JSON.stringify(storedOrder) !== JSON.stringify(normalizedOrder);
+      const hiddenChanged =
+        JSON.stringify(storedHidden) !== JSON.stringify(normalizedHidden);
+
+      this.settings.optionOrder = normalizedOrder;
+      this.settings.hiddenTabs = normalizedHidden;
+
+      if (orderChanged || hiddenChanged) {
+        await this.saveSettings();
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
+  }
+
+  private async setOptionOrder(newOrder: OptionKey[]) {
+    this.settings.optionOrder = normalizeOrder(newOrder);
+    await this.saveSettings();
   }
 
   private async loadDevices() {
@@ -314,6 +350,146 @@ class OptionsPage {
       });
     }
 
+    // Navigation order
+    const ul = document.getElementById(
+      'option-order'
+    ) as HTMLUListElement | null;
+    if (ul) {
+      const renderOrder = () => {
+        // Only include SMS/MMS if we have devices
+        const eligible = this.settings.optionOrder.filter(
+          k => k !== 'SMS/MMS' || this.smsDevices.length > 0
+        );
+        ul.innerHTML = eligible
+          .map(k => {
+            const isHidden = this.settings.hiddenTabs?.includes(k);
+
+            return `
+              <li draggable="true" data-key="${k}" class="dnd-item">
+                <span class="handle" aria-hidden="true">⋮⋮</span>
+                <span class="label">${k}</span>
+                <button type="button"
+                        class="toggle-visibility"
+                        data-key="${k}"
+                        aria-label="${isHidden ? 'Show' : 'Hide'} ${k}"
+                        data-state="${isHidden ? 'show' : 'hide'}">
+                  ${isHidden ? 'Show' : 'Hide'}
+                </button>
+              </li>
+            `;
+          })
+          .join('');
+      };
+      renderOrder();
+
+      ul.addEventListener('click', async e => {
+        const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(
+          '.toggle-visibility'
+        );
+        if (!btn) return;
+        e.preventDefault();
+
+        const key = btn.dataset.key as OptionKey | undefined;
+        if (!key) return;
+
+        // ensure array exists
+        this.settings.hiddenTabs = Array.isArray(this.settings.hiddenTabs)
+          ? this.settings.hiddenTabs
+          : [];
+
+        const hidden = new Set<OptionKey>(this.settings.hiddenTabs);
+        const isCurrentlyHidden = hidden.has(key);
+
+        // Build the "effective" option order — skip SMS/MMS if no devices
+        const effectiveOrder = DEFAULT_OPTION_ORDER.filter(k =>
+          k === 'SMS/MMS' ? this.smsDevices.length > 0 : true
+        );
+
+        // If user is trying to hide this key, ensure at least one remains visible
+        if (!isCurrentlyHidden) {
+          const visibleCount = effectiveOrder.filter(
+            k => !hidden.has(k)
+          ).length;
+          if (visibleCount <= 1) {
+            this.showMessage('At least one tab must remain visible.', 'error');
+            return;
+          }
+          hidden.add(key); // hide it
+        } else {
+          hidden.delete(key); // show it
+        }
+
+        // persist
+        this.settings.hiddenTabs = Array.from(hidden);
+        await this.saveSettings();
+
+        // re-render list (updates button label/color via your renderOrder)
+        renderOrder();
+      });
+
+      let draggingEl: HTMLElement | null = null;
+
+      ul.addEventListener('dragstart', e => {
+        if ((e.target as HTMLElement).closest('.toggle-visibility')) {
+          e.preventDefault(); // don't drag when clicking the button
+          return;
+        }
+        const li = (e.target as HTMLElement)?.closest(
+          'li'
+        ) as HTMLElement | null;
+        if (!li) return;
+        draggingEl = li;
+        li.classList.add('dragging');
+        e.dataTransfer?.setData('text/plain', li.dataset.key || '');
+        e.dataTransfer?.setDragImage(li, 10, 10);
+      });
+
+      ul.addEventListener('dragover', e => {
+        e.preventDefault();
+        const after = getAfterElement(ul, e.clientY);
+        if (!draggingEl) return;
+        if (!after) ul.appendChild(draggingEl);
+        else ul.insertBefore(draggingEl, after);
+      });
+
+      ul.addEventListener('dragend', async () => {
+        if (draggingEl) draggingEl.classList.remove('dragging');
+        draggingEl = null;
+        const order = Array.from(ul.querySelectorAll('li')).map(
+          li => li.getAttribute('data-key') as OptionKey
+        );
+        // Tabs left out of the list (SMS with no device) keep their saved position.
+        this.settings.optionOrder.forEach((key, index) => {
+          if (!order.includes(key)) order.splice(index, 0, key);
+        });
+        await this.setOptionOrder(order);
+        renderOrder(); // rehydrate DOM to avoid any ghost states
+      });
+
+      // Option order
+      const getAfterElement = (
+        container: HTMLElement,
+        y: number
+      ): HTMLElement | null => {
+        const els = Array.from(
+          container.querySelectorAll<HTMLElement>('li:not(.dragging)')
+        );
+
+        let closestOffset = Number.NEGATIVE_INFINITY;
+        let closestEl: HTMLElement | null = null;
+
+        for (const el of els) {
+          const box = el.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closestOffset) {
+            closestOffset = offset;
+            closestEl = el;
+          }
+        }
+        return closestEl;
+      };
+    }
+
     // System theme (auto) toggle
     const systemThemeToggle = document.getElementById(
       'system-theme-toggle'
@@ -432,6 +608,8 @@ class OptionsPage {
         autoReconnect: true,
         defaultSmsDevice: '',
         autoOpenPushLinksAsTab: false,
+        optionOrder: DEFAULT_OPTION_ORDER.slice(),
+        hiddenTabs: [],
         systemTheme: false,
       };
       this.pendingSmsDeviceChange = null;
@@ -464,6 +642,8 @@ class OptionsPage {
           autoReconnect: true,
           defaultSmsDevice: '',
           autoOpenPushLinksAsTab: false,
+          optionOrder: DEFAULT_OPTION_ORDER.slice(),
+          hiddenTabs: [],
           systemTheme: false,
         };
         this.pendingSmsDeviceChange = null;
@@ -529,6 +709,17 @@ class OptionsPage {
             <input type="checkbox" id="system-theme-toggle" class="toggle" checked="${this.settings.systemTheme}">
           </div>
         </div>
+
+        <div class="setting-item">
+          <div class="setting-info">
+            <label>Navigation order</label>
+            <p>Drag to rearrange tabs. Use Show or Hide to change visibility.</p>
+          </div>
+          <div class="setting-control">
+            <ul id="option-order" class="dnd-list"></ul>
+          </div>
+        </div>
+
       </div>
 
       <div class="settings-section">
