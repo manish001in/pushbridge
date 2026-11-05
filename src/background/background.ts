@@ -1309,7 +1309,15 @@ async function handleUploadFile(
         targetDevice: targetDeviceIden,
       };
 
-      await addTransferRecord(transferRecord);
+      // The file is delivered: nothing after this may report it as failed, or
+      // the user would send it again.
+      sendResponse({ success: true, filePush });
+
+      try {
+        await addTransferRecord(transferRecord);
+      } catch (error) {
+        console.error('Failed to record the file transfer:', error);
+      }
 
       // Broadcast to any listening popups that a new file push was created
       try {
@@ -1321,10 +1329,6 @@ async function handleUploadFile(
       } catch {
         // Ignore if no popup is listening
       }
-
-      // The file is delivered: nothing after this may report it as failed, or
-      // the user would send it again.
-      sendResponse({ success: true, filePush });
 
       try {
         await chrome.notifications.create({

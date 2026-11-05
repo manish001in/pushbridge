@@ -119,6 +119,37 @@ describe('OperationQueue Deduplication', () => {
       expect(queuedOps[0].url).toBe('https://api.pushbullet.com/v2/permanents/device1_threads');
     });
 
+    it('every caller of a deduplicated request can read its own response', async () => {
+      const url = 'https://api.pushbullet.com/v2/permanents/device1_threads';
+      // Jest's environment has no fetch Response, so this keeps its rule: one read.
+      const response = (): any => {
+        let used = false;
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: () => null },
+          clone: response,
+          json: async () => {
+            if (used) throw new TypeError('Body is unusable');
+            used = true;
+            return { threads: [1] };
+          },
+        };
+      };
+      (global.fetch as jest.Mock).mockResolvedValue(response());
+      const results = Array.from({ length: 7 }, () =>
+        operationQueue.enqueue({ url, options: { method: 'GET' } })
+      );
+      operationQueue.stopProcessing();
+      await (operationQueue as any).deduplicateQueue();
+      await (operationQueue as any).processNextOperation();
+
+      const bodies = await Promise.all(
+        (await Promise.all(results)).map(response => response.json())
+      );
+      expect(bodies).toEqual(Array(7).fill({ threads: [1] }));
+    });
+
     it('should not deduplicate non-permanents operations', async () => {
       // Add 6 operations with only 2 being permanents
       const operations: PendingOperation[] = [
