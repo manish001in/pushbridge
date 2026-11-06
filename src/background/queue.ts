@@ -53,6 +53,7 @@ const RETRY_MAX_DELAY = 60 * 60 * 1000;
 const MAX_OP_AGE = 7 * 24 * 60 * 60 * 1000;
 const QUOTA_WAIT_MS = 60 * 1000;
 const WARNINGS_KEY = 'pb_queue_warnings';
+export const QUEUE_WARNING_ALARM = 'pb_queue_warning_retry';
 const MAX_DELIVERY_CHECK_PAGES = 5;
 const MAX_INCONCLUSIVE_CHECKS = 3;
 // The server's clock decides what `modified_after` means, not this computer's.
@@ -245,20 +246,26 @@ const opOutcomes = new Map<string, EnqueueOutcome>();
  * it has really been shown. It can't go through reportError, which hides a failure.
  */
 async function discardOp(op: PushbridgeOp, message: string): Promise<void> {
-  warningWrites = warningWrites.then(async () => {
+  await inWarningOrder(async () => {
     const warnings = (await getLocal<string[]>(WARNINGS_KEY)) ?? [];
     await setLocal(WARNINGS_KEY, [...warnings, message]);
   });
-  await warningWrites;
   await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
   await showQueueWarnings();
 }
 
-let warningWrites: Promise<void> = Promise.resolve();
+let warningWrites: Promise<unknown> = Promise.resolve();
+
+/** One failed write mustn't stop every later one. */
+function inWarningOrder(step: () => Promise<void>): Promise<void> {
+  const write = warningWrites.then(step, step);
+  warningWrites = write.catch(() => undefined);
+  return write;
+}
 
 /** Also at worker start, for any that couldn't be shown before. */
 export function showQueueWarnings(): Promise<void> {
-  warningWrites = warningWrites.then(async () => {
+  return inWarningOrder(async () => {
     const warnings = (await getLocal<string[]>(WARNINGS_KEY)) ?? [];
     const remaining = [...warnings];
     for (const message of warnings) {
@@ -272,6 +279,7 @@ export function showQueueWarnings(): Promise<void> {
         remaining.shift();
       } catch (error) {
         console.error('Failed to show a queue warning:', error);
+        await chrome.alarms.create(QUEUE_WARNING_ALARM, { delayInMinutes: 1 });
         break;
       }
     }
@@ -279,7 +287,6 @@ export function showQueueWarnings(): Promise<void> {
       await setLocal(WARNINGS_KEY, remaining);
     }
   });
-  return warningWrites;
 }
 
 /** Rejected by the server or unsendable, so trying again can't help. */

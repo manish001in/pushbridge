@@ -17,6 +17,8 @@ export interface UploadProgress {
 export interface UploadResult {
   success: boolean;
   error?: string;
+  /** Pass to finishUpload once whatever the upload was for is done. */
+  fileHash?: string;
 }
 
 export type ProgressCallback = (progress: UploadProgress) => void;
@@ -167,9 +169,6 @@ export async function uploadFile(
     if (response.ok) {
       console.log('File upload completed successfully');
 
-      // Remove pending upload on success
-      await removePendingUpload(fileHash);
-
       // Simulate progress completion if callback provided
       if (onProgress) {
         onProgress({
@@ -179,7 +178,9 @@ export async function uploadFile(
         });
       }
 
-      return { success: true };
+      // The record stays until the caller finishes: an uploaded file is no use if
+      // the worker stops before its push is created.
+      return { success: true, fileHash };
     } else {
       const error = `Upload failed with status ${response.status}: ${response.statusText}`;
       console.error(error);
@@ -222,6 +223,11 @@ export async function uploadFile(
     });
     return { success: false, error: 'Upload failed' };
   }
+}
+
+/** The upload's purpose is done, or the user has been told it failed. */
+export function finishUpload(fileHash: string): Promise<void> {
+  return removePendingUpload(fileHash);
 }
 
 /**

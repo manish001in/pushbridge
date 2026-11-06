@@ -420,6 +420,38 @@ describe('catching up when the stream connects', () => {
       expect(stored.pb_push_summary_unshown).toBe(0);
     });
 
+    test('the summary is owed before a push counts as handled', async () => {
+      const owedWhenMarked: number[] = [];
+      tracker.markAsProcessed.mockImplementation(async () => {
+        owedWhenMarked.push(stored.pb_push_summary_unshown ?? 0);
+      });
+      (getPushHistory as jest.Mock).mockResolvedValue({
+        pushes: Array.from({ length: 12 }, (_, i) => note(i)),
+      });
+      await connect();
+      expect(owedWhenMarked.slice(-2)).toEqual([1, 2]);
+    });
+
+    test('an open Messages tab hears about new pushes', async () => {
+      (chrome.runtime.sendMessage as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      serve(1);
+      await connect();
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ cmd: 'syncHistory', source: 'tickle' })
+      );
+    });
+
+    test('with nothing new, it stays quiet', async () => {
+      (chrome.runtime.sendMessage as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      (getPushHistory as jest.Mock).mockResolvedValue({ pushes: [] });
+      await connect();
+      expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
     test('at worker start, saved work gets its alarm back', async () => {
       stored.pb_push_scan_progress = { cursor: '5' };
       (chrome.alarms.create as jest.Mock).mockClear();

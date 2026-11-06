@@ -38,6 +38,7 @@ import { reportError, PBError } from './errorManager';
 import {
   uploadFile,
   ProgressCallback,
+  finishUpload,
   resumeInterruptedUploads,
   cleanupOldPendingUploads,
 } from './fileUploader';
@@ -68,6 +69,8 @@ import {
   showPushNotification,
 } from './pushNotifications';
 import {
+  QUEUE_WARNING_ALARM,
+  showQueueWarnings,
   initializeQueue,
   enqueue,
   getQueueStatus,
@@ -337,6 +340,8 @@ chrome.alarms.onAlarm.addListener(alarm => {
       void resumePushScan();
     } else if (alarm.name === DEVICE_SETUP_ALARM) {
       void ensureDeviceRegistered();
+    } else if (alarm.name === QUEUE_WARNING_ALARM) {
+      void showQueueWarnings();
     }
   });
 });
@@ -1397,6 +1402,7 @@ async function handleUploadFile(
   sendResponse: (response: any) => void
 ) {
   const accountEpoch = currentAccountEpoch();
+  let uploadRecord: string | undefined;
   try {
     const { fileData, targetDeviceIden, email, title, body, channel_tag, isRetry } =
       payload;
@@ -1443,6 +1449,7 @@ async function handleUploadFile(
     };
 
     const uploadResult = await uploadFile(uploadInfo, file, progressCallback);
+    uploadRecord = uploadResult.fileHash;
 
     // A file uploaded for one account must not be sent from another.
     if (accountEpoch !== currentAccountEpoch()) {
@@ -1522,6 +1529,12 @@ async function handleUploadFile(
       success: false,
       error: error instanceof Error ? error.message : 'Upload failed',
     });
+  } finally {
+    if (uploadRecord) {
+      await finishUpload(uploadRecord).catch(error =>
+        console.error('Failed to clear the upload record:', error)
+      );
+    }
   }
 }
 
@@ -1568,6 +1581,10 @@ async function handleUploadFileForSms(
     };
 
     const uploadResult = await uploadFile(uploadInfo, file, progressCallback);
+    // Nothing further depends on it here: the URL goes straight back to the page.
+    if (uploadResult.fileHash) {
+      await finishUpload(uploadResult.fileHash);
+    }
 
     // A file uploaded for one account must not be sent from another.
     if (accountEpoch !== currentAccountEpoch()) {

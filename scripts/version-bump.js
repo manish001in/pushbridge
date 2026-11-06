@@ -51,6 +51,18 @@ function bumpVersion(type = 'patch') {
     console.log('Updated manifest.json version');
   }
 
+  // Update package-lock.json if it exists, so \`npm ci\` keeps working
+  const lockPath = path.join(path.dirname(packagePath), 'package-lock.json');
+  if (fs.existsSync(lockPath)) {
+    const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    lock.version = newVersion;
+    if (lock.packages && lock.packages['']) {
+      lock.packages[''].version = newVersion;
+    }
+    fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+    console.log('Updated package-lock.json version');
+  }
+
   console.log(`Version bumped to ${newVersion}`);
 
   // Update CHANGELOG.md

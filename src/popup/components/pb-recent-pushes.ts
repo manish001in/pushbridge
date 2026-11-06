@@ -76,6 +76,8 @@ export class RecentPushes extends LitElement {
 
   @state()
   private hasMore = false;
+  private isMerging = false;
+  private mergeAgain = false;
 
   @state()
   private cursor?: string;
@@ -990,7 +992,7 @@ export class RecentPushes extends LitElement {
         this.cursor = response.history.cursor;
         this.hasMore = !!response.history.cursor;
         pageHadNothingToShow =
-          this.hasMore && withoutDeleted(response.history.pushes).length === 0;
+          this.hasMore && this.getFilteredPushes().length === 0;
 
         // Update last modified timestamp
         if (response.history.pushes.length > 0) {
@@ -1022,9 +1024,50 @@ export class RecentPushes extends LitElement {
     }
 
     // The API can return a page of only deleted records, or none, with real pushes
-    // further back. Don't leave the user looking at an empty list.
+    // further back, and recent ones may all belong to the other view. Don't leave the
+    // user looking at an empty list.
     if (pageHadNothingToShow && emptyPages < MAX_EMPTY_PAGES_TO_SKIP) {
       await this.loadPushes(false, emptyPages + 1);
+    }
+  }
+
+  /**
+   * Bring in what just arrived, keeping older pages the user has loaded and their place
+   * in history. Arrivals during a request are covered by one more request after it.
+   */
+  private async mergeNewestPushes(): Promise<void> {
+    if (this.isMerging) {
+      this.mergeAgain = true;
+      return;
+    }
+    this.isMerging = true;
+    try {
+      do {
+        this.mergeAgain = false;
+        const response = await chrome.runtime.sendMessage({
+          cmd: 'getEnhancedPushHistory',
+          limit: 20,
+          trigger: { type: 'popup_open', timestamp: Date.now() },
+        });
+        if (response?.ok) {
+          const incoming: EnhancedPush[] = response.history.pushes;
+          const replaced = new Set(incoming.map(push => push.iden));
+          this.pushes = [
+            ...withoutDeleted<EnhancedPush>(incoming),
+            ...this.pushes.filter(push => !replaced.has(push.iden)),
+          ].sort((a, b) => b.created - a.created);
+          // With nothing loaded yet, this page is where history continues from.
+          if (!this.cursor && !this.hasMore) {
+            this.cursor = response.history.cursor;
+            this.hasMore = !!response.history.cursor;
+          }
+          await this.saveState();
+        }
+      } while (this.mergeAgain);
+    } catch (error) {
+      console.error('Failed to bring in new pushes:', error);
+    } finally {
+      this.isMerging = false;
     }
   }
 
@@ -1092,6 +1135,9 @@ export class RecentPushes extends LitElement {
   private handleSubtabChange(subtab: 'channels' | 'devices') {
     this.activeSubtab = subtab;
     this.saveState();
+    if (this.hasMore && this.getFilteredPushes().length === 0) {
+      void this.loadPushes(false);
+    }
   }
 
   private handleMessage(message: any): void {
@@ -1101,9 +1147,13 @@ export class RecentPushes extends LitElement {
       (message.source === 'tickle' || message.source === 'background')
     ) {
       // Reload pushes when WebSocket tickle or background sync is received
-      // Use refresh mode to ensure we get the latest data and avoid duplicates
       console.log('🔄 [RecentPushes] Received sync message:', message);
-      this.loadPushes(true);
+      if (message.source === 'tickle') {
+        void this.mergeNewestPushes();
+      } else {
+        // Use refresh mode to ensure we get the latest data and avoid duplicates
+        this.loadPushes(true);
+      }
     }
 
     // Handle push creation events

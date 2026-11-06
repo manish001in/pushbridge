@@ -56,6 +56,7 @@ export class PbSmsThread extends LitElement {
 
   @state()
   private hasMoreMessages: boolean = true;
+  private loadedOlderPages = false;
 
   @state()
   private messageCursor: string | null = null;
@@ -859,11 +860,14 @@ export class PbSmsThread extends LitElement {
     );
     if (!updated || this.isLoading) return;
 
-    // Keep older pages the user has scrolled back through.
+    // Keep older pages the user has scrolled back through. Without any, something
+    // missing from the refreshed copy was removed.
     const oldest = updated.messages[0]?.timestamp ?? Infinity;
-    const olderLoaded = (this.thread?.messages ?? []).filter(
-      message => message.timestamp < oldest
-    );
+    const olderLoaded = this.loadedOlderPages
+      ? (this.thread?.messages ?? []).filter(
+          message => message.timestamp < oldest
+        )
+      : [];
     this.thread = {
       ...updated,
       messages: [...olderLoaded, ...updated.messages],
@@ -1002,6 +1006,7 @@ export class PbSmsThread extends LitElement {
 
       if (response.success) {
         this.thread = response.thread;
+        this.loadedOlderPages = false;
         this.messageCursor = response.cursor || null;
         this.hasMoreMessages = response.hasMore || false;
 
@@ -1071,6 +1076,7 @@ export class PbSmsThread extends LitElement {
           ...this.thread,
           messages: [...olderMessages, ...this.thread.messages],
         };
+        this.loadedOlderPages = true;
         this.messageCursor = response.cursor || null;
         this.hasMoreMessages = response.hasMore || false;
 
@@ -1685,9 +1691,11 @@ export class PbSmsThread extends LitElement {
               type="file"
               accept="image/*"
               @change=${this.handleFileSelect}
+              ?disabled=${this.isSending}
             />
             <button
               class="file-select-btn"
+              ?disabled=${this.isSending}
               @click=${() =>
                 (
                   this.shadowRoot?.querySelector(
@@ -1717,6 +1725,7 @@ export class PbSmsThread extends LitElement {
                   <button
                     class="remove-file-btn"
                     @click=${this.removeSelectedFile}
+                    ?disabled=${this.isSending}
                     title="Remove file"
                   >
                     ×

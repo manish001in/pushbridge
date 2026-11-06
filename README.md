@@ -10,10 +10,11 @@ A Manifest V3 compatible Chrome extension that replicates core Pushbullet functi
 
 - **📱 Notification Mirroring**: Mirror Android notifications to your desktop
 - **📤 Push Sending**: Send notes, links, and files to your devices
+- **🔔 Live Push Notifications**: Desktop notifications for incoming pushes, including ones that arrived while your computer was asleep
 - **💬 SMS/MMS Support**: Send and receive SMS messages from your desktop
 - **📢 Channel Subscriptions**: Subscribe to and broadcast to Pushbullet channels
 - **🔄 Real-time Sync**: Instant synchronization via WebSocket connection
-- **⚙️ Customizable Settings**: Configure notifications, sounds, and defaults
+- **⚙️ Customizable Settings**: Configure notifications, sounds, defaults, tab order and theme
 - **🔍 Contacts Management**: Send pushes to contacts
 
 ## 📋 Requirements
@@ -91,7 +92,13 @@ A Manifest V3 compatible Chrome extension that replicates core Pushbullet functi
 
 - Android notifications automatically appear as Chrome notifications
 - Click notifications to dismiss them on your phone
-- View recent pushes in the "Messages" tab
+- Pushes sent to this browser show as desktop notifications. After time away, up to 10 show, plus one summary of the rest
+- View recent pushes in the "Messages" tab, under "Own Devices & Contacts" or "Channels & Subs". Posts from channels you subscribe to appear in the "Subscriptions" tab
+
+### Opening Links
+
+- Clicking a link in the popup opens it and closes the popup
+- Cmd+click (macOS), Ctrl+click (Windows/Linux) or middle click opens it in a background tab and keeps the popup open
 
 ### SMS Messaging
 
@@ -103,7 +110,7 @@ A Manifest V3 compatible Chrome extension that replicates core Pushbullet functi
 
 ### Channel Management
 
-1. Go to the "Channels" tab
+1. Go to the "Subscriptions" tab
 2. Search for channels by tag
 3. Subscribe to channels to receive their posts
 4. Manage your subscriptions with unsubscribe options
@@ -120,12 +127,23 @@ Right-click on any webpage to:
 
 Access settings by right-clicking the extension icon and selecting "Options":
 
-- **Notifications**: Toggle notification sounds and display
+- **Notifications**: Toggle notifications, sounds and mirrored notifications separately, and auto-dismiss them
+- **Tabs**: Reorder or hide the popup's tabs
+- **Theme**: Match your system's light or dark theme
 - **Default Device**: Choose which device receives pushes by default
 - **Connection**: Test WebSocket connection and auto-reconnect settings
 - **Diagnostics**: Export debug logs for troubleshooting
 - **SMS Device**: Choose default SMS device for SMS functionality
 - **Auto Open Push Links as Tabs**: Automatically open link pushes in new browser tabs when received
+- **Reset All Data**: Clears everything and restarts the extension
+
+## 💡 Good to Know
+
+- **Rate limits**: Pushbullet limits how much each account can do. If you reach the limit, a push you send is saved and goes out automatically. A file or SMS fails straight away and keeps what you wrote, so nothing goes out later without you knowing
+- **Offline**: A note or link sent with no connection is saved and goes out when you're back online. Files need a connection
+- **Switching accounts**: Signing in as a different account restarts the extension, so nothing from the old account carries over except general preferences. Open Pushbridge windows close, and it reopens by itself. Signing back in as the same account keeps everything
+- **Two phones**: Two phones with matching notification IDs clear together when one is dismissed, because Pushbullet's dismissal doesn't say which device it came from
+- **SMS status**: A sent text shows as sent. There's no tracking of whether the phone delivered it
 
 ## 🛠️ Development
 
@@ -137,7 +155,6 @@ pushbridge/
 │   ├── background/     # Service worker and background logic
 │   ├── popup/         # Popup UI components
 │   ├── options/       # Options page
-│   ├── content/       # Content scripts
 │   └── types/         # TypeScript type definitions
 ├── public/            # Static assets and manifest
 ├── tests/             # Unit and E2E tests
@@ -151,7 +168,7 @@ pushbridge/
 npm run dev          # Start development server
 npm run build        # Build for production
 npm run test         # Run unit tests
-npm run test:e2e     # Run E2E tests
+npm run test:e2e     # Run the smoke test
 npm run lint         # Run ESLint
 npm run format       # Format code with Prettier
 
@@ -161,16 +178,21 @@ npm run build --prod   # Build optimized production bundle
 
 ### Testing
 
+Run `npm run build` before the browser tests. Set `PUPPETEER_EXECUTABLE_PATH` if needed.
+
 ```bash
-# Run all tests
+# Unit tests
 npm test
 
-# Run specific test suites
-npm run test:unit
+# Browser tests against the built extension
 npm run test:e2e
+npm run test:e2e:tabs
+npm run test:e2e:send-safety
+npm run test:e2e:popup-links
+npm run test:e2e:theme-window
 
-# Run tests with coverage
-npm run test:coverage
+# Real extension against a local fake Pushbullet API and stream
+npm run test:e2e:fake-api
 ```
 
 The theme/window browser regression test loads the built, unpacked extension in

@@ -5,7 +5,8 @@
 
 import { accountReady } from './accountCutover';
 import { reportError, PBError } from './errorManager';
-import { getLocalBytesInUse, getLocal, setLocal, removeLocal } from './storage';
+import { cleanupExpiredMirrors } from './mirrorManager';
+import { getLocalBytesInUse, getLocal, setLocal } from './storage';
 
 const QUOTA_LIMIT_BYTES = 4 * 1024 * 1024; // 4 MB (MV3 limit ≈ 5 MB)
 const QUOTA_CHECK_INTERVAL_HOURS = 12;
@@ -13,8 +14,10 @@ const QUOTA_ALARM_NAME = 'quota-check';
 
 // Storage keys for different data types
 const PUSH_HISTORY_KEY = 'pb_push_history';
+const RECENT_PUSHES_KEY = 'pb_recent_pushes_state';
+const MAX_KEPT_PUSHES = 100;
+const MAX_KEPT_MESSAGES = 100;
 const TRANSFERS_KEY = 'pb_transfers';
-const SETTINGS_KEY = 'pb_settings';
 
 export interface PushHistoryEntry {
   id: string;
@@ -138,15 +141,35 @@ async function purgeOldData(): Promise<void> {
       );
     }
 
-    // Purge old notification mappings (if they exist)
     const allKeys = await getAllStorageKeys();
-    const notificationKeys = allKeys.filter(key => key.startsWith('mirror_'));
 
-    for (const key of notificationKeys) {
-      const entry = await getLocal<any>(key);
-      if (entry && entry.timestamp && entry.timestamp < thirtyDaysAgo) {
-        await removeLocal(key);
-        purgedCount++;
+    // Through the mirror code, which also clears the notification and its badge count.
+    await cleanupExpiredMirrors();
+
+    // Trim what can be fetched again.
+    const history = await getLocal<any>(RECENT_PUSHES_KEY);
+    if (history?.pushes?.length > MAX_KEPT_PUSHES) {
+      purgedCount += history.pushes.length - MAX_KEPT_PUSHES;
+      await setLocal(RECENT_PUSHES_KEY, {
+        ...history,
+        pushes: history.pushes.slice(0, MAX_KEPT_PUSHES),
+        cursor: undefined,
+        hasMore: true,
+      });
+    }
+
+    for (const key of allKeys.filter(k => k.startsWith('sms_data_'))) {
+      const data = await getLocal<any>(key);
+      let trimmed = 0;
+      const threads = (data?.threads ?? []).map((thread: any) => {
+        const extra = (thread.messages?.length ?? 0) - MAX_KEPT_MESSAGES;
+        if (extra <= 0) return thread;
+        trimmed += extra;
+        return { ...thread, messages: thread.messages.slice(extra) };
+      });
+      if (trimmed) {
+        await setLocal(key, { ...data, threads });
+        purgedCount += trimmed;
       }
     }
 
@@ -157,21 +180,9 @@ async function purgeOldData(): Promise<void> {
   }
 }
 
-/**
- * Get all storage keys (helper function)
- * Note: This is a simplified implementation since chrome.storage.local doesn't have a keys() method
- */
+/** Every key, since mirrors and SMS data have one each. */
 async function getAllStorageKeys(): Promise<string[]> {
-  // For now, we'll return known keys
-  // In a real implementation, you might want to maintain a separate key index
-  return [
-    PUSH_HISTORY_KEY,
-    TRANSFERS_KEY,
-    SETTINGS_KEY,
-    'pb_token',
-    'pb_device_iden',
-    'pb_last_modified',
-  ];
+  return Object.keys(await chrome.storage.local.get(null));
 }
 
 /**
