@@ -16,6 +16,7 @@ const ACCOUNT_ALARMS = [
   'pb_push_scan_resume',
   'pb_sms_notification_retry',
   'pb_device_setup',
+  'pb_queue_warning_retry',
 ];
 
 export type AccountChange =

@@ -75,6 +75,7 @@ class MockFileReader {
 let uploadFile: any;
 let resumeInterruptedUploads: any;
 let cleanupFailedUpload: any;
+let finishUpload: any;
 let getPendingUploads: any;
 let cleanupOldPendingUploads: any;
 
@@ -83,6 +84,7 @@ beforeAll(async () => {
   uploadFile = module.uploadFile;
   resumeInterruptedUploads = module.resumeInterruptedUploads;
   cleanupFailedUpload = module.cleanupFailedUpload;
+  finishUpload = module.finishUpload;
   getPendingUploads = module.getPendingUploads;
   cleanupOldPendingUploads = module.cleanupOldPendingUploads;
 });
@@ -293,13 +295,17 @@ describe('fileUploader', () => {
         }, 0);
       });
 
-      await uploadFile(mockUploadInfo, mockFile);
+      const result = await uploadFile(mockUploadInfo, mockFile);
 
-      // Should remove pending upload
-      expect(mockSetLocal).toHaveBeenCalledWith(
-        'pb_pending_uploads',
-        expect.arrayContaining([])
-      );
+      // The record stays until the caller says it's done.
+      const writes = () =>
+        mockSetLocal.mock.calls.filter(call => call[0] === 'pb_pending_uploads');
+      expect(writes().at(-1)?.[1]).toHaveLength(1);
+      expect(result.fileHash).toEqual(expect.any(String));
+
+      mockGetLocal.mockResolvedValue(writes().at(-1)?.[1]);
+      await finishUpload(result.fileHash);
+      expect(writes().at(-1)?.[1]).toEqual([]);
     }, 10000);
   });
 

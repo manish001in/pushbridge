@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.4] - 2026-11-06
+
+### Fixed
+- The Messages tab keeps looking for your pushes when recent history is all from the other view, instead of looking empty until Load more
+- An open Messages tab updates when a new push arrives, and keeps older pages you've loaded
+- A backlog summary and an upload interrupted by a worker restart are no longer lost
+- Warnings about dropped messages retry by themselves if they can't be shown
+- SMS attachment controls are locked while sending, so a newly picked file isn't cleared
+- A file notification that retries no longer lists the same file twice in transfers
+- Messages deleted on the phone leave an open conversation when it refreshes
+- Owned channels and contacts are kept properly across worker restarts, so they aren't fetched again needlessly
+- When storage runs out, cleanup now covers mirrors, recent pushes and SMS history, not just older data
+
+### Changed
+- Builds use exact dependency versions from the lockfile
+
 ## [1.3.3] - 2026-11-06
 
 ### Added

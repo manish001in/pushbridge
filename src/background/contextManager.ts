@@ -486,6 +486,7 @@ export class ContextManager {
         owned_channels: Array.from(this.context.owned_channels.entries()),
         subscriptions: Array.from(this.context.subscriptions.entries()),
         devices: Array.from(this.context.devices.entries()),
+        contacts: Array.from(this.context.contacts.entries()),
       };
 
       await setLocal(CONTEXT_STORAGE_KEY, contextForStorage);
@@ -505,6 +506,10 @@ export class ContextManager {
           owned_channels: new Map(storedContext.owned_channels || []),
           subscriptions: new Map(storedContext.subscriptions || []),
           devices: new Map(storedContext.devices || []),
+          // Older versions saved this as an empty object.
+          contacts: new Map(
+            Array.isArray(storedContext.contacts) ? storedContext.contacts : []
+          ),
         };
       }
     } catch (error) {

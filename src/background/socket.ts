@@ -545,6 +545,9 @@ async function handlePushTickle(
                 heldBack = true;
                 if (isPushForThisBrowser(push, deviceIden)) {
                   scan.heldBack++;
+                  // Before it counts as handled, since the summary is its only
+                  // notice, and the worker could stop before showing one.
+                  await setLocal(PUSH_SUMMARY_KEY, scan.heldBack);
                 }
               } else {
                 try {
@@ -593,6 +596,19 @@ async function handlePushTickle(
 
       if (scan.heldBack > 0) {
         await showBacklogSummary(scan.heldBack);
+      }
+
+      // An open Messages tab would otherwise show nothing new until refreshed.
+      if (newPushesCount > 0) {
+        void Promise.resolve(
+          chrome.runtime.sendMessage({
+            cmd: 'syncHistory',
+            source: 'tickle',
+            newPushes: newPushesCount,
+          })
+        ).catch(() => {
+          // Nothing is listening when no popup is open.
+        });
       }
 
       console.log(

@@ -54,8 +54,11 @@ export function addTransferRecord(transfer: TransferRecord): Promise<void> {
     try {
       const transfers =
         (await getLocal<TransferRecord[]>('pb_transfers')) || [];
-      transfers.unshift(transfer);
-      await setLocal('pb_transfers', transfers.slice(0, 50));
+      // A notification that's retried records the same file again.
+      await setLocal(
+        'pb_transfers',
+        [transfer, ...transfers.filter(t => t.id !== transfer.id)].slice(0, 50)
+      );
     } catch (error) {
       console.error('Failed to add transfer record:', error);
     }

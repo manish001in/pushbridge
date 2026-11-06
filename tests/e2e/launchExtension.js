@@ -22,6 +22,13 @@ export async function launchExtension(extraArgs = []) {
         ...extraArgs,
       ],
     });
+    // Kept for when Chrome dies, since its last words are the only clue.
+    const output = [];
+    browser.process()?.stderr?.on('data', chunk => {
+      output.push(String(chunk));
+      if (output.length > 200) output.shift();
+    });
+    browser.recentOutput = () => output.join('').split('\n').slice(-40).join('\n');
     try {
       const target = await browser.waitForTarget(
         t => t.type() === 'service_worker',

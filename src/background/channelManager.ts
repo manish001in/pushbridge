@@ -60,6 +60,7 @@ export interface ChannelsResponse {
 // Cache for channel subscriptions and owned channels
 let subscriptionsCache: ChannelSubscription[] | null = null;
 let subscriptionInvalidations = 0;
+let ownedChannelInvalidations = 0;
 let ownedChannelsCache: OwnedChannel[] | null = null;
 let lastSubscriptionsFetchTime: number = 0;
 let lastOwnedChannelsFetchTime: number = 0;
@@ -319,6 +320,19 @@ export async function getSubscriptions(
 export async function getOwnedChannels(
   forceRefresh: boolean = false
 ): Promise<OwnedChannel[]> {
+  // The memory cache is empty after a worker restart; the saved copy is still good.
+  if (!ownedChannelsCache) {
+    const invalidationsAtStart = ownedChannelInvalidations;
+    const saved = await getLocal<{
+      channels: OwnedChannel[];
+      lastFetched: number;
+    }>('pb_owned_channels');
+    if (saved?.channels && invalidationsAtStart === ownedChannelInvalidations) {
+      ownedChannelsCache = saved.channels;
+      lastOwnedChannelsFetchTime = saved.lastFetched;
+    }
+  }
+
   const now = Date.now();
 
   // Return cached data if available and not stale
@@ -490,6 +504,7 @@ export async function clearSubscriptionsCache(): Promise<void> {
  */
 export async function clearOwnedChannelsCache(): Promise<void> {
   ownedChannelsCache = null;
+  ownedChannelInvalidations++;
   lastOwnedChannelsFetchTime = 0;
   await setLocal('pb_owned_channels', null);
   await setLocal('pb_channels_cursor', null);

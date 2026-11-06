@@ -323,6 +323,35 @@ describe('outgoing operation queue', () => {
         expect(warnings).toEqual([]);
       });
 
+      test('a warning that fails to show sets an alarm', async () => {
+        ops = [lost()];
+        (chrome.alarms.create as jest.Mock).mockClear();
+        (chrome.notifications.create as jest.Mock).mockRejectedValueOnce(
+          new Error('no')
+        );
+        await processQueue();
+        expect(chrome.alarms.create).toHaveBeenCalledWith(
+          'pb_queue_warning_retry',
+          { delayInMinutes: 1 }
+        );
+      });
+
+      test('one failed save does not stop later warnings', async () => {
+        const real = (setLocal as jest.Mock).getMockImplementation();
+        (setLocal as jest.Mock).mockImplementationOnce(async () => {
+          throw new Error('full');
+        });
+        ops = [lost()];
+        await processQueue();
+        expect(ops).toHaveLength(1);
+
+        (setLocal as jest.Mock).mockImplementation(real!);
+        ops = [lost()];
+        await processQueue();
+        expect(ops).toEqual([]);
+        expect(chrome.notifications.create).toHaveBeenCalled();
+      });
+
       test('an older send with no ID is reported, not sent again', async () => {
         ops = [{ ...op('old'), payload: { type: 'note' }, retryCount: 1 }];
         await processQueue();
