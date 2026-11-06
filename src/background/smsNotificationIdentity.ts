@@ -18,8 +18,7 @@ const FORGET_AFTER_MS = 10 * 60 * 1000;
 
 export const SMS_RETRY_ALARM = 'pb_sms_notification_retry';
 const RETRIES_KEY = 'pb_sms_notification_retries';
-// The periodic sync has come round by then.
-const GIVE_UP_AFTER_MS = 6 * 60 * 60 * 1000;
+const MAX_RETRY_DELAY_MINUTES = 60;
 
 interface Sighting {
   source: SmsSource;
@@ -93,7 +92,8 @@ export function clearSmsSightings(): Promise<void> {
 }
 
 interface PendingRetry {
-  since: number;
+  /** Passes that couldn't settle it, so a phone that stays offline is left in peace. */
+  attempts: number;
   /** Needs a look past the latest-message check: a mirror has no thread to mark. */
   full: boolean;
   /** Changes when another failure arrives, so a pass can tell it wasn't the last. */
@@ -106,9 +106,9 @@ function loadRetries(): Promise<PendingRetries> {
   return getLocal<PendingRetries>(RETRIES_KEY).then(found => found ?? {});
 }
 
-async function ensureRetryAlarm(): Promise<void> {
+async function ensureRetryAlarm(delayInMinutes = 1): Promise<void> {
   if (!(await chrome.alarms.get(SMS_RETRY_ALARM))) {
-    await chrome.alarms.create(SMS_RETRY_ALARM, { delayInMinutes: 1 });
+    await chrome.alarms.create(SMS_RETRY_ALARM, { delayInMinutes });
   }
 }
 
@@ -124,7 +124,7 @@ export function scheduleSmsNotificationRetry(
     const retries = await loadRetries();
     const earlier = retries[deviceIden];
     retries[deviceIden] = {
-      since: earlier?.since ?? Date.now(),
+      attempts: earlier?.attempts ?? 0,
       full: earlier?.full || full,
       failures: (earlier?.failures ?? 0) + 1,
     };
@@ -134,8 +134,10 @@ export function scheduleSmsNotificationRetry(
 }
 
 /**
- * What the alarm does. `sync` returns when that phone's sync last completed, which
- * stays old if it was skipped for low quota, an offline phone or an error.
+ * What the alarm does. `sync` returns when that phone last synced every conversation,
+ * which stays old if it was skipped for low quota, an offline phone or an error. Kept
+ * until a complete pass finds nothing further wrong. A newer message on the phone
+ * replaces this one as the conversation's notification.
  */
 export async function runSmsNotificationRetries(
   sync: (deviceIden: string, full: boolean) => Promise<number>
@@ -155,17 +157,23 @@ export async function runSmsNotificationRetries(
       const current = await loadRetries();
       const entry = current[deviceIden];
       if (!entry) return;
-      const givenUp = Date.now() - entry.since > GIVE_UP_AFTER_MS;
-      if (givenUp || (synced && entry.failures === retry.failures)) {
+      if (synced && entry.failures === retry.failures) {
         delete current[deviceIden];
-      } else if (synced) {
-        entry.full = false;
+      } else {
+        entry.attempts++;
+        if (synced) entry.full = false;
       }
       await setLocal(RETRIES_KEY, current);
     });
   }
 
-  await restoreSmsRetryAlarm();
+  await inOrder(async () => {
+    const left = Object.values(await loadRetries());
+    if (left.length) {
+      const attempts = Math.max(...left.map(retry => retry.attempts));
+      await ensureRetryAlarm(Math.min(2 ** attempts, MAX_RETRY_DELAY_MINUTES));
+    }
+  });
 }
 
 /** At worker start, and after each pass: anything still pending needs its alarm. */

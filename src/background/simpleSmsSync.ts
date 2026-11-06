@@ -28,6 +28,8 @@ const SMS_LAST_SYNC_KEY = (deviceIden: string) => `sms_last_sync_${deviceIden}`;
 interface SimpleSmsData {
   threads: SmsThread[];
   lastSync: number;
+  /** When every conversation last fetched without error. */
+  lastCompleteSync?: number;
   deviceIden: string;
 }
 
@@ -132,6 +134,7 @@ async function runSmsSync(
     const threadsResponse = await smsApiClient.getSmsThreadsList(deviceIden);
 
     const fetched = new Map<string, SmsThread>();
+    let everyThreadFetched = true;
     const known = incremental
       ? (await getCachedSmsData(deviceIden)).threads
       : [];
@@ -182,6 +185,7 @@ async function runSmsSync(
           error
         );
         // Continue with other threads; this one keeps what the cache has
+        everyThreadFetched = false;
       }
     }
 
@@ -204,7 +208,15 @@ async function runSmsSync(
         }
       }
 
-      const data: SimpleSmsData = { threads, lastSync: now(), deviceIden };
+      const syncedAt = now();
+      const data: SimpleSmsData = {
+        threads,
+        lastSync: syncedAt,
+        lastCompleteSync: everyThreadFetched
+          ? syncedAt
+          : cached.lastCompleteSync,
+        deviceIden,
+      };
       await setLocal(SMS_DATA_KEY(deviceIden), data);
       await setLocal(SMS_LAST_SYNC_KEY(deviceIden), data.lastSync);
       return data;

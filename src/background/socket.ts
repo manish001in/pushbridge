@@ -287,13 +287,17 @@ const PUSH_SCAN_WATERMARK_KEY = 'pb_push_scan_watermark';
 const PUSH_SCAN_OVERLAP_SECONDS = 5;
 
 const PUSH_SCAN_STATE_KEY = 'pb_push_scan_progress';
+const PUSH_SUMMARY_KEY = 'pb_push_summary_unshown';
 export const PUSH_SCAN_ALARM = 'pb_push_scan_resume';
 const PAGES_PER_SCAN_PASS = 5;
 const MAX_FAILED_ROW_RETRIES = 5;
 
 /** At worker start: saved work needs its alarm, which may not have survived. */
 export async function restorePushScanAlarm(): Promise<void> {
-  if (await getLocal<PushScan | null>(PUSH_SCAN_STATE_KEY)) {
+  if (
+    (await getLocal<PushScan | null>(PUSH_SCAN_STATE_KEY)) ||
+    (await getLocal<number>(PUSH_SUMMARY_KEY))
+  ) {
     await ensureScanAlarm();
   }
 }
@@ -388,6 +392,30 @@ function sortByCreated(pushes: any[]): any[] {
   return pushes.sort((a, b) => a.created - b.created);
 }
 
+/**
+ * The summarized pushes count as handled, so this is their only notice. If it can't be
+ * shown it's kept, with an alarm, until it can.
+ */
+async function showBacklogSummary(count: number): Promise<void> {
+  try {
+    const prefs = await getNotificationPrefs();
+    if (prefs.enabled) {
+      await chrome.notifications.create('push_backlog_summary', {
+        type: 'basic',
+        iconUrl: 'icons/48.png',
+        title: 'More pushes',
+        message: `${count} more while you were away. See Messages.`,
+        silent: !prefs.sound,
+      });
+    }
+    await setLocal(PUSH_SUMMARY_KEY, 0);
+  } catch (error) {
+    console.error('Failed to show the backlog summary:', error);
+    await setLocal(PUSH_SUMMARY_KEY, count);
+    await ensureScanAlarm();
+  }
+}
+
 /** The alarm, not tickles or reconnects, paces a long scan. */
 async function ensureScanAlarm(): Promise<void> {
   if (!(await chrome.alarms.get(PUSH_SCAN_ALARM))) {
@@ -420,6 +448,11 @@ async function handlePushTickle(
 
     if (!(await getLocal<string>('pb_token'))) {
       return;
+    }
+
+    const unshownSummary = await getLocal<number>(PUSH_SUMMARY_KEY);
+    if (unshownSummary) {
+      await showBacklogSummary(unshownSummary);
     }
 
     const saved = await getLocal<PushScan | null>(PUSH_SCAN_STATE_KEY);
@@ -559,16 +592,7 @@ async function handlePushTickle(
       }
 
       if (scan.heldBack > 0) {
-        const prefs = await getNotificationPrefs();
-        if (prefs.enabled) {
-          await chrome.notifications.create('push_backlog_summary', {
-            type: 'basic',
-            iconUrl: 'icons/48.png',
-            title: 'More pushes',
-            message: `${scan.heldBack} more while you were away. See Messages.`,
-            silent: !prefs.sound,
-          });
-        }
+        await showBacklogSummary(scan.heldBack);
       }
 
       console.log(

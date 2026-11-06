@@ -429,11 +429,15 @@ class OperationQueue {
       if (Array.isArray(legacy) && legacy.length) {
         const pending =
           (await getLocal<any[]>('pb_pending_ops')) ?? [];
-        const known = new Set(pending.map((op: any) => op.payload?.guid));
+        const known = new Set(
+          pending.map((op: any) => op.payload?.guid).filter(Boolean)
+        );
         const lost = legacy.filter(entry => {
           if (entry.options?.method !== 'POST') return false;
           try {
-            return !known.has(JSON.parse(entry.options.body)?.guid);
+            // No ID proves nothing: it doesn't mean the saved queue has this one.
+            const guid = JSON.parse(entry.options.body)?.guid;
+            return !guid || !known.has(guid);
           } catch {
             return true;
           }

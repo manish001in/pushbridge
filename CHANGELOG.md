@@ -6,6 +6,9 @@
 - Desktop notifications for live pushes. They skip pushes sent from this browser or to another device, and links that opened in a tab. After time away at most 10 show, plus one summary of the rest
 
 ### Changed
+- Needs Chrome 116 or newer (was 110), which Pushbridge's notification handling relies on
+- Signing in as a different account, or Reset All Data, restarts the extension, so nothing from the old account can carry over. Open Pushbridge windows close, and it reopens by itself
+- A push that can't send right now is saved and goes out automatically. A file or SMS during a rate limit fails straight away and keeps what you wrote, so nothing goes out later without you knowing
 - Uses far less of your Pushbullet quota. Checking for pushes reads only what changed, a new SMS fetches only its own conversation (a full check still runs every 6 hours), and optional background syncs pause when quota runs low
 - After hitting the rate limit, requests wait for the limit to reset instead of retrying sooner. A push sent meanwhile is saved and goes out afterwards
 - Received files only notify, and are downloaded from Messages. The old auto-download code never ran in practice and has been removed
@@ -23,6 +26,10 @@
 - Retrying a picture message keeps its ID only if it's the same file
 - A sent SMS stays visible until the phone reports it, instead of vanishing when a newer message arrives
 - A rate limited push is now sent once the limit passes
+- The send form is locked while sending, so text typed meanwhile isn't cleared afterwards
+- A queued message that has to be dropped always warns you, even if the first warning can't be shown
+- Registering this browser retries by itself, instead of leaving sends failing
+- Failed notifications and interrupted push checks recover by themselves, without waiting for the next push or SMS
 - A queued push could send twice after a worker restart or a failed storage write. One interrupted mid-send now checks whether it got through, then sends only if it didn't
 - A queued push is never sent from a different account, and a retry first checks whether the earlier attempt went through
 - SMS failures now show in the conversation, and a failed queue save is reported instead of showing as queued

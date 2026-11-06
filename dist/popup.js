@@ -356,7 +356,7 @@ import{s as ce}from"./fileTransport.js";import{g as se}from"./storage.js";import
             id="send-to-select"
             .value=${this.sendTo}
             @change=${this.handleSendToChange}
-            ?disabled=${this.isLoading}
+            ?disabled=${this.isLoading||this.isSending}
           >
             <option value="all">All Devices</option>
             ${this.sendTargets.map(t=>n`
@@ -371,7 +371,12 @@ import{s as ce}from"./fileTransport.js";import{g as se}from"./storage.js";import
         <!-- File Input (always visible) -->
         <div class="form-group">
           <label for="file-input">File (optional):</label>
-          <input id="file-input" type="file" @change=${this.handleFileSelect} />
+          <input
+            id="file-input"
+            type="file"
+            @change=${this.handleFileSelect}
+            ?disabled=${this.isSending}
+          />
           ${this.selectedFile?n`
                 <small class="form-text">
                   Selected: ${this.selectedFile.name}
@@ -388,6 +393,7 @@ import{s as ce}from"./fileTransport.js";import{g as se}from"./storage.js";import
             type="text"
             .value=${this.pushTitle}
             @input=${this.handleInputChange}
+            ?disabled=${this.isSending}
             placeholder="Enter title..."
           />
         </div>
@@ -399,6 +405,7 @@ import{s as ce}from"./fileTransport.js";import{g as se}from"./storage.js";import
             name="body"
             .value=${this.body}
             @input=${this.handleInputChange}
+            ?disabled=${this.isSending}
             placeholder="Enter your message or URL..."
           ></textarea>
         </div>
@@ -4315,7 +4322,7 @@ import{s as ce}from"./fileTransport.js";import{g as se}from"./storage.js";import
       flex: 1;
       min-width: 0;
     }
-  `;$([_({type:Array})],v.prototype,"subscriptions",2);$([d()],v.prototype,"searchQuery",2);$([d()],v.prototype,"searchResults",2);$([d()],v.prototype,"isLoading",2);$([d()],v.prototype,"isSearching",2);$([d()],v.prototype,"errorMessage",2);$([d()],v.prototype,"successMessage",2);$([d()],v.prototype,"activeSubtab",2);$([d()],v.prototype,"subscriptionPosts",2);$([d()],v.prototype,"isLoadingPosts",2);v=$([L("pb-channels")],v);let S,A=!1,Ee=!1;const Ue="pb_follow_system_theme";function He(){try{localStorage.setItem(Ue,A?"1":"0")}catch{}}function Wt(){try{return localStorage.getItem(Ue)==="1"}catch{return!1}}function xe(t){const e=t?"dark":"light";document.documentElement.getAttribute("data-theme")!==e&&document.documentElement.setAttribute("data-theme",e)}function te(){A&&xe(window.matchMedia("(prefers-color-scheme: dark)").matches)}function je(){A?S||(S=window.matchMedia("(prefers-color-scheme: dark)"),S.addEventListener?S.addEventListener("change",te):S.addListener(te)):S&&(S.removeEventListener?S.removeEventListener("change",te):S.removeListener(te),S=void 0)}async function Gt(){try{A=!!(await se("pb_settings"))?.systemTheme}catch{A=!1}He(),xe(A?window.matchMedia("(prefers-color-scheme: dark)").matches:!1),je()}function Qt(t,e){e!=="local"||!t.pb_settings||(A=!!t.pb_settings.newValue?.systemTheme,He(),xe(A&&window.matchMedia("(prefers-color-scheme: dark)").matches),je())}function Yt(){if(!Ee){Ee=!0;try{const t=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.setAttribute("data-theme",Wt()&&t?"dark":"light")}catch{document.documentElement.setAttribute("data-theme","light")}Gt(),chrome.storage.onChanged.addListener(Qt)}}const Zt=1440*60*1e3;async function Be(){const[t,e]=await Promise.all([se("pb_device_cache"),se("defaultSmsDevice")]),o=(t?.devices??[]).filter(s=>s.has_sms===!0&&s.active).sort((s,i)=>(s.nickname??"").localeCompare(i.nickname??""));return{device:o.find(s=>s.iden===e)??o[0]??null,isStale:!t?.lastFetched||Date.now()-t.lastFetched>=Zt}}Yt();new URLSearchParams(window.location.search).has("windowMode")&&document.documentElement.classList.add("window-mode");Lt();let z=null,qe=[],Ve=[];document.addEventListener("DOMContentLoaded",async()=>{chrome.runtime.sendMessage({cmd:"POPUP_OPEN"}).catch(t=>console.error("🪟 [Popup] Failed to send POPUP_OPEN message:",t)),await Je(),await Ke()});async function Ke(){const t=document.querySelector(".container");if(!t){console.error("Container element not found");return}try{if(await se("pb_token")){const[o,s,i]=await Promise.all([Be(),Xe(),et()]);z=o.device,qe=s,Ve=i,t.innerHTML=`
+  `;$([_({type:Array})],v.prototype,"subscriptions",2);$([d()],v.prototype,"searchQuery",2);$([d()],v.prototype,"searchResults",2);$([d()],v.prototype,"isLoading",2);$([d()],v.prototype,"isSearching",2);$([d()],v.prototype,"errorMessage",2);$([d()],v.prototype,"successMessage",2);$([d()],v.prototype,"activeSubtab",2);$([d()],v.prototype,"subscriptionPosts",2);$([d()],v.prototype,"isLoadingPosts",2);v=$([L("pb-channels")],v);let S,A=!1,Ee=!1;const Ue="pb_follow_system_theme";function He(){try{localStorage.setItem(Ue,A?"1":"0")}catch{}}function Wt(){try{return localStorage.getItem(Ue)==="1"}catch{return!1}}function xe(t){const e=t?"dark":"light";document.documentElement.getAttribute("data-theme")!==e&&document.documentElement.setAttribute("data-theme",e)}function te(){A&&xe(window.matchMedia("(prefers-color-scheme: dark)").matches)}function je(){A?S||(S=window.matchMedia("(prefers-color-scheme: dark)"),S.addEventListener?S.addEventListener("change",te):S.addListener(te)):S&&(S.removeEventListener?S.removeEventListener("change",te):S.removeListener(te),S=void 0)}async function Gt(){try{A=!!(await se("pb_settings"))?.systemTheme}catch{A=!1}He(),xe(A?window.matchMedia("(prefers-color-scheme: dark)").matches:!1),je()}function Qt(t,e){e!=="local"||!t.pb_settings||(A=!!t.pb_settings.newValue?.systemTheme,He(),xe(A&&window.matchMedia("(prefers-color-scheme: dark)").matches),je())}function Yt(){if(!Ee){Ee=!0;try{const t=window.matchMedia("(prefers-color-scheme: dark)").matches;document.documentElement.setAttribute("data-theme",Wt()&&t?"dark":"light")}catch{document.documentElement.setAttribute("data-theme","light")}Gt(),chrome.storage.onChanged.addListener(Qt)}}const Zt=1440*60*1e3;async function Be(){const[t,e]=await Promise.all([se("pb_device_cache"),se("defaultSmsDevice")]),o=(t?.devices??[]).filter(s=>s.has_sms===!0&&s.active).sort((s,i)=>(s.nickname??"").localeCompare(i.nickname??""));return{device:o.find(s=>s.iden===e)??o[0]??null,isStale:!t?.lastFetched||Date.now()-t.lastFetched>=Zt}}Yt();new URLSearchParams(window.location.search).has("windowMode")&&document.documentElement.classList.add("window-mode");Lt();let z=null,qe=[],Ve=[];document.addEventListener("DOMContentLoaded",async()=>{chrome.runtime.sendMessage({cmd:"POPUP_OPEN"}).catch(t=>console.error("🪟 [Popup] Failed to send POPUP_OPEN message:",t)),await Je(()=>{document.querySelector(".container")?.replaceChildren("Pushbridge is restarting. This should only take a moment.")}),await Ke()});async function Ke(){const t=document.querySelector(".container");if(!t){console.error("Container element not found");return}try{if(await se("pb_token")){const[o,s,i]=await Promise.all([Be(),Xe(),et()]);z=o.device,qe=s,Ve=i,t.innerHTML=`
         <div class="popup-container">
           <div class="popup-header">
             <h2 class="popup-title">Pushbridge</h2>

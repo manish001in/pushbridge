@@ -342,6 +342,34 @@ try {
   assert.notEqual(otherFile.guid, firstFile.guid);
   await popup.close();
 
+  console.log('Testing the form is locked while sending, so no new draft is lost');
+  await seed();
+  popup = await openPopup();
+  await popup.waitForSelector('pb-composer >>> textarea');
+  const locked = await popup.evaluate(async () => {
+    const composer = document.querySelector('pb-composer');
+    const root = composer.shadowRoot;
+    const box = root.querySelector('textarea');
+    box.value = 'first message';
+    box.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    await composer.updateComplete;
+    root.querySelector('.send-button').click();
+    await composer.updateComplete;
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const during = ['textarea', '#title', 'select', '#file-input'].map(
+      selector => root.querySelector(selector).disabled
+    );
+    window.__holds.createPush();
+    while (composer.isSending) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    await composer.updateComplete;
+    return { during, after: box.disabled };
+  });
+  assert.deepEqual(locked.during, [true, true, true, true]);
+  assert.equal(locked.after, false);
+  await popup.close();
+
   console.log('Testing edits while a file is read do not change what is sent');
   await seed();
   popup = await openPopup();

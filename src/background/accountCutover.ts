@@ -12,7 +12,11 @@ const JOURNAL_KEY = 'pb_account_change_pending';
 /** In session storage, which only a real reload clears. A worker restart keeps it. */
 const RELOAD_MARKER_KEY = 'pb_account_reload_required';
 const KEPT_ACROSS_ACCOUNTS = ['pb_settings', 'pb_rate_state', 'pb_backoff_state'];
-const ACCOUNT_ALARMS = ['pb_push_scan_resume', 'pb_sms_notification_retry'];
+const ACCOUNT_ALARMS = [
+  'pb_push_scan_resume',
+  'pb_sms_notification_retry',
+  'pb_device_setup',
+];
 
 export type AccountChange =
   | { token: string; userIden: string; reset?: false }
@@ -41,11 +45,23 @@ export function isSwitchingAccount(): boolean {
  * pages may still be open.
  */
 export async function requestAccountChange(change: AccountChange): Promise<void> {
+  if (switching) {
+    throw new Error('Pushbridge is already restarting');
+  }
   switching = true;
   setAccountChanging(true);
   const generation = crypto.randomUUID();
-  await chrome.storage.session.set({ [RELOAD_MARKER_KEY]: generation });
-  await chrome.storage.local.set({ [JOURNAL_KEY]: { ...change, generation } });
+  try {
+    await chrome.storage.session.set({ [RELOAD_MARKER_KEY]: generation });
+    await chrome.storage.local.set({ [JOURNAL_KEY]: { ...change, generation } });
+  } catch (error) {
+    // Nothing was saved, so nothing will restart. Carry on as before, and let it be
+    // asked for again.
+    switching = false;
+    setAccountChanging(false);
+    await chrome.storage.session.remove(RELOAD_MARKER_KEY).catch(() => {});
+    throw error;
+  }
 }
 
 export function restartForAccountChange(): void {
@@ -98,7 +114,7 @@ async function finishPendingChange(): Promise<void> {
   }
 
   const session = await chrome.storage.session.get(RELOAD_MARKER_KEY);
-  if (session?.[RELOAD_MARKER_KEY] === journal.generation) {
+  if (session?.[RELOAD_MARKER_KEY]) {
     // The worker restarted, but the extension never reloaded: old pages may still be
     // open. Reload now. Nothing runs until it has, and the reload clears the marker.
     chrome.runtime.reload();

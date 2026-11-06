@@ -25,6 +25,7 @@ import { getContacts, clearContactCache, getContactByIden } from './contactManag
 import { contextManager } from './contextManager';
 import { buildContextMenuPush } from './contextMenuPayload';
 import {
+  getDevices,
   ensureChromeDevice,
   getPushableDevices,
   clearDeviceCache,
@@ -110,6 +111,7 @@ import { unifiedNotificationTracker } from './unifiedNotificationTracker';
 // Storage key for tracking popup open time
 const POPUP_LAST_OPENED_KEY = 'pb_last_popup_opened';
 const SMS_SYNC_ALARM = 'pb_sms_sync';
+const DEVICE_SETUP_ALARM = 'pb_device_setup';
 const SMS_SYNC_INTERVAL_MINUTES = 6 * 60;
 const ONE_HOUR_MS = 3600000; // 1 hour in milliseconds
 
@@ -259,6 +261,7 @@ async function finishWorkerStart(): Promise<void> {
   }
   await restorePushScanAlarm();
   await restoreSmsRetryAlarm();
+  await ensureDeviceRegistered();
 
   if (!change) {
     return;
@@ -269,7 +272,6 @@ async function finishWorkerStart(): Promise<void> {
       await chrome.runtime.openOptionsPage();
       return;
     }
-    await ensureChromeDevice();
     await fetchInitialDataAfterTokenVerification();
     await chrome.windows.create({
       url: chrome.runtime.getURL('popup.html?windowMode=1'),
@@ -285,9 +287,31 @@ async function finishWorkerStart(): Promise<void> {
 /** The retry alarm: each phone with a failed notification, until it's shown. */
 function retrySmsNotifications(): Promise<void> {
   return runSmsNotificationRetries(async (deviceIden, full) => {
+    const devices = await getDevices();
+    if (!devices.some(device => device.iden === deviceIden)) {
+      // That phone is gone, and so is any way of showing its message.
+      return Number.MAX_SAFE_INTEGER;
+    }
     const data = await syncAllSmsData(deviceIden, { incremental: !full });
-    return data.lastSync;
+    return data.lastCompleteSync ?? 0;
   });
+}
+
+/**
+ * Sends need this browser registered. Worth checking on every start: if it failed once,
+ * or the worker stopped first, every send would fail with nothing to fix it.
+ */
+async function ensureDeviceRegistered(): Promise<void> {
+  const token = await getLocal<string>('pb_token');
+  if (!token || (await getLocal<string>('pb_device_iden'))) {
+    return;
+  }
+  try {
+    await ensureChromeDevice();
+  } catch (error) {
+    console.error('Failed to register this browser, will retry:', error);
+    await chrome.alarms.create(DEVICE_SETUP_ALARM, { delayInMinutes: 1 });
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -311,6 +335,8 @@ chrome.alarms.onAlarm.addListener(alarm => {
       void retrySmsNotifications();
     } else if (alarm.name === PUSH_SCAN_ALARM) {
       void resumePushScan();
+    } else if (alarm.name === DEVICE_SETUP_ALARM) {
+      void ensureDeviceRegistered();
     }
   });
 });

@@ -52,6 +52,7 @@ const RETRY_BASE_DELAY = 30 * 1000;
 const RETRY_MAX_DELAY = 60 * 60 * 1000;
 const MAX_OP_AGE = 7 * 24 * 60 * 60 * 1000;
 const QUOTA_WAIT_MS = 60 * 1000;
+const WARNINGS_KEY = 'pb_queue_warnings';
 const MAX_DELIVERY_CHECK_PAGES = 5;
 const MAX_INCONCLUSIVE_CHECKS = 3;
 // The server's clock decides what `modified_after` means, not this computer's.
@@ -239,9 +240,46 @@ export type EnqueueOutcome =
 
 const opOutcomes = new Map<string, EnqueueOutcome>();
 
+/**
+ * Dropping a message must not be silent, so the warning is saved first, and stays until
+ * it has really been shown. It can't go through reportError, which hides a failure.
+ */
 async function discardOp(op: PushbridgeOp, message: string): Promise<void> {
+  warningWrites = warningWrites.then(async () => {
+    const warnings = (await getLocal<string[]>(WARNINGS_KEY)) ?? [];
+    await setLocal(WARNINGS_KEY, [...warnings, message]);
+  });
+  await warningWrites;
   await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
-  await reportError(PBError.Unknown, { message, code: 1002 });
+  await showQueueWarnings();
+}
+
+let warningWrites: Promise<void> = Promise.resolve();
+
+/** Also at worker start, for any that couldn't be shown before. */
+export function showQueueWarnings(): Promise<void> {
+  warningWrites = warningWrites.then(async () => {
+    const warnings = (await getLocal<string[]>(WARNINGS_KEY)) ?? [];
+    const remaining = [...warnings];
+    for (const message of warnings) {
+      try {
+        await chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icons/48.png',
+          title: 'A queued message needs checking',
+          message,
+        });
+        remaining.shift();
+      } catch (error) {
+        console.error('Failed to show a queue warning:', error);
+        break;
+      }
+    }
+    if (remaining.length !== warnings.length) {
+      await setLocal(WARNINGS_KEY, remaining);
+    }
+  });
+  return warningWrites;
 }
 
 /** Rejected by the server or unsendable, so trying again can't help. */
@@ -251,7 +289,7 @@ function isPermanentFailure(error: unknown): boolean {
     return status >= 400 && status < 500 && status !== 429;
   }
   const message = error instanceof Error ? error.message : String(error);
-  return /not yet implemented|unknown operation|is required|not registered|no token/i.test(
+  return /not yet implemented|unknown operation|is required|no token/i.test(
     message
   );
 }
@@ -292,9 +330,10 @@ async function processPendingOp(
 
   // An attempt marked by an earlier worker may or may not have left: it could have
   // been waiting out a rate limit. Its send ID settles it below, so it is neither
-  // lost nor sent twice. Without an ID there's no way to know, so report it.
+  // lost nor sent twice. Without an ID, as with those saved by an older version,
+  // there's no way to know, so report it.
   const interrupted = !!op.attemptStartedAt && !startedOps.has(op.id);
-  if (interrupted && !op.payload?.guid) {
+  if ((interrupted || isUncertain(op)) && !op.payload?.guid) {
     await discardOp(
       op,
       'A queued message was interrupted while sending and may not have been delivered. Please check and send it again if needed.'
@@ -569,6 +608,8 @@ function generateOperationId(): string {
  * Initialize queue processing
  */
 export function initializeQueue(): void {
+  void showQueueWarnings();
+
   // Start periodic queue processing
   queueState.processingInterval = setInterval(() => {
     if (queueState.isOnline && !queueState.isProcessing) {

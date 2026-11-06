@@ -150,12 +150,18 @@ describe('retrying a failed SMS notification', () => {
     expect(pending()['phone-2'].full).toBe(false);
   });
 
-  test('it gives up eventually', async () => {
+  test('a phone that stays offline is asked less and less often', async () => {
     await scheduleSmsNotificationRetry('phone-2');
-    local.pb_sms_notification_retries['phone-2'].since =
-      Date.now() - 7 * 60 * 60 * 1000;
-    await runSmsNotificationRetries(async () => 0);
-    expect(pending()).toEqual({});
+    const delays: number[] = [];
+    (chrome.alarms.create as jest.Mock).mockImplementation(async (_name, options) => {
+      delays.push(options.delayInMinutes);
+    });
+    for (let i = 0; i < 8; i++) {
+      await runSmsNotificationRetries(async () => 0);
+    }
+    expect(delays).toEqual([2, 4, 8, 16, 32, 60, 60, 60]);
+    expect(Object.keys(pending())).toEqual(['phone-2']);
+    (chrome.alarms.create as jest.Mock).mockReset();
   });
 });
 

@@ -50,7 +50,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.error('🪟 [Popup] Failed to send POPUP_OPEN message:', error)
     );
 
-  await waitForAccountChange();
+  await waitForAccountChange(() => {
+    document.querySelector('.container')?.replaceChildren(
+      'Pushbridge is restarting. This should only take a moment.'
+    );
+  });
   await initializePopup();
 });
 

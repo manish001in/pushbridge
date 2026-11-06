@@ -27,7 +27,7 @@ class UserFeedback {
         type: 'basic',
         iconUrl: 'icons/48.png',
         title: 'Rate Limit Hit',
-        message: `Retrying in ${backoffSeconds}s. Operations queued.`,
+        message: `Waiting ${backoffSeconds}s before contacting Pushbullet again.`,
       });
 
       this.isRateLimited = true;

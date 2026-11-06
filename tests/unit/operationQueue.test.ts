@@ -399,6 +399,13 @@ describe('OperationQueue Deduplication', () => {
       expect(chrome.notifications.create).not.toHaveBeenCalled();
     });
 
+    test('a missing ID never counts as a match', async () => {
+      local.pb_operation_queue = [post(undefined)];
+      local.pb_pending_ops = [{ payload: {} }];
+      await operationQueue.loadQueue();
+      expect(chrome.notifications.create).toHaveBeenCalledTimes(1);
+    });
+
     test('reads are not sends', async () => {
       local.pb_operation_queue = [
         { url: 'https://api.pushbullet.com/v2/devices', options: { method: 'GET' } },

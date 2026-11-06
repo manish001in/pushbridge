@@ -399,6 +399,27 @@ describe('catching up when the stream connects', () => {
       expect(stored.pb_push_scan_watermark).toBe(1000);
     });
 
+    test('a summary that fails is kept, and the rest stays recoverable', async () => {
+      (chrome.notifications.create as jest.Mock).mockRejectedValueOnce(
+        new Error('no')
+      );
+      (getPushHistory as jest.Mock).mockResolvedValue({
+        pushes: Array.from({ length: 12 }, (_, i) => note(i)),
+      });
+      await connect();
+      expect(stored.pb_push_summary_unshown).toBe(2);
+      expect(chrome.alarms.create).toHaveBeenCalledWith('pb_push_scan_resume', {
+        delayInMinutes: 1,
+      });
+
+      await pass();
+      expect(chrome.notifications.create).toHaveBeenLastCalledWith(
+        'push_backlog_summary',
+        expect.objectContaining({ message: expect.stringContaining('2 more') })
+      );
+      expect(stored.pb_push_summary_unshown).toBe(0);
+    });
+
     test('at worker start, saved work gets its alarm back', async () => {
       stored.pb_push_scan_progress = { cursor: '5' };
       (chrome.alarms.create as jest.Mock).mockClear();

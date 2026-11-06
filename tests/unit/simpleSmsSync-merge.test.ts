@@ -70,6 +70,7 @@ describe('SMS cache', () => {
   const seedCache = (...threads: any[]) => {
     stored[`sms_data_${DEVICE}`] = { threads, lastSync: 1, deviceIden: DEVICE };
   };
+  const cachedData = () => stored[`sms_data_${DEVICE}`];
   const cachedThread = (id: string) =>
     stored[`sms_data_${DEVICE}`].threads.find((t: any) => t.id === id);
   const listThreads = (...ids: string[]) =>
@@ -274,6 +275,16 @@ describe('SMS cache', () => {
         await smsSync.syncAllSmsData(DEVICE, { incremental: true });
         expect(chrome.notifications.create).toHaveBeenCalledTimes(2);
         expect(cachedThread('t1').latestKey).toBeDefined();
+      });
+
+      test('a conversation failing to fetch means the pass was not complete', async () => {
+        expect(cachedData().lastCompleteSync).toBe(cachedData().lastSync);
+        cachedData().lastSync = 1;
+        cachedData().lastCompleteSync = 1;
+        api.getSmsThreadMessages.mockRejectedValueOnce(new Error('down'));
+        await smsSync.syncAllSmsData(DEVICE);
+        expect(cachedData().lastSync).toBeGreaterThan(1);
+        expect(cachedData().lastCompleteSync).toBe(1);
       });
 
       test('quota running low skips the sync', async () => {

@@ -701,6 +701,10 @@ class OptionsPage {
           // The extension restarts, closing this page, and opens settings again.
           return;
         }
+        if (!response?.success) {
+          this.showMessage(response?.error || 'Failed to reset data', 'error');
+          return;
+        }
         this.showMessage(
           'All data cleared successfully. Please refresh the page.',
           'success'
@@ -942,7 +946,9 @@ class OptionsPage {
 // Initialize options page
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('Options DOM ready');
-  await waitForAccountChange();
+  await waitForAccountChange(() => {
+    document.body.prepend('Pushbridge is restarting. This should only take a moment.');
+  });
   const optionsPage = new OptionsPage();
   optionsPage.init();
 });

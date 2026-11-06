@@ -1223,6 +1223,41 @@ try {
     );
   });
 
+  await test('a browser that failed to register tries again by itself', async () => {
+    singlePhone();
+    await stopWorker();
+    await seed({ pb_device_iden: '', pb_user_iden: 'me' });
+    when('POST', '/v2/devices', { status: 500 });
+    await wakeAndConnect();
+    await waitUntil(() => hasAlarm('pb_device_setup'), 'the retry alarm');
+    assert.ok(!(await stored('pb_device_iden')));
+    await fireAlarm('pb_device_setup');
+    await waitUntil(() => stored('pb_device_iden'), 'the registration');
+  });
+
+  await test('a new page waits as long as the account change takes', async () => {
+    api.devices = [];
+    await seed({
+      pb_recent_pushes_state: { pushes: [{ iden: 'private', title: 'From A', created: 1 }] },
+      pb_account_change_pending: { reset: true, generation: 'held' },
+    });
+    const page = await browser.newPage();
+    await page.goto(`${base}/popup.html`);
+    await sleep(3500);
+    assert.equal(await page.$('pb-composer'), null, 'Nothing loaded');
+    assert.ok(
+      (await page.evaluate(() => document.body.textContent)).includes('restarting'),
+      'And it says why'
+    );
+    await control.evaluate(() =>
+      chrome.storage.local.remove('pb_account_change_pending')
+    );
+    await page.waitForFunction(
+      () => document.querySelector('pb-composer') || document.querySelector('pb-token-setup')
+    );
+    await page.close();
+  });
+
   await test('a worker that died before reloading still reloads first', async () => {
     api.devices = [];
     await seed(accountAData());

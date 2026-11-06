@@ -6,7 +6,7 @@ import {
 } from '../../src/background/accountEpoch';
 import { httpClient } from '../../src/background/httpClient';
 import { createPush } from '../../src/background/pushManager';
-import { enqueue, processQueue } from '../../src/background/queue';
+import { enqueue, processQueue, showQueueWarnings } from '../../src/background/queue';
 import { rateLimitManager } from '../../src/background/rateLimitManager';
 import { getLocal, setLocal } from '../../src/background/storage';
 
@@ -29,6 +29,7 @@ jest.setTimeout(30000);
 
 describe('outgoing operation queue', () => {
   let ops: any[] = [];
+  let warnings: string[] = [];
   let nextId = 0;
   // Unique across tests, because the queue remembers delivered IDs.
   const op = (id: string) => ({
@@ -45,9 +46,21 @@ describe('outgoing operation queue', () => {
     (getLocal as jest.Mock).mockImplementation(async (key: string) =>
       key === 'pb_pending_ops' ? [...ops] : undefined
     );
-    (setLocal as jest.Mock).mockImplementation(async (_key, value) => {
-      ops = value;
+    warnings = [];
+    (getLocal as jest.Mock).mockImplementation(async (key: string) =>
+      key === 'pb_pending_ops'
+        ? [...ops]
+        : key === 'pb_queue_warnings'
+          ? warnings
+          : undefined
+    );
+    (setLocal as jest.Mock).mockImplementation(async (key, value) => {
+      if (key === 'pb_queue_warnings') warnings = value;
+      else ops = value;
     });
+    (chrome.notifications.create as jest.Mock) = jest
+      .fn()
+      .mockResolvedValue('id');
     (createPush as jest.Mock).mockResolvedValue({});
   });
 
@@ -91,7 +104,7 @@ describe('outgoing operation queue', () => {
     });
 
     test('never gives up on a push just from repeated network failures', async () => {
-      ops = [{ ...op('a'), retryCount: 50 }];
+      ops = [{ ...op('a'), payload: { guid: 'g50' }, retryCount: 50, mayHaveBeenSent: false }];
       (createPush as jest.Mock).mockRejectedValueOnce(new TypeError('offline'));
       await processQueue();
       expect(ops).toHaveLength(1);
@@ -104,7 +117,7 @@ describe('outgoing operation queue', () => {
       );
       await processQueue();
       expect(ops).toEqual([]);
-      expect(reportError).toHaveBeenCalled();
+      expect(chrome.notifications.create).toHaveBeenCalled();
     });
 
     test('rate limiting is not treated as a rejection', async () => {
@@ -158,7 +171,7 @@ describe('outgoing operation queue', () => {
         await processQueue();
         expect(createPush).not.toHaveBeenCalled();
         expect(ops).toEqual([]);
-        expect(reportError).toHaveBeenCalled();
+        expect(chrome.notifications.create).toHaveBeenCalled();
       });
     });
 
@@ -220,7 +233,7 @@ describe('outgoing operation queue', () => {
         await processQueue();
         expect(createPush).not.toHaveBeenCalled();
         expect(ops).toEqual([]);
-        expect(reportError).toHaveBeenCalled();
+        expect(chrome.notifications.create).toHaveBeenCalled();
       });
 
       test('a clear refusal needs no check', async () => {
@@ -274,6 +287,59 @@ describe('outgoing operation queue', () => {
         expect(ops[0].nextAttemptAt).toBeGreaterThan(Date.now());
         expect(ops[0].inconclusiveChecks).toBeUndefined();
       });
+    });
+
+    describe('dropping a message', () => {
+      const lost = () => ({
+        ...op('lost'),
+        payload: {},
+        attemptStartedAt: Date.now() - 1000,
+      });
+
+      test('the warning is saved before the message goes', async () => {
+        ops = [lost()];
+        const order: string[] = [];
+        const real = (setLocal as jest.Mock).getMockImplementation();
+        (setLocal as jest.Mock).mockImplementation(async (key, value) => {
+          order.push(key);
+          return real!(key, value);
+        });
+        await processQueue();
+        (setLocal as jest.Mock).mockImplementation(real!);
+        expect(order[0]).toBe('pb_queue_warnings');
+        expect(order).toContain('pb_pending_ops');
+      });
+
+      test('a warning that fails to show is kept and shown later', async () => {
+        ops = [lost()];
+        (chrome.notifications.create as jest.Mock).mockRejectedValueOnce(
+          new Error('no')
+        );
+        await processQueue();
+        expect(ops).toEqual([]);
+        expect(warnings).toHaveLength(1);
+
+        await showQueueWarnings();
+        expect(warnings).toEqual([]);
+      });
+
+      test('an older send with no ID is reported, not sent again', async () => {
+        ops = [{ ...op('old'), payload: { type: 'note' }, retryCount: 1 }];
+        await processQueue();
+        expect(createPush).not.toHaveBeenCalled();
+        expect(ops).toEqual([]);
+        expect(warnings).toHaveLength(0);
+        expect(chrome.notifications.create).toHaveBeenCalled();
+      });
+    });
+
+    test('a browser not registered yet waits instead of losing the message', async () => {
+      ops = [op('wait')];
+      (createPush as jest.Mock).mockRejectedValueOnce(
+        new Error('Chrome device not registered')
+      );
+      await processQueue();
+      expect(ops).toHaveLength(1);
     });
 
     describe('when the account changes', () => {

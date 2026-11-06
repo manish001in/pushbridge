@@ -116,6 +116,43 @@ describe('finishing an account change at startup', () => {
     expect(chrome.runtime.reload).not.toHaveBeenCalled();
   });
 
+  test('any leftover marker means reload first, even a different one', async () => {
+    local = { [JOURNAL]: { reset: true, generation: 'g1' }, pb_token: 'token-a' };
+    session[MARKER] = 'g2';
+    void start().accountReady;
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(chrome.runtime.reload).toHaveBeenCalledTimes(1);
+    expect(local.pb_token).toBe('token-a');
+  });
+
+  test('a second change while one is starting is refused', async () => {
+    const cutover = start();
+    await cutover.accountReady;
+    await cutover.requestAccountChange({ reset: true });
+    await expect(
+      cutover.requestAccountChange({ token: 't', userIden: 'b' })
+    ).rejects.toThrow('already restarting');
+    expect(local[JOURNAL].reset).toBe(true);
+  });
+
+  test('if the change cannot be saved, sending works again', async () => {
+    (chrome.storage.session.remove as jest.Mock).mockResolvedValue(undefined);
+    let cutover: typeof import('../../src/background/accountCutover');
+    let epoch: typeof import('../../src/background/accountEpoch');
+    jest.isolateModules(() => {
+      cutover = require('../../src/background/accountCutover');
+      epoch = require('../../src/background/accountEpoch');
+    });
+    await cutover!.accountReady;
+    (chrome.storage.local.set as jest.Mock).mockRejectedValueOnce(new Error('full'));
+    await expect(cutover!.requestAccountChange({ reset: true })).rejects.toThrow('full');
+    expect(cutover!.isSwitchingAccount()).toBe(false);
+    expect(() => epoch!.assertSameAccount()).not.toThrow();
+    expect(chrome.storage.session.remove).toHaveBeenCalledWith(MARKER);
+    await cutover!.requestAccountChange({ reset: true });
+    expect(local[JOURNAL]).toBeDefined();
+  });
+
   test('asking for a change saves the marker before the journal', async () => {
     const order: string[] = [];
     (chrome.storage.session.set as jest.Mock).mockImplementation(async () => {

@@ -800,7 +800,7 @@ export class PushComposer extends LitElement {
             id="send-to-select"
             .value=${this.sendTo}
             @change=${this.handleSendToChange}
-            ?disabled=${this.isLoading}
+            ?disabled=${this.isLoading || this.isSending}
           >
             <option value="all">All Devices</option>
             ${this.sendTargets.map(
@@ -817,7 +817,12 @@ export class PushComposer extends LitElement {
         <!-- File Input (always visible) -->
         <div class="form-group">
           <label for="file-input">File (optional):</label>
-          <input id="file-input" type="file" @change=${this.handleFileSelect} />
+          <input
+            id="file-input"
+            type="file"
+            @change=${this.handleFileSelect}
+            ?disabled=${this.isSending}
+          />
           ${this.selectedFile
             ? html`
                 <small class="form-text">
@@ -836,6 +841,7 @@ export class PushComposer extends LitElement {
             type="text"
             .value=${this.pushTitle}
             @input=${this.handleInputChange}
+            ?disabled=${this.isSending}
             placeholder="Enter title..."
           />
         </div>
@@ -847,6 +853,7 @@ export class PushComposer extends LitElement {
             name="body"
             .value=${this.body}
             @input=${this.handleInputChange}
+            ?disabled=${this.isSending}
             placeholder="Enter your message or URL..."
           ></textarea>
         </div>
