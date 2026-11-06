@@ -224,15 +224,6 @@ export async function addMessageToThread(
     //   await unifiedNotificationTracker.markAsProcessed('sms', message.pb_guid, message.timestamp);
     // }
 
-    // Just mark as processed for deduplication, don't increment count
-    if (message.inbound) {
-      await unifiedNotificationTracker.markAsProcessed(
-        'sms',
-        message.pb_guid,
-        message.timestamp
-      );
-      console.log(`📝 [SMSBridge] Marked SMS as processed: ${message.pb_guid}`);
-    }
 
     console.log(
       `✅ [SMSBridge] Added message to thread: ${conversationId}, total messages: ${thread.messages.length}`
@@ -313,11 +304,15 @@ export async function getConversation(
 /**
  * Send SMS using Pushbullet's dedicated SMS API (/v2/texts)
  */
+const localMessageId = () =>
+  `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
 export async function sendSms(
   deviceIden: string,
   conversationId: string,
   message: string,
-  attachments?: Array<{ content_type: string; name: string; url: string }>
+  attachments?: Array<{ content_type: string; name: string; url: string }>,
+  guid?: string
 ): Promise<void> {
   try {
     // Allow empty message if attachments are present (for MMS)
@@ -362,6 +357,11 @@ export async function sendSms(
       },
     };
 
+    // Lets the API recognize a retry of the same text instead of sending it again.
+    if (guid) {
+      smsData.data.guid = guid;
+    }
+
     // Add file attachments for MMS if provided
     if (attachments && attachments.length > 0) {
       smsData.data.file_type = attachments[0].content_type;
@@ -378,7 +378,9 @@ export async function sendSms(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(smsData),
-      }
+      },
+      // Never held in memory waiting for quota: the draft stays, and the user decides.
+      { failFast: true }
     );
 
     if (!response.ok) {
@@ -401,11 +403,9 @@ export async function sendSms(
 
     // Add sent message to local cache
     const sentMessage: SmsMsg = {
-      id:
-        result.id || `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      pb_guid:
-        result.guid ||
-        `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // The API returns `iden`, and the guid inside `data`.
+      id: result.iden || localMessageId(),
+      pb_guid: result.data?.guid || guid || localMessageId(),
       timestamp: Date.now(),
       inbound: false,
       text: message,
@@ -453,10 +453,9 @@ export async function markConversationAsRead(
 export async function getTotalUnreadCount(): Promise<number> {
   try {
     // Try the new simple SMS system first
-    const simpleCount = await getTotalUnreadSmsCount();
-    if (simpleCount > 0) {
-      return simpleCount;
-    }
+    // Zero is an answer, not a reason to fall back: the old cache doesn't learn
+    // about conversations being read, so it would bring the count back.
+    return await getTotalUnreadSmsCount();
   } catch (error) {
     console.warn(
       '[SMSBridge] Simple SMS count failed, falling back to cache:',

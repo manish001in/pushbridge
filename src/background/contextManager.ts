@@ -17,14 +17,19 @@ import {
   ContactsApiResponse,
 } from '../types/api-interfaces';
 
+import { currentAccountEpoch } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
+import { rateLimitManager } from './rateLimitManager';
 import { getLocal, setLocal } from './storage';
 
 const CONTEXT_STORAGE_KEY = 'user_context';
 const CONTEXT_REFRESH_TRIGGERS_KEY = 'context_refresh_triggers';
 
+const MIN_REFRESH_INTERVAL = 60 * 1000;
+
 export class ContextManager {
+  private lastRefreshAt = 0;
   private static instance: ContextManager;
   private context: UserContext | null = null;
   private isRefreshing = false;
@@ -43,9 +48,11 @@ export class ContextManager {
    * Get the current user context, refreshing if needed
    */
   async getContext(trigger: ContextRefreshTrigger): Promise<UserContext> {
-    // Always refresh on popup open
+    // Refresh on popup open, unless that just happened
     if (trigger.type === 'popup_open') {
-      await this.refreshContext(trigger);
+      if (!this.refreshedRecently()) {
+        await this.refreshContext(trigger);
+      }
     } else {
       // For other triggers, check if context exists and is valid
       if (!this.context || !this.context.is_valid) {
@@ -100,6 +107,11 @@ export class ContextManager {
     sourceDeviceIden?: string,
     channelIden?: string
   ): Promise<void> {
+    // A source that stays unknown after a refresh shouldn't refresh on every push.
+    if (this.refreshedRecently()) {
+      return;
+    }
+
     const trigger: ContextRefreshTrigger = {
       type: 'unknown_source',
       timestamp: Date.now(),
@@ -124,6 +136,7 @@ export class ContextManager {
 
     try {
       await this.refreshPromise;
+      this.lastRefreshAt = Date.now();
     } finally {
       this.isRefreshing = false;
       this.refreshPromise = null;
@@ -133,7 +146,18 @@ export class ContextManager {
   /**
    * Perform the actual context refresh
    */
+  private refreshedRecently(): boolean {
+    return (
+      !!this.context && Date.now() - this.lastRefreshAt < MIN_REFRESH_INTERVAL
+    );
+  }
+
   private async performRefresh(trigger: ContextRefreshTrigger): Promise<void> {
+    if (this.context && rateLimitManager.isQuotaLow()) {
+      return;
+    }
+
+    const accountEpoch = currentAccountEpoch();
     try {
       const token = await getLocal<string>('pb_token');
       if (!token) {
@@ -214,6 +238,11 @@ export class ContextManager {
       }
 
       // Create new context
+      // Signed out meanwhile: don't refill what the reset cleared.
+      if (accountEpoch !== currentAccountEpoch()) {
+        return;
+      }
+
       this.context = {
         current_device_iden: currentDeviceIden,
         owned_channels: ownedChannelsMap,
@@ -522,6 +551,7 @@ export class ContextManager {
    * Clear stored context (for testing/debugging)
    */
   async clearContext(): Promise<void> {
+    this.lastRefreshAt = 0;
     this.context = null;
     await setLocal(CONTEXT_STORAGE_KEY, null);
     await setLocal(CONTEXT_REFRESH_TRIGGERS_KEY, null);

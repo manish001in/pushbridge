@@ -3,15 +3,19 @@
  * Handles real-time connection to Pushbullet stream API
  */
 
+import { currentAccountEpoch } from './accountEpoch';
 import { getContacts } from './contactManager';
 import { getDevices, getDefaultSmsDevice } from './deviceManager';
 import { reportError, PBError } from './errorManager';
 import { handleMirror, handleRemoteDismiss } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
+import { getNotificationPrefs } from './notificationPrefs';
 import { formatToThreeDecimals } from './numberUtils';
 import { getPushHistory } from './pushManager';
+import { isPushForThisBrowser, showPushNotification } from './pushNotifications';
+import { rateLimitManager } from './rateLimitManager';
 import { syncAllSmsData } from './simpleSmsSync';
-import { getLocal, getSession, setSession } from './storage';
+import { getLocal, getSession, setLocal, setSession } from './storage';
 import { unifiedNotificationTracker } from './unifiedNotificationTracker';
 
 interface WebSocketMessage {
@@ -44,10 +48,12 @@ const wsState: WebSocketState = {
 // Constants
 const MAX_RETRY_COUNT = 10;
 const STREAM_STARTED_KEY = 'pb_stream_started';
+const ENCRYPTION_WARNED_KEY = 'pb_encryption_warned';
 // Limit tabs opened at once when catching up after sleep; the rest stay in Messages.
 const MAX_CATCH_UP_TABS = 10;
 // Enough for a long absence without paging through a whole account's history.
-const MAX_CATCH_UP_PAGES = 5;
+// A backlog shouldn't flood the desktop; the rest stay in Messages and on the badge.
+const MAX_NOTIFICATIONS_PER_SCAN = 10;
 const RECONNECT_DELAYS = [2000, 4000, 8000, 16000, 32000]; // Exponential backoff
 const HEARTBEAT_TIMEOUT = 60000; // 60 seconds
 const POLL_INTERVAL = 60000; // 60 seconds
@@ -67,7 +73,11 @@ export async function connectOnWorkerStart(): Promise<void> {
     console.log('Auto-reconnect is off, not reconnecting on worker start');
     return;
   }
-  await setSession(STREAM_STARTED_KEY, true);
+  try {
+    await setSession(STREAM_STARTED_KEY, true);
+  } catch (error) {
+    console.error('Failed to record stream start:', error);
+  }
   await initializeWebSocket();
 }
 
@@ -271,53 +281,157 @@ async function switchToPollingMode(): Promise<void> {
   }, POLL_INTERVAL) as any;
 }
 
+const PUSH_SCAN_WATERMARK_KEY = 'pb_push_scan_watermark';
+// Re-read a few seconds, in case a push became visible slightly out of order. The
+// tracker already knows which of those were handled.
+const PUSH_SCAN_OVERLAP_SECONDS = 5;
+
+const PUSH_SCAN_STATE_KEY = 'pb_push_scan_progress';
+const PUSH_SUMMARY_KEY = 'pb_push_summary_unshown';
+export const PUSH_SCAN_ALARM = 'pb_push_scan_resume';
+const PAGES_PER_SCAN_PASS = 5;
+const MAX_FAILED_ROW_RETRIES = 5;
+
+/** At worker start: saved work needs its alarm, which may not have survived. */
+export async function restorePushScanAlarm(): Promise<void> {
+  if (
+    (await getLocal<PushScan | null>(PUSH_SCAN_STATE_KEY)) ||
+    (await getLocal<number>(PUSH_SUMMARY_KEY))
+  ) {
+    await ensureScanAlarm();
+  }
+}
+
+/** One more pass of a long scan, from its alarm. */
+export function resumePushScan(): Promise<void> {
+  pushSyncChain = pushSyncChain.then(() => handlePushTickle(true, true));
+  return pushSyncChain;
+}
+
 let pushSyncChain: Promise<void> = Promise.resolve();
+let syncWaiting = false;
 
 /**
  * Run one history scan at a time. Overlapping scans would both see the same push
  * as new before either marks it processed, and open its link twice.
  */
 function schedulePushSync(catchUp = false): Promise<void> {
-  pushSyncChain = pushSyncChain.then(() => handlePushTickle(catchUp));
+  // One waiting scan will see everything the skipped ones would have.
+  if (syncWaiting) {
+    return pushSyncChain;
+  }
+  syncWaiting = true;
+  pushSyncChain = pushSyncChain.then(() => {
+    syncWaiting = false;
+    return handlePushTickle(catchUp);
+  });
   return pushSyncChain;
 }
 
-/**
- * Pushes to look at, oldest first. The API sorts by modified time, so paging stops
- * only once a page has nothing modified since the user last looked, and creation
- * order comes from sorting.
- */
-async function fetchPushesToProcess(catchUp: boolean): Promise<any[]> {
-  const pushes: any[] = [];
-  let cursor: string | undefined = '';
+/** A scan of everything changed since the watermark, resumable across workers. */
+interface PushScan {
+  since: number;
+  cursor: string;
+  newestSeen: number;
+  oldestFailed?: number;
+  tabsOpened: number;
+  notificationsShown: number;
+  heldBack: number;
+  failedRetries?: number;
+}
 
-  for (let page = 0; page < (catchUp ? MAX_CATCH_UP_PAGES : 1); page++) {
+/**
+ * Read one pass of a scan, oldest first. The API sorts by modified time, so `done`
+ * means there's no cursor left, or the rest was modified before the user last looked.
+ */
+async function readScanPages(
+  scan: PushScan,
+  catchUp: boolean
+): Promise<{ pushes: any[]; done: boolean }> {
+  const pushes: any[] = [];
+
+  for (let page = 0; page < PAGES_PER_SCAN_PASS; page++) {
+    if (page > 0 && rateLimitManager.isQuotaLow()) {
+      return { pushes: sortByCreated(pushes), done: false };
+    }
     const history: { pushes?: any[]; cursor?: string } = await getPushHistory(
       50,
-      0,
-      cursor
+      scan.since,
+      scan.cursor
     );
     const batch = history.pushes ?? [];
     pushes.push(...batch);
-    cursor = history.cursor;
+    scan.cursor = history.cursor ?? '';
 
     const oldest = batch[batch.length - 1];
     if (
-      !cursor ||
-      !oldest ||
-      !(await unifiedNotificationTracker.isNewerThanLastSeen(oldest.modified))
+      !scan.cursor ||
+      (oldest &&
+        (!(await unifiedNotificationTracker.isNewerThanLastSeen(
+          oldest.modified
+        )) ||
+          // A live scan has caught up once it reaches one it has already handled.
+          // With a watermark the query itself says where to stop, and an old push
+          // that was only dismissed mustn't hide new ones behind it.
+          (!catchUp &&
+            !scan.since &&
+            batch.some(push =>
+              unifiedNotificationTracker.wasProcessed('push', push.iden)
+            ))))
     ) {
-      break;
+      return { pushes: sortByCreated(pushes), done: true };
     }
   }
 
+  // Without a baseline there's nothing to stop an old account's whole history.
+  const done = !(await unifiedNotificationTracker.hasBaseline());
+  return { pushes: sortByCreated(pushes), done };
+}
+
+function sortByCreated(pushes: any[]): any[] {
   return pushes.sort((a, b) => a.created - b.created);
+}
+
+/**
+ * The summarized pushes count as handled, so this is their only notice. If it can't be
+ * shown it's kept, with an alarm, until it can.
+ */
+async function showBacklogSummary(count: number): Promise<void> {
+  try {
+    const prefs = await getNotificationPrefs();
+    if (prefs.enabled) {
+      await chrome.notifications.create('push_backlog_summary', {
+        type: 'basic',
+        iconUrl: 'icons/48.png',
+        title: 'More pushes',
+        message: `${count} more while you were away. See Messages.`,
+        silent: !prefs.sound,
+      });
+    }
+    await setLocal(PUSH_SUMMARY_KEY, 0);
+  } catch (error) {
+    console.error('Failed to show the backlog summary:', error);
+    await setLocal(PUSH_SUMMARY_KEY, count);
+    await ensureScanAlarm();
+  }
+}
+
+/** The alarm, not tickles or reconnects, paces a long scan. */
+async function ensureScanAlarm(): Promise<void> {
+  if (!(await chrome.alarms.get(PUSH_SCAN_ALARM))) {
+    await chrome.alarms.create(PUSH_SCAN_ALARM, { delayInMinutes: 1 });
+  }
 }
 
 /**
  * Handle push tickle by syncing history using unified tracker
  */
-async function handlePushTickle(catchUp = false): Promise<void> {
+async function handlePushTickle(
+  catchUp = false,
+  fromAlarm = false
+): Promise<void> {
+  let checkpoint: PushScan | undefined;
+  const scanEpoch = currentAccountEpoch();
   try {
     console.log(
       catchUp
@@ -332,10 +446,43 @@ async function handlePushTickle(catchUp = false): Promise<void> {
       return;
     }
 
-    let tabsOpened = 0;
+    if (!(await getLocal<string>('pb_token'))) {
+      return;
+    }
+
+    const unshownSummary = await getLocal<number>(PUSH_SUMMARY_KEY);
+    if (unshownSummary) {
+      await showBacklogSummary(unshownSummary);
+    }
+
+    const saved = await getLocal<PushScan | null>(PUSH_SCAN_STATE_KEY);
+    if (saved && (!fromAlarm || rateLimitManager.isQuotaLow())) {
+      // Finish the scan in progress first. New arrivals are picked up right after.
+      await ensureScanAlarm();
+      return;
+    }
+    if (!saved && fromAlarm) {
+      return;
+    }
+
+    const scannedUpTo = await getLocal<number>(PUSH_SCAN_WATERMARK_KEY);
+    const scan: PushScan = saved ?? {
+      since: scannedUpTo ? scannedUpTo - PUSH_SCAN_OVERLAP_SECONDS : 0,
+      cursor: '',
+      newestSeen: scannedUpTo ?? 0,
+      tabsOpened: 0,
+      notificationsShown: 0,
+      heldBack: 0,
+    };
 
     // Get recent pushes and process them
-    const pushes = await fetchPushesToProcess(catchUp);
+    const accountEpoch = currentAccountEpoch();
+    const deviceIden = await getLocal<string>('pb_device_iden');
+    // Where to start again if this pass fails. Reading moves the cursor on.
+    checkpoint = { ...scan };
+    const { pushes, done } = await readScanPages(scan, catchUp);
+    // Only a backlog is capped. A scan long enough to need resuming is one.
+    const capped = catchUp || !!saved || !done;
 
     if (pushes.length > 0) {
       console.log(`🔄 [WebSocket] Found ${pushes.length} pushes to process`);
@@ -344,6 +491,11 @@ async function handlePushTickle(catchUp = false): Promise<void> {
       let newPushesCount = 0;
 
       for (const push of pushes) {
+        // Signed out meanwhile: nothing from this scan should show or open.
+        if (accountEpoch !== currentAccountEpoch()) {
+          return;
+        }
+
         // Only process non-dismissed pushes that are for this user/device
         if (
           !push.dismissed &&
@@ -373,19 +525,61 @@ async function handlePushTickle(catchUp = false): Promise<void> {
             );
             
             // Handle specific push types
+            let openedInTab = false;
+            let heldBack = false;
             if (push.type === 'link') {
               console.log('🔗 [WebSocket] Processing link push from history');
-              if (!catchUp || tabsOpened < MAX_CATCH_UP_TABS) {
-                if (await handleLinkPush(push)) tabsOpened++;
+              if (!capped || scan.tabsOpened < MAX_CATCH_UP_TABS) {
+                openedInTab = await handleLinkPush(push);
+                if (openedInTab) scan.tabsOpened++;
               }
             }
-            
-            await notificationBadge.addPushNotifications(1);
-            await unifiedNotificationTracker.markAsProcessed(
-              'push',
-              push.iden,
-              new Date(formatToThreeDecimals(push.created)*1000).getTime()
-            );
+
+            // The new tab already shows a link that opened.
+            if (!openedInTab) {
+              // Only a backlog is capped. The rest get one summary, below.
+              if (
+                capped &&
+                scan.notificationsShown >= MAX_NOTIFICATIONS_PER_SCAN
+              ) {
+                heldBack = true;
+                if (isPushForThisBrowser(push, deviceIden)) {
+                  scan.heldBack++;
+                }
+              } else {
+                try {
+                  if (await showPushNotification(push)) {
+                    scan.notificationsShown++;
+                  }
+                } catch (error) {
+                  // Not shown. Leave it unprocessed so the next scan retries, unless
+                  // that has been tried enough. Then it counts as handled, or the
+                  // next scan would read it again and start all over.
+                  if ((scan.failedRetries ?? 0) < MAX_FAILED_ROW_RETRIES) {
+                    scan.oldestFailed = Math.min(
+                      scan.oldestFailed ?? Infinity,
+                      push.modified ?? 0
+                    );
+                    continue;
+                  }
+                  console.error('Giving up on a push notification:', error);
+                }
+              }
+            }
+
+            // Only count what was meant for this browser.
+            if (isPushForThisBrowser(push, deviceIden)) {
+              await notificationBadge.addPushNotifications(1);
+            }
+            // Later passes read older pushes, which no scan reads again. The tracker only
+            // remembers so many, and they mustn't push out the recent ones it needs.
+            if (!heldBack || !saved) {
+              await unifiedNotificationTracker.markAsProcessed(
+                'push',
+                push.iden,
+                new Date(formatToThreeDecimals(push.created)*1000).getTime()
+              );
+            }
             newPushesCount++;
           } else {
             console.log(
@@ -397,12 +591,68 @@ async function handlePushTickle(catchUp = false): Promise<void> {
         }
       }
 
+      if (scan.heldBack > 0) {
+        await showBacklogSummary(scan.heldBack);
+      }
+
       console.log(
-        `🔄 [WebSocket] Processed ${processedCount} pushes, ${newPushesCount} new pushes from tickle`
+        `🔄 [WebSocket] Processed ${processedCount} pushes, ${newPushesCount} new pushes`
       );
+
+      scan.newestSeen = Math.max(
+        scan.newestSeen,
+        ...pushes.map(push => push.modified ?? 0)
+      );
+    }
+
+    if (accountEpoch !== currentAccountEpoch()) {
+      return;
+    }
+
+    if (!done) {
+      await setLocal(PUSH_SCAN_STATE_KEY, scan);
+      await ensureScanAlarm();
+      return;
+    }
+
+    // The scan is complete, so nothing older is left unread. Only a push that failed
+    // to show needs another look.
+    const reachedTo =
+      scan.oldestFailed === undefined
+        ? scan.newestSeen
+        : Math.max(scan.since, scan.oldestFailed - 1);
+    if (scan.oldestFailed !== undefined) {
+      // Nothing else would look again on a quiet connection.
+      await setLocal(PUSH_SCAN_WATERMARK_KEY, reachedTo);
+      await setLocal(PUSH_SCAN_STATE_KEY, {
+        ...scan,
+        since: reachedTo - PUSH_SCAN_OVERLAP_SECONDS,
+        cursor: '',
+        oldestFailed: undefined,
+        failedRetries: (scan.failedRetries ?? 0) + 1,
+      });
+      await ensureScanAlarm();
+      return;
+    }
+    if (scan.newestSeen > (scannedUpTo ?? 0)) {
+      await setLocal(PUSH_SCAN_WATERMARK_KEY, scan.newestSeen);
+    }
+    if (saved) {
+      await setLocal(PUSH_SCAN_STATE_KEY, null);
+      // Anything that arrived during the scan.
+      void schedulePushSync();
     }
   } catch (error) {
     console.error('Failed to handle push tickle:', error);
+    // An alarm alone does nothing without saved work, and nothing else may come along.
+    if (checkpoint && scanEpoch === currentAccountEpoch()) {
+      try {
+        await setLocal(PUSH_SCAN_STATE_KEY, checkpoint);
+        await ensureScanAlarm();
+      } catch (saveError) {
+        console.error('Failed to save the push scan:', saveError);
+      }
+    }
   }
 }
 
@@ -440,12 +690,33 @@ async function handleContactTickle(): Promise<void> {
   }
 }
 
+/** Encrypted mirrors can't be read here. Say so once, instead of them just not appearing. */
+async function warnEncryptionUnsupported(): Promise<void> {
+  if (await getSession<boolean>(ENCRYPTION_WARNED_KEY)) {
+    return;
+  }
+  await setSession(ENCRYPTION_WARNED_KEY, true);
+  await chrome.notifications.create('pb_encryption_unsupported', {
+    type: 'basic',
+    iconUrl: 'icons/48.png',
+    title: "Mirrored notifications can't be shown",
+    message:
+      "End-to-end encryption is on for your Pushbullet account, and Pushbridge can't read encrypted notifications yet.",
+  });
+}
+
 /**
  * Handle push messages for mirror and dismissal
  */
 async function handlePushMessage(message: WebSocketMessage): Promise<void> {
   try {
     const push = message.push;
+
+    if ((push as any)?.encrypted) {
+      await warnEncryptionUnsupported();
+      return;
+    }
+
     if (!push || !push.type) {
       console.log('Invalid push message format');
       return;
@@ -500,7 +771,7 @@ async function handleSmsChanged(_push: any): Promise<void> {
     }
 
     // Use the simple SMS sync system
-    await syncAllSmsData(defaultDevice.iden);
+    await syncAllSmsData(defaultDevice.iden, { incremental: true });
   } catch (error) {
     console.error('📱 [WebSocket] Failed to handle SMS changed:', error);
   }
@@ -523,11 +794,7 @@ async function handleLinkPush(push: any): Promise<boolean> {
     // Only open links meant for this browser, not ones sent to another device
     // or sent from here.
     const deviceIden = await getLocal<string>('pb_device_iden');
-    if (
-      push.direction === 'outgoing' || // Sent to another person
-      (push.target_device_iden && push.target_device_iden !== deviceIden) ||
-      (deviceIden && push.source_device_iden === deviceIden)
-    ) {
+    if (!isPushForThisBrowser(push, deviceIden)) {
       console.log('🔗 [WebSocket] Link push is not for this browser, skipping');
       return false;
     }
@@ -546,7 +813,7 @@ async function handleLinkPush(push: any): Promise<boolean> {
         return false;
       }
     } catch (error) {
-      console.warn('⚠️ [WebSocket] Invalid URL format:', url, error);
+      console.warn('⚠️ [WebSocket] Link push has an invalid URL', error);
       return false;
     }
 

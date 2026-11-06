@@ -1,6 +1,6 @@
 {
   "name": "pushbridge",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Unofficial manifest V3 Chrome extension that replicates core Pushbullet functionality via the official Pushbullet REST & WebSocket APIs",
   "type": "module",
   "scripts": {
@@ -17,6 +17,8 @@
     "test:e2e:theme-window": "node tests/e2e/theme-window-test.js",
     "test:e2e:popup-links": "node tests/e2e/popup-links-test.js",
     "test:e2e:tabs": "node tests/e2e/tabs-cached-test.js",
+    "test:e2e:send-safety": "node tests/e2e/send-safety-test.js",
+    "test:e2e:fake-api": "node tests/e2e/fake-api-test.js",
     "version:patch": "node scripts/version-bump.js patch",
     "version:minor": "node scripts/version-bump.js minor",
     "version:major": "node scripts/version-bump.js major"
@@ -38,7 +40,8 @@
     "puppeteer": "^24.14.0",
     "ts-jest": "^29.1.1",
     "typescript": "^5.3.2",
-    "vite": "^7.0.5"
+    "vite": "^7.0.5",
+    "ws": "^8.18.3"
   },
   "keywords": [
     "chrome-extension",

@@ -13,6 +13,7 @@ import './components/pb-channels';
 import type { PushbulletDevice } from '../background/deviceManager';
 import { getLocal } from '../background/storage';
 
+import { waitForAccountChange } from './accountReady';
 import {
   getOptionOrder,
   getHiddenTabs,
@@ -49,6 +50,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.error('🪟 [Popup] Failed to send POPUP_OPEN message:', error)
     );
 
+  await waitForAccountChange(() => {
+    document.querySelector('.container')?.replaceChildren(
+      'Pushbridge is restarting. This should only take a moment.'
+    );
+  });
   await initializePopup();
 });
 
@@ -317,7 +323,10 @@ function setupSmsInterface(): void {
       conversationList.addEventListener(
         'conversation-selected',
         (e: CustomEvent) => {
-          const { conversationId, conversationName } = e.detail;
+          const { conversationId, conversationName, deviceIden } = e.detail;
+          // Together: conversation IDs are only unique per phone, so this has to
+          // be the phone the list was showing.
+          if (deviceIden) smsThread.deviceIden = deviceIden;
           smsThread.conversationId = conversationId;
           conversationTitle.textContent = conversationName || 'Conversation';
 

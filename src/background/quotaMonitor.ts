@@ -3,6 +3,7 @@
  * Monitors storage usage and purges old data when quota is exceeded
  */
 
+import { accountReady } from './accountCutover';
 import { reportError, PBError } from './errorManager';
 import { getLocalBytesInUse, getLocal, setLocal, removeLocal } from './storage';
 
@@ -58,9 +59,14 @@ export async function initializeQuotaMonitor(): Promise<void> {
 /**
  * Handle quota check alarm
  */
+// One function, so adding it twice has no effect.
+function onQuotaAlarmWhenReady(alarm: chrome.alarms.Alarm): void {
+  void accountReady.then(() => handleQuotaAlarm(alarm));
+}
+
 /** Must run every time the worker starts; alarms outlive it. */
 export function registerQuotaListener(): void {
-  chrome.alarms.onAlarm.addListener(handleQuotaAlarm);
+  chrome.alarms.onAlarm.addListener(onQuotaAlarmWhenReady);
 }
 
 function handleQuotaAlarm(alarm: chrome.alarms.Alarm): void {

@@ -118,7 +118,8 @@ describe('pushManager', () => {
             file_name: 'test.txt',
             file_type: 'text/plain',
           }),
-        })
+        }),
+        { failFast: false }
       );
     });
 
@@ -228,12 +229,13 @@ describe('pushManager', () => {
             file_type: 'text/plain',
             file_url: 'https://example.com/file.txt',
             source_device_iden: 'test-device-id',
-            target_device_iden: 'target-device-id',
+            device_iden: 'target-device-id',
             title: 'Test Title',
             body: 'Test Body (File: test.txt)',
             channel_tag: 'test-channel',
           }),
-        }
+        },
+        { failFast: false }
       );
     });
 
@@ -278,9 +280,10 @@ describe('pushManager', () => {
             file_type: 'text/plain',
             file_url: 'https://files.pushbullet.com/file123',
             source_device_iden: 'device-123',
-            // No target_device_iden
+            // No device_iden
           }),
-        })
+        }),
+        { failFast: false }
       );
     });
 
@@ -377,7 +380,8 @@ describe('pushManager', () => {
           body: expect.stringMatching(
             /.*"type":"note".*"source_device_iden":"device-123".*"title":"Test Note".*"body":"Test body".*/
           ),
-        })
+        }),
+        { failFast: false }
       );
     });
 
@@ -420,7 +424,8 @@ describe('pushManager', () => {
           body: expect.stringMatching(
             /.*"type":"link".*"source_device_iden":"device-123".*"title":"Test Link".*"url":"https:\/\/example\.com".*/
           ),
-        })
+        }),
+        { failFast: false }
       );
     });
 
@@ -504,7 +509,8 @@ describe('pushManager', () => {
             'Access-Token': 'test-token',
             'Content-Type': 'application/json',
           },
-        })
+        }),
+        { failFast: false }
       );
 
       // Verify the request body contains the expected fields

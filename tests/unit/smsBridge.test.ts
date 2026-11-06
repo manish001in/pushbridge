@@ -405,7 +405,8 @@ describe('SMS Bridge', () => {
               message: 'Hello world',
             },
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
 
@@ -642,7 +643,8 @@ describe('SMS Bridge', () => {
               message: 'Hello group!',
             },
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
   });
@@ -690,39 +692,34 @@ describe('SMS Bridge', () => {
       await initializeSmsBridge();
     });
 
+    const seedSimpleCache = (counts: number[]) => {
+      mockGetLocal.mockImplementation((key: string) =>
+        Promise.resolve(
+          key === `sms_data_${mockDefaultDevice.iden}`
+            ? {
+                deviceIden: mockDefaultDevice.iden,
+                lastSync: 1,
+                threads: counts.map((unreadCount, index) => ({
+                  id: `c${index}`,
+                  name: `Contact ${index}`,
+                  messages: [],
+                  lastMessageTime: Date.now(),
+                  unreadCount,
+                })),
+              }
+            : undefined
+        )
+      );
+    };
+
     it('should return total unread count across all conversations', async () => {
-      const thread1: SmsThread = {
-        id: 'conversation1',
-        name: 'Contact 1',
-        messages: [],
-        lastMessageTime: Date.now(),
-        unreadCount: 2,
-      };
+      seedSimpleCache([2, 1]);
+      await expect(getTotalUnreadCount()).resolves.toBe(3);
+    });
 
-      const thread2: SmsThread = {
-        id: 'conversation2',
-        name: 'Contact 2',
-        messages: [],
-        lastMessageTime: Date.now(),
-        unreadCount: 1,
-      };
-
-      // Mock the device-specific storage key
-      mockGetLocal.mockImplementation((key: string) => {
-        if (key === `smsThreads_${mockDefaultDevice.iden}`) {
-          return Promise.resolve({
-            conversation1: thread1,
-            conversation2: thread2,
-          });
-        }
-        return Promise.resolve(undefined);
-      });
-
-      // Reinitialize to load the conversations
-      await initializeSmsBridge();
-
-      const total = await getTotalUnreadCount();
-      expect(total).toBe(3);
+    it('zero stays zero once everything has been read', async () => {
+      seedSimpleCache([0, 0]);
+      await expect(getTotalUnreadCount()).resolves.toBe(0);
     });
   });
 
@@ -1217,7 +1214,8 @@ describe('Group MMS and Attachments', () => {
             },
             file_url: attachments[0].url,
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
 
@@ -1298,7 +1296,8 @@ describe('Group MMS and Attachments', () => {
             },
             file_url: attachments[0].url,
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
 
@@ -1363,7 +1362,8 @@ describe('Group MMS and Attachments', () => {
             },
             file_url: attachments[0].url,
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
 
@@ -1435,7 +1435,8 @@ describe('Group MMS and Attachments', () => {
             'Access-Token': 'test-token',
             'Content-Type': 'application/json',
           }),
-        })
+        }),
+        { failFast: true }
       );
 
       // Verify the call was made (indicating attachments were processed)

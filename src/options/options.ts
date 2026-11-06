@@ -1,6 +1,7 @@
 // Options page entry point
 console.log('Pushbridge options page loaded');
 
+import { waitForAccountChange } from '../popup/accountReady';
 import {
   DEFAULT_ORDER as DEFAULT_OPTION_ORDER,
   normalizeOrder,
@@ -20,6 +21,17 @@ interface Settings {
   systemTheme: boolean;
   mirrorNotificationsEnabled: boolean;
   autoDismissNotifications: boolean;
+}
+
+/** Device names are user-controlled text, and this page renders through innerHTML. */
+function escapeHtml(value: string | undefined): string {
+  return (value ?? '').replace(
+    /[&<>"']/g,
+    char =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
+        char
+      ] as string
+  );
 }
 
 class OptionsPage {
@@ -682,7 +694,17 @@ class OptionsPage {
     ) {
       try {
         // Clear all data including cursors
-        await chrome.runtime.sendMessage({ cmd: 'clearAllData' });
+        const response = await chrome.runtime.sendMessage({
+          cmd: 'clearAllData',
+        });
+        if (response?.restarting) {
+          // The extension restarts, closing this page, and opens settings again.
+          return;
+        }
+        if (!response?.success) {
+          this.showMessage(response?.error || 'Failed to reset data', 'error');
+          return;
+        }
         this.showMessage(
           'All data cleared successfully. Please refresh the page.',
           'success'
@@ -812,7 +834,7 @@ class OptionsPage {
               ${this.devices
                 .map(
                   device =>
-                    `<option value="${device.iden}">${this.getDeviceDisplayName(device)} (${device.type})</option>`
+                    `<option value="${escapeHtml(device.iden)}">${escapeHtml(this.getDeviceDisplayName(device))} (${escapeHtml(device.type ?? (device as { icon?: string }).icon ?? 'device')})</option>`
                 )
                 .join('')}
             </select>
@@ -830,7 +852,7 @@ class OptionsPage {
               ${this.smsDevices
                 .map(
                   device =>
-                    `<option value="${device.iden}">${this.getDeviceDisplayName(device)} (${device.type})</option>`
+                    `<option value="${escapeHtml(device.iden)}">${escapeHtml(this.getDeviceDisplayName(device))} (${escapeHtml(device.type ?? (device as { icon?: string }).icon ?? 'device')})</option>`
                 )
                 .join('')}
             </select>
@@ -922,8 +944,11 @@ class OptionsPage {
 }
 
 // Initialize options page
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   console.log('Options DOM ready');
+  await waitForAccountChange(() => {
+    document.body.prepend('Pushbridge is restarting. This should only take a moment.');
+  });
   const optionsPage = new OptionsPage();
   optionsPage.init();
 });

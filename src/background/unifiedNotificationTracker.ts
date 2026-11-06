@@ -77,6 +77,8 @@ class UnifiedNotificationTracker {
   private counts: UnreadCounts;
   private isInitialized = false;
 
+  private readonly claims = new Set<string>();
+
   private constructor() {
     // Initialize with default values
     this.timestamps = {
@@ -182,6 +184,36 @@ class UnifiedNotificationTracker {
     return toMilliseconds(timestamp) > this.lastSeenMs() - BUFFER_TIME;
   }
 
+  /**
+   * Like shouldShowNotification, but also reserves the ID, so two overlapping
+   * callers can't both decide to show the same notification.
+   */
+  async claimNotification(notification: NotificationData): Promise<boolean> {
+    if (!(await this.shouldShowNotification(notification))) {
+      return false;
+    }
+    const claim = `${notification.type}:${notification.id}`;
+    // Nothing can interleave from this check to the reservation.
+    if (
+      this.claims.has(claim) ||
+      this.isRecentlyProcessed(notification.id, notification.type)
+    ) {
+      return false;
+    }
+    // In memory only. It reaches saved state through markAsProcessed, once it's handled.
+    this.claims.add(claim);
+    return true;
+  }
+
+  /** Undo a claim whose notification couldn't be shown, so it can be retried. */
+  releaseClaim(type: NotificationType, id: string): void {
+    this.claims.delete(`${type}:${id}`);
+  }
+
+  wasProcessed(type: NotificationType, id: string): boolean {
+    return this.isRecentlyProcessed(id, type);
+  }
+
   /** False until the user has opened the popup at least once. */
   async hasBaseline(): Promise<boolean> {
     await this.ensureInitialized();
@@ -281,6 +313,7 @@ class UnifiedNotificationTracker {
     id: string,
     timestamp: number
   ): Promise<void> {
+    this.claims.delete(`${type}:${id}`);
     await this.ensureInitialized();
 
     console.log(
@@ -550,7 +583,9 @@ class UnifiedNotificationTracker {
     const cacheKey = `${type}Ids` as keyof RecentlyProcessedCache;
     const cache = this.cache[cacheKey] as string[];
 
-    // Add to beginning of array
+    // Add to beginning of array, once
+    const existing = cache.indexOf(id);
+    if (existing !== -1) cache.splice(existing, 1);
     cache.unshift(id);
 
     // Keep only the most recent entries

@@ -18,6 +18,10 @@ export interface BackoffState {
   expiresAt: number; // When backoff expires
 }
 
+const LOW_QUOTA_FRACTION = 0.1;
+// The API's window is 15 minutes; never trust a reset further off than that.
+const MAX_QUOTA_WAIT_MS = 16 * 60 * 1000;
+
 class RateLimitManager {
   private rateState: RateState | null = null;
   private backoffState: BackoffState = {
@@ -144,6 +148,19 @@ class RateLimitManager {
   }
 
   /**
+   * True when most of this period's quota is gone. Syncs that can wait should, so
+   * what's left goes to things the user is doing.
+   */
+  isQuotaLow(): boolean {
+    const state = this.rateState;
+    return (
+      !!state &&
+      Date.now() < state.reset * 1000 &&
+      state.remaining < state.limit * LOW_QUOTA_FRACTION
+    );
+  }
+
+  /**
    * Start exponential backoff
    */
   startBackoff(): void {
@@ -153,7 +170,15 @@ class RateLimitManager {
     );
 
     const currentBackoffDuration = this.backoffState.backoffSeconds;
-    const expiresAt = Date.now() + currentBackoffDuration * 1000;
+    // With the quota used up, every attempt before its reset is refused anyway.
+    const quotaBackAt =
+      this.rateState?.remaining === 0
+        ? Math.min(this.rateState.reset * 1000, Date.now() + MAX_QUOTA_WAIT_MS)
+        : 0;
+    const expiresAt = Math.max(
+      Date.now() + currentBackoffDuration * 1000,
+      quotaBackAt
+    );
 
     this.backoffState.isActive = true;
     this.backoffState.expiresAt = expiresAt;

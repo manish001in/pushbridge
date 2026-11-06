@@ -2,26 +2,14 @@
 // data, not a Pushbullet account. Set PUPPETEER_EXECUTABLE_PATH if needed.
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import path from 'node:path';
 
-import puppeteer from 'puppeteer';
+import { launchExtension } from './launchExtension.js';
 
-const extensionPath = path.resolve('dist');
-const browser = await puppeteer.launch({
-  headless: true,
-  ignoreDefaultArgs: ['--disable-extensions'],
-  args: [
-    '--no-sandbox',
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
-    '--enable-unsafe-extension-debugging',
-  ],
-});
+const { browser, target } = await launchExtension([
+  '--host-resolver-rules=MAP * 127.0.0.1:9',
+]);
 
 try {
-  const target = await browser.waitForTarget(
-    t => t.type() === 'service_worker'
-  );
   const base = target.url().replace('/background.js', '');
   const workerCdp = await target.createCDPSession();
   await workerCdp.send('Network.enable');
@@ -184,7 +172,8 @@ try {
     const closed = once(action, 'close', {
       signal: AbortSignal.timeout(10000),
     });
-    await action.click('#open-window-btn');
+    // The popup closes as part of this click, sometimes before the mouse-up.
+    await action.click('#open-window-btn').catch(() => {});
     await closed;
     const standaloneTarget = await browser.waitForTarget(
       t => t.url() === `${base}/popup.html?windowMode=1`

@@ -48,6 +48,15 @@ interface StoredState {
   activeSubtab: 'channels' | 'devices';
 }
 
+const MAX_EMPTY_PAGES_TO_SKIP = 5;
+
+/** Deleted pushes come back from the API as bare records with nothing to show. */
+function withoutDeleted<T>(pushes: T[]): T[] {
+  return pushes.filter(
+    push => (push as { active?: boolean }).active !== false
+  );
+}
+
 @customElement('pb-recent-pushes')
 export class RecentPushes extends LitElement {
   @state()
@@ -850,7 +859,7 @@ export class RecentPushes extends LitElement {
         const state: StoredState = stored.pb_recent_pushes_state;
         // Since we're now using enhanced pushes, we can directly use the stored pushes
         // The metadata should already be properly computed by PushEnricher
-        this.pushes = state.pushes || [];
+        this.pushes = withoutDeleted(state.pushes || []);
         this.cursor = state.cursor;
         this.hasMore = state.hasMore || false;
         this.lastModified = state.lastModified;
@@ -903,7 +912,7 @@ export class RecentPushes extends LitElement {
     }
   }
 
-  async loadPushes(refresh = false) {
+  async loadPushes(refresh = false, emptyPages = 0) {
     console.log('🔄 [RecentPushes] loadPushes called with refresh:', refresh);
 
     if (this.isLoading) {
@@ -915,6 +924,7 @@ export class RecentPushes extends LitElement {
     this.isLoading = true;
     this.isRefreshing = refresh;
     this.errorMessage = '';
+    let pageHadNothingToShow = false;
 
     try {
       const lastModified = refresh ? undefined : this.lastModified;
@@ -928,7 +938,8 @@ export class RecentPushes extends LitElement {
       const response = await chrome.runtime.sendMessage({
         cmd: 'getEnhancedPushHistory',
         limit: 100,
-        modifiedAfter: lastModified,
+        // A page of older history must keep the query it started with.
+        modifiedAfter: refresh || this.cursor ? undefined : lastModified,
         cursor: refresh ? undefined : this.cursor,
         trigger: {
           type: 'popup_open',
@@ -946,7 +957,7 @@ export class RecentPushes extends LitElement {
       if (response.ok) {
         if (refresh) {
           console.log('🔄 [RecentPushes] Refreshing pushes list');
-          this.pushes = response.history.pushes;
+          this.pushes = withoutDeleted<EnhancedPush>(response.history.pushes);
         } else {
           console.log(
             '➕ [RecentPushes] Appending pushes to existing list with deduplication'
@@ -957,7 +968,7 @@ export class RecentPushes extends LitElement {
           );
 
           // Filter out duplicates and add new pushes
-          const newPushes = response.history.pushes.filter(
+          const newPushes = withoutDeleted<EnhancedPush>(response.history.pushes).filter(
             (push: EnhancedPush) => !existingPushesMap.has(push.iden)
           );
 
@@ -978,6 +989,8 @@ export class RecentPushes extends LitElement {
 
         this.cursor = response.history.cursor;
         this.hasMore = !!response.history.cursor;
+        pageHadNothingToShow =
+          this.hasMore && withoutDeleted(response.history.pushes).length === 0;
 
         // Update last modified timestamp
         if (response.history.pushes.length > 0) {
@@ -1006,6 +1019,12 @@ export class RecentPushes extends LitElement {
       console.log('🔄 [RecentPushes] Setting isLoading to false');
       this.isLoading = false;
       this.isRefreshing = false;
+    }
+
+    // The API can return a page of only deleted records, or none, with real pushes
+    // further back. Don't leave the user looking at an empty list.
+    if (pageHadNothingToShow && emptyPages < MAX_EMPTY_PAGES_TO_SKIP) {
+      await this.loadPushes(false, emptyPages + 1);
     }
   }
 
@@ -1277,6 +1296,12 @@ export class RecentPushes extends LitElement {
           ? html`
               <div
                 class="file-preview"
+                role="link"
+                tabindex="0"
+                aria-label="Open image"
+                @keydown=${(e: KeyboardEvent) => {
+                  if (e.key === 'Enter') openLink(push.image_url);
+                }}
                 @click=${(e: MouseEvent) => openLink(push.image_url, e)}
                 @auxclick=${(e: MouseEvent) => openLink(push.image_url, e)}
               >

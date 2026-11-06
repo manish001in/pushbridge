@@ -1,6 +1,9 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
+import { serializeFile } from '../fileTransport';
+import { determinePushType } from '../pushType';
+
 @customElement('pb-composer')
 export class PushComposer extends LitElement {
   @property({ type: String })
@@ -414,58 +417,15 @@ export class PushComposer extends LitElement {
     }
   }
 
-  // Smart push type detection
-  private determinePushType(
-    message: string,
-    file?: File
-  ): 'note' | 'link' | 'file' {
-    if (file) return 'file';
-
-    // Strip whitespace from message
-    const trimmedMessage = message.trim();
-
-    if (!trimmedMessage) return 'note';
-
-    // Extract URLs from message using improved regex
-    const urlRegex = /https?:\/\/[^\s]+/g;
-    const urls = trimmedMessage.match(urlRegex);
-
-    // If exactly one URL and message is just that URL (after trimming), it's a link
-    if (urls?.length === 1 && trimmedMessage === urls[0]) {
-      return 'link';
-    }
-
-    // Otherwise it's a note (including multiple URLs or text with URLs)
-    return 'note';
-  }
-
-  // Load combined send targets (devices + owned channels + contacts)
+  // Load combined send targets (devices + owned channels + contacts). Each list shows
+  // as soon as it arrives: during a rate limit one could wait for many minutes, and
+  // that mustn't stop the user choosing from the others.
   private async loadSendTargets() {
-    try {
-      // Get devices, owned channels, and contacts in parallel
-      const [devicesResponse, channelsResponse, contactsResponse] =
-        await Promise.all([
-          chrome.runtime.sendMessage({ cmd: 'getDevices' }),
-          chrome.runtime.sendMessage({ cmd: 'GET_OWNED_CHANNELS' }),
-          chrome.runtime.sendMessage({ cmd: 'getContacts' }),
-        ]);
+    let devices: any[] = [];
+    let channels: any[] = [];
+    let contacts: any[] = [];
 
-      const devices = devicesResponse.ok ? devicesResponse.devices : [];
-      const channels = channelsResponse.success
-        ? channelsResponse.ownedChannels
-        : [];
-      const contacts = contactsResponse.ok ? contactsResponse.contacts : [];
-
-      console.log(
-        'Loaded devices:',
-        devices.length,
-        'channels:',
-        channels.length,
-        'contacts:',
-        contacts.length
-      );
-
-      // Combine into send targets array
+    const showTargets = () => {
       this.sendTargets = [
         ...devices.map((dev: any) => ({
           id: dev.iden,
@@ -486,21 +446,43 @@ export class PushComposer extends LitElement {
           icon: '📢',
         })),
       ];
+    };
 
-      console.log('Total send targets:', this.sendTargets.length);
+    const results = await Promise.allSettled([
+      chrome.runtime.sendMessage({ cmd: 'getDevices' }).then(async response => {
+        devices = response.ok ? response.devices : [];
+        showTargets();
+        await this.applyDefaultTarget();
+      }),
+      chrome.runtime
+        .sendMessage({ cmd: 'GET_OWNED_CHANNELS' })
+        .then(response => {
+          channels = response.success ? response.ownedChannels : [];
+          showTargets();
+        }),
+      chrome.runtime.sendMessage({ cmd: 'getContacts' }).then(response => {
+        contacts = response.ok ? response.contacts : [];
+        showTargets();
+      }),
+    ]);
 
-      // Start from the default device chosen in settings, unless the user has
-      // already picked a target while the list was loading.
-      const stored = await chrome.storage.local.get('pb_settings');
-      const defaultTarget = stored?.pb_settings?.defaultDevice;
-      if (
-        this.sendTo === 'all' &&
-        this.sendTargets.some(target => target.id === defaultTarget)
-      ) {
-        this.sendTo = defaultTarget;
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error('Failed to load send targets:', result.reason);
       }
-    } catch (error) {
-      console.error('Failed to load send targets:', error);
+    }
+  }
+
+  // Start from the default device chosen in settings, unless the user has already
+  // picked a target while the list was loading.
+  private async applyDefaultTarget() {
+    const stored = await chrome.storage.local.get('pb_settings');
+    const defaultTarget = stored?.pb_settings?.defaultDevice;
+    if (
+      this.sendTo === 'all' &&
+      this.sendTargets.some(target => target.id === defaultTarget)
+    ) {
+      this.sendTo = defaultTarget;
     }
   }
 
@@ -606,7 +588,53 @@ export class PushComposer extends LitElement {
     this.sendTo = select.value;
   }
 
+  /** Set when a send failed, in case the server got it and only the answer was lost. */
+  private failedAttempt: {
+    key: string;
+    file: File | null;
+    guid: string;
+    startedAt: number;
+  } | null = null;
+
+  /**
+   * One ID per message. Sending the unchanged message again reuses it, so the worker
+   * can check whether the first attempt got through. Any change makes a new message.
+   */
+  private identifyAttempt(targetId: string | undefined) {
+    const file = this.selectedFile;
+    const key = JSON.stringify([
+      targetId,
+      this.pushTitle,
+      this.body,
+      file?.name,
+      file?.size,
+      file?.lastModified,
+    ]);
+    // The same file object, since two files can match in everything shown here.
+    const isRetry =
+      this.failedAttempt?.key === key &&
+      this.failedAttempt.file === (file ?? null);
+    if (!isRetry) {
+      this.failedAttempt = {
+        key,
+        file: file ?? null,
+        guid: crypto.randomUUID(),
+        startedAt: Date.now(),
+      };
+    }
+    return {
+      guid: this.failedAttempt!.guid,
+      attemptStartedAt: this.failedAttempt!.startedAt,
+      isRetry,
+    };
+  }
+
   private async handleSend() {
+    // The keyboard shortcut reaches here even while the button is disabled.
+    if (this.isSending) {
+      return;
+    }
+
     if (!this.validateForm()) {
       return;
     }
@@ -616,7 +644,7 @@ export class PushComposer extends LitElement {
 
     try {
       // Determine the actual push type using smart detection
-      const actualPushType = this.determinePushType(
+      const actualPushType = determinePushType(
         this.body,
         this.selectedFile || undefined
       );
@@ -654,14 +682,11 @@ export class PushComposer extends LitElement {
       // Handle file upload if present
       if (this.selectedFile && actualPushType === 'file') {
         // Convert File to ArrayBuffer to preserve data through message passing
-        const fileBuffer = await this.selectedFile.arrayBuffer();
-        const fileData = {
-          name: this.selectedFile.name,
-          type: this.selectedFile.type,
-          size: this.selectedFile.size,
-          lastModified: this.selectedFile.lastModified,
-          buffer: Array.from(new Uint8Array(fileBuffer)), // Convert to regular array for serialization
-        };
+        // Fixed before the first wait: the form can change while the file is read.
+        const attempt = this.identifyAttempt(selectedTarget?.id);
+        const title = this.pushTitle.trim() || undefined;
+        const body = this.body.trim() || undefined;
+        const fileData = await serializeFile(this.selectedFile);
 
         const uploadResponse = await chrome.runtime.sendMessage({
           cmd: 'UPLOAD_FILE',
@@ -674,16 +699,18 @@ export class PushComposer extends LitElement {
                 ? selectedTarget.id
                 : undefined,
             // Include push metadata for file pushes
-            title: this.pushTitle.trim() || undefined,
-            body: this.body.trim() || undefined,
+            title,
+            body,
             channel_tag:
               selectedTarget?.type === 'channel'
                 ? selectedTarget.id
                 : undefined,
+            ...attempt,
           },
         });
 
         if (uploadResponse.success) {
+          this.failedAttempt = null;
           this.setMessageWithTimeout('File sent successfully!');
           this.resetForm();
         } else {
@@ -699,11 +726,16 @@ export class PushComposer extends LitElement {
       // Send regular push
       const response = await chrome.runtime.sendMessage({
         cmd: 'createPush',
-        payload,
+        payload: { ...payload, ...this.identifyAttempt(selectedTarget?.id) },
       });
 
       if (response.ok) {
-        this.setMessageWithTimeout('Push sent successfully!');
+        this.failedAttempt = null;
+        this.setMessageWithTimeout(
+          response.queued
+            ? 'Saved. It will send automatically.'
+            : 'Push sent successfully!'
+        );
         this.resetForm();
       } else {
         this.setMessageWithTimeout(
@@ -768,7 +800,7 @@ export class PushComposer extends LitElement {
             id="send-to-select"
             .value=${this.sendTo}
             @change=${this.handleSendToChange}
-            ?disabled=${this.isLoading}
+            ?disabled=${this.isLoading || this.isSending}
           >
             <option value="all">All Devices</option>
             ${this.sendTargets.map(
@@ -785,7 +817,12 @@ export class PushComposer extends LitElement {
         <!-- File Input (always visible) -->
         <div class="form-group">
           <label for="file-input">File (optional):</label>
-          <input id="file-input" type="file" @change=${this.handleFileSelect} />
+          <input
+            id="file-input"
+            type="file"
+            @change=${this.handleFileSelect}
+            ?disabled=${this.isSending}
+          />
           ${this.selectedFile
             ? html`
                 <small class="form-text">
@@ -804,6 +841,7 @@ export class PushComposer extends LitElement {
             type="text"
             .value=${this.pushTitle}
             @input=${this.handleInputChange}
+            ?disabled=${this.isSending}
             placeholder="Enter title..."
           />
         </div>
@@ -815,6 +853,7 @@ export class PushComposer extends LitElement {
             name="body"
             .value=${this.body}
             @input=${this.handleInputChange}
+            ?disabled=${this.isSending}
             placeholder="Enter your message or URL..."
           ></textarea>
         </div>

@@ -77,32 +77,35 @@ async function storePendingUpload(
     attempts: 0,
   };
 
-  const pendingUploads =
-    (await getLocal<PendingUpload[]>('pb_pending_uploads')) || [];
-  const existingIndex = pendingUploads.findIndex(
-    upload => upload.fileHash === fileHash
-  );
+  await updatePendingUploads(uploads => [
+    ...uploads.filter(upload => upload.fileHash !== fileHash),
+    pendingUpload,
+  ]);
+}
 
-  if (existingIndex >= 0) {
-    pendingUploads[existingIndex] = pendingUpload;
-  } else {
-    pendingUploads.push(pendingUpload);
-  }
+let pendingUploadWrites: Promise<unknown> = Promise.resolve();
 
-  await setLocal('pb_pending_uploads', pendingUploads);
+/** One change at a time, so uploads from two windows can't overwrite each other. */
+function updatePendingUploads(
+  change: (uploads: PendingUpload[]) => PendingUpload[]
+): Promise<void> {
+  const write = pendingUploadWrites.then(async () => {
+    const uploads =
+      (await getLocal<PendingUpload[]>('pb_pending_uploads')) || [];
+    await setLocal('pb_pending_uploads', change(uploads));
+  });
+  pendingUploadWrites = write.catch(() => undefined);
+  return write;
 }
 
 /**
  * Remove pending upload from storage
  * @param fileHash - The file hash to remove
  */
-async function removePendingUpload(fileHash: string): Promise<void> {
-  const pendingUploads =
-    (await getLocal<PendingUpload[]>('pb_pending_uploads')) || [];
-  const filtered = pendingUploads.filter(
-    upload => upload.fileHash !== fileHash
+function removePendingUpload(fileHash: string): Promise<void> {
+  return updatePendingUploads(uploads =>
+    uploads.filter(upload => upload.fileHash !== fileHash)
   );
-  await setLocal('pb_pending_uploads', filtered);
 }
 
 /**
@@ -222,64 +225,30 @@ export async function uploadFile(
 }
 
 /**
- * Resume interrupted uploads on service worker restart
- * @returns Promise resolving to number of resumed uploads
+ * Report uploads a worker restart interrupted, and clear their records
+ * @returns Promise resolving to number of interrupted uploads
  */
 export async function resumeInterruptedUploads(): Promise<number> {
   try {
     const pendingUploads =
       (await getLocal<PendingUpload[]>('pb_pending_uploads')) || [];
-    let resumedCount = 0;
+    let interruptedCount = 0;
 
     for (const pendingUpload of pendingUploads) {
-      // Skip uploads older than 1 hour
-      if (Date.now() - pendingUpload.timestamp > 60 * 60 * 1000) {
-        console.log('Skipping old pending upload:', pendingUpload.fileName);
-        continue;
-      }
-
-      // Skip uploads with too many attempts
-      if (pendingUpload.attempts >= 3) {
-        console.log(
-          'Skipping upload with too many attempts:',
-          pendingUpload.fileName
-        );
-        continue;
-      }
-
-      // Try to resume upload
-      try {
-        console.log(
-          `Resuming upload for ${pendingUpload.fileName} from offset ${pendingUpload.offset}`
-        );
-
-        // Note: In a real implementation, we'd need to reconstruct the actual file
-        // For now, we'll just clean up old pending uploads
-        await removePendingUpload(pendingUpload.fileHash);
-        resumedCount++;
-      } catch (error) {
-        console.error('Failed to resume upload:', error);
-        // Increment attempt count
-        pendingUpload.attempts++;
-
-        // Create a mock file object for resume
-        const mockFile = new File([], pendingUpload.fileName, {
-          type: pendingUpload.fileType,
-        });
-        Object.defineProperty(mockFile, 'size', {
-          value: pendingUpload.fileSize,
-        });
-
-        await storePendingUpload(
-          pendingUpload.fileHash,
-          pendingUpload.uploadInfo,
-          mockFile,
-          pendingUpload.offset
-        );
-      }
+      // The file's contents don't survive a worker restart, so it can't be resumed.
+      // Tell the user instead of quietly dropping it.
+      console.warn('An upload was interrupted');
+      await chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icons/48.png',
+        title: 'Upload interrupted',
+        message: `${pendingUpload.fileName} didn't finish uploading. Please send it again.`,
+      });
+      await removePendingUpload(pendingUpload.fileHash);
+      interruptedCount++;
     }
 
-    return resumedCount;
+    return interruptedCount;
   } catch (error) {
     console.error('Failed to resume interrupted uploads:', error);
     return 0;

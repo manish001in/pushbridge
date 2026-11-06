@@ -5,12 +5,21 @@
 
 import { MirrorPush, DismissalPush, MirrorMeta } from '../types/pushbullet';
 
+import {
+  AccountChangedError,
+  assertSameAccount,
+  currentAccountEpoch,
+} from './accountEpoch';
 // Contact lookup removed - SMS functionality uses phone numbers directly
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { notificationBadge } from './notificationBadge';
 import { getNotificationPrefs } from './notificationPrefs';
 import { addMessageToThread } from './smsBridge';
+import {
+  scheduleSmsNotificationRetry,
+  showSmsOnce,
+} from './smsNotificationIdentity';
 import { getLocal, setLocal, removeLocal } from './storage';
 import { fromPushbulletTime } from './timestampUtils';
 import { unifiedNotificationTracker } from './unifiedNotificationTracker';
@@ -20,9 +29,43 @@ const MIRROR_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 const MIRROR_STORAGE_PREFIX = 'mirror_';
 
 /**
- * Handle mirror push by creating Chrome notification
+ * The same for every update to a phone notification, so that Chrome replaces it
+ * rather than showing another. Encoded so a separator inside a field can't make
+ * two different notifications match.
  */
-export async function handleMirror(push: MirrorPush): Promise<void> {
+function stableMirrorKey(push: MirrorPush): string {
+  return [
+    push.source_device_iden,
+    push.package_name,
+    push.notification_id,
+    push.notification_tag ?? '',
+  ]
+    .map(part => encodeURIComponent(part))
+    .join(':');
+}
+
+let mirrorChain: Promise<void> = Promise.resolve();
+
+/**
+ * Handle mirror push by creating Chrome notification. One at a time: updates can
+ * arrive together, and each decides what to do from the record the last one wrote.
+ */
+export function handleMirror(push: MirrorPush): Promise<void> {
+  // Signed out while this waited: it belongs to the previous account.
+  const accountEpoch = currentAccountEpoch();
+  const result = mirrorChain.then(() =>
+    accountEpoch === currentAccountEpoch()
+      ? processMirror(push, accountEpoch)
+      : undefined
+  );
+  mirrorChain = result.catch(() => undefined);
+  return result;
+}
+
+async function processMirror(
+  push: MirrorPush,
+  accountEpoch: number
+): Promise<void> {
   try {
     console.log('🔔 [MirrorManager] Handling mirror push:', {
       application_name: push.application_name,
@@ -32,15 +75,21 @@ export async function handleMirror(push: MirrorPush): Promise<void> {
 
     // Handle SMS/MMS specifically
     if (push.application_name === 'SMS') {
-      await handleIncomingSms(push);
+      await handleIncomingSms(push, accountEpoch);
 
       // Remove double notification creation - handleIncomingSms already handles this
       // await createSmsNotification(push);  // ❌ REMOVED - This was causing double notifications
       return;
     }
 
-    // Generate unique Chrome notification ID
-    const chromeNotifId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const chromeNotifId = stableMirrorKey(push);
+
+    // An update to one the badge still counts doesn't count again. If the user has
+    // looked since, the update is news.
+    const existing = await getLocal<MirrorMeta>(
+      `${MIRROR_STORAGE_PREFIX}${chromeNotifId}`
+    );
+    const alreadyOnBadge = !!existing && (await isOnBadge(existing));
 
     // Create notification metadata
     const notifMeta: MirrorMeta = {
@@ -53,7 +102,9 @@ export async function handleMirror(push: MirrorPush): Promise<void> {
       application_name: push.application_name,
       icon_url: push.icon_url,
       expiresAt: Date.now() + MIRROR_TTL,
-      createdAt: Date.now(),
+      createdAt: alreadyOnBadge
+        ? mirrorCreatedAt(existing as MirrorMeta)
+        : Date.now(),
     };
 
     // Store metadata in local storage
@@ -61,6 +112,7 @@ export async function handleMirror(push: MirrorPush): Promise<void> {
 
     // Create Chrome notification
     const prefs = await getNotificationPrefs();
+    assertSameAccount(accountEpoch);
     if (prefs.enabled && prefs.mirrorsEnabled) {
       await chrome.notifications.create(chromeNotifId, {
         type: 'basic' as const,
@@ -73,8 +125,10 @@ export async function handleMirror(push: MirrorPush): Promise<void> {
     }
 
     // Update notification badge for mirror notification
-    console.log('🔔 [MirrorManager] Adding mirror notification to badge');
-    await notificationBadge.addPushNotifications(1);
+    if (!alreadyOnBadge) {
+      console.log('🔔 [MirrorManager] Adding mirror notification to badge');
+      await notificationBadge.addPushNotifications(1);
+    }
 
     // Mark as processed in unified tracker
     await unifiedNotificationTracker.markAsProcessed(
@@ -101,7 +155,19 @@ export async function handleMirror(push: MirrorPush): Promise<void> {
 /**
  * Handle remote dismissal by clearing Chrome notification
  */
-export async function handleRemoteDismiss(push: DismissalPush): Promise<void> {
+export function handleRemoteDismiss(push: DismissalPush): Promise<void> {
+  // In line with mirrors, so a dismissal can't overtake the mirror it dismisses.
+  const accountEpoch = currentAccountEpoch();
+  const result = mirrorChain.then(() =>
+    accountEpoch === currentAccountEpoch()
+      ? processRemoteDismiss(push)
+      : undefined
+  );
+  mirrorChain = result.catch(() => undefined);
+  return result;
+}
+
+async function processRemoteDismiss(push: DismissalPush): Promise<void> {
   try {
     console.log('🗑️ [MirrorManager] Handling remote dismissal:', {
       package_name: push.package_name,
@@ -147,12 +213,19 @@ export async function handleRemoteDismiss(push: DismissalPush): Promise<void> {
  * take away a newer push instead.
  */
 async function releaseMirrorBadge(meta: MirrorMeta): Promise<void> {
-  const lastSeenMs = await unifiedNotificationTracker.getLastSeenMs();
-  // Records from older versions only have an expiry to go by.
-  const createdAt = meta.createdAt ?? meta.expiresAt - MIRROR_TTL;
-  if (createdAt > lastSeenMs) {
+  if (await isOnBadge(meta)) {
     await notificationBadge.addPushNotifications(-1);
   }
+}
+
+/** Records from older versions only have an expiry to go by. */
+function mirrorCreatedAt(meta: MirrorMeta): number {
+  return meta.createdAt ?? meta.expiresAt - MIRROR_TTL;
+}
+
+async function isOnBadge(meta: MirrorMeta): Promise<boolean> {
+  const lastSeenMs = await unifiedNotificationTracker.getLastSeenMs();
+  return mirrorCreatedAt(meta) > lastSeenMs;
 }
 
 /** Mirror notifications are the ones with a stored record under their ID. */
@@ -410,7 +483,10 @@ export async function getActiveMirrors(): Promise<
  * Handle incoming SMS/MMS from mirror ephemeral
  * @param push - The mirror push containing SMS data
  */
-async function handleIncomingSms(push: MirrorPush): Promise<void> {
+async function handleIncomingSms(
+  push: MirrorPush,
+  accountEpoch: number
+): Promise<void> {
   try {
     if (push.application_name !== 'SMS') {
       return; // Not an SMS
@@ -442,8 +518,10 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
     );
 
     // Check if we should show this notification based on last seen time
-    const shouldShow = await unifiedNotificationTracker.shouldShowNotification({
-      id: push.notification_id || `sms_${Date.now()}`,
+    // Phones reuse notification IDs, so the time makes each message its own.
+    const smsNotificationId = `${push.notification_id || 'sms'}_${messageTimestamp}`;
+    const shouldShow = await unifiedNotificationTracker.claimNotification({
+      id: smsNotificationId,
       type: 'sms',
       created: messageTimestamp,
       metadata: {
@@ -461,7 +539,7 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
     }
 
     // Create Chrome notification for SMS (since we removed createSmsNotification call)
-    const chromeNotifId = `sms_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const chromeNotifId = `sms_${stableMirrorKey(push)}`;
 
     console.log('📱 [MirrorManager] Creating Chrome notification for SMS:', {
       title: push.title,
@@ -469,16 +547,39 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
       chromeNotifId: chromeNotifId,
     });
 
-    const prefs = await getNotificationPrefs();
-    if (prefs.enabled) {
-      await chrome.notifications.create(chromeNotifId, {
-        type: 'basic' as const,
-        title: push.title,
-        message: push.body,
-        iconUrl: push.icon_url ? push.icon_url : 'icons/48.png',
-        requireInteraction: false, // SMS notifications can auto-dismiss
-        silent: !prefs.sound,
-      });
+    let notificationFailed = false;
+    try {
+      const prefs = await getNotificationPrefs();
+      if (prefs.enabled) {
+        await showSmsOnce(
+          {
+            sender: push.title,
+            text: push.body,
+            sentAt: messageTimestamp,
+            source: 'mirror',
+          },
+          async () => {
+            assertSameAccount(accountEpoch);
+            await chrome.notifications.create(chromeNotifId, {
+              type: 'basic' as const,
+              title: push.title,
+              message: push.body,
+              iconUrl: push.icon_url ? push.icon_url : 'icons/48.png',
+              requireInteraction: false, // SMS notifications can auto-dismiss
+              silent: !prefs.sound,
+            });
+          }
+        );
+      }
+    } catch (error) {
+      if (error instanceof AccountChangedError) {
+        return;
+      }
+      // Not shown: a later sync should still be able to notify for it.
+      console.error('Failed to show SMS notification:', error);
+      notificationFailed = true;
+      unifiedNotificationTracker.releaseClaim('sms', smsNotificationId);
+      await scheduleSmsNotificationRetry(push.source_device_iden, { full: true });
     }
 
     // Create SMS message object
@@ -500,11 +601,13 @@ async function handleIncomingSms(push: MirrorPush): Promise<void> {
     await addMessageToThread(conversationId, message, contactName);
 
     // Mark as processed in unified tracker
-    await unifiedNotificationTracker.markAsProcessed(
-      'sms',
-      message.id,
-      messageTimestamp
-    );
+    if (!notificationFailed) {
+      await unifiedNotificationTracker.markAsProcessed(
+        'sms',
+        smsNotificationId,
+        messageTimestamp
+      );
+    }
 
     console.log(
       '✅ [MirrorManager] Incoming SMS processed:',

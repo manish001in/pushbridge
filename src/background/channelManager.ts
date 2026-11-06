@@ -3,6 +3,7 @@
  * Implements M6-01: Fetch & Cache Channel Subscriptions
  */
 
+import { currentAccountEpoch } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { getLocal, setLocal } from './storage';
@@ -64,6 +65,7 @@ let lastSubscriptionsFetchTime: number = 0;
 let lastOwnedChannelsFetchTime: number = 0;
 const CACHE_EXPIRY_HOURS = 6;
 const CACHE_DURATION = CACHE_EXPIRY_HOURS * 60 * 60 * 1000; // 6 hours in milliseconds
+const MAX_PAGES = 50;
 
 /**
  * Fetch channel subscriptions from Pushbullet API with cursor support
@@ -71,18 +73,15 @@ const CACHE_DURATION = CACHE_EXPIRY_HOURS * 60 * 60 * 1000; // 6 hours in millis
  * @param forceRefresh - Whether to force refresh (ignore stored cursor)
  */
 export async function fetchSubscriptions(
-  forceRefresh = false
+  forceRefresh = false,
+  cursor?: string,
+  page = 0
 ): Promise<ChannelSubscription[]> {
   try {
+    const accountEpoch = currentAccountEpoch();
     const token = await getLocal<string>('pb_token');
     if (!token) {
       throw new Error('No access token available');
-    }
-
-    // Get stored cursor for pagination (unless force refresh)
-    let cursor: string | undefined;
-    if (!forceRefresh) {
-      cursor = await getLocal<string>('pb_subscriptions_cursor');
     }
 
     // Build query parameters
@@ -128,20 +127,41 @@ export async function fetchSubscriptions(
       await setLocal('pb_subscriptions_has_more', false);
     }
 
-    // Cache the subscriptions
-    await cacheSubscriptions(data.subscriptions);
+    // The cache is treated as the whole list, so it has to be the whole list.
+    // Deleted ones come back as bare records with nothing to show.
+    const active = data.subscriptions.filter(sub => sub.active !== false);
+    if (data.cursor && page >= MAX_PAGES) {
+      throw new Error('Too many pages of subscriptions');
+    }
+    const all = data.cursor
+      ? [
+          ...active,
+          ...(await fetchSubscriptions(forceRefresh, data.cursor, page + 1)),
+        ]
+      : active;
+
+    if (page > 0) {
+      return all;
+    }
+
+    // Signed out meanwhile: don't refill what the reset cleared.
+    if (accountEpoch !== currentAccountEpoch()) {
+      return [];
+    }
+
+    await cacheSubscriptions(all);
 
     // Emit runtime message for UI updates
     chrome.runtime
       .sendMessage({
         type: 'pb:subsUpdated',
-        payload: { subscriptions: data.subscriptions },
+        payload: { subscriptions: all },
       })
       .catch(() => {
         // Ignore errors if no listeners
       });
 
-    return data.subscriptions;
+    return all;
   } catch (error) {
     console.error('Failed to fetch channel subscriptions:', error);
     await reportError(PBError.Unknown, {
@@ -157,18 +177,15 @@ export async function fetchSubscriptions(
  * @param forceRefresh - Whether to force refresh (ignore stored cursor)
  */
 async function fetchOwnedChannels(
-  forceRefresh = false
+  forceRefresh = false,
+  cursor?: string,
+  page = 0
 ): Promise<OwnedChannel[]> {
   try {
+    const accountEpoch = currentAccountEpoch();
     const token = await getLocal<string>('pb_token');
     if (!token) {
       throw new Error('No access token available');
-    }
-
-    // Get stored cursor for pagination (unless force refresh)
-    let cursor: string | undefined;
-    if (!forceRefresh) {
-      cursor = await getLocal<string>('pb_channels_cursor');
     }
 
     // Build query parameters
@@ -215,20 +232,39 @@ async function fetchOwnedChannels(
       await setLocal('pb_channels_has_more', false);
     }
 
-    // Cache the owned channels
-    await cacheOwnedChannels(data.channels);
+    // The cache is treated as the whole list, so it has to be the whole list.
+    if (data.cursor && page >= MAX_PAGES) {
+      throw new Error('Too many pages of channels');
+    }
+    const all = data.cursor
+      ? [
+          ...data.channels,
+          ...(await fetchOwnedChannels(forceRefresh, data.cursor, page + 1)),
+        ]
+      : data.channels;
+
+    if (page > 0) {
+      return all;
+    }
+
+    // Signed out meanwhile: don't refill what the reset cleared.
+    if (accountEpoch !== currentAccountEpoch()) {
+      return [];
+    }
+
+    await cacheOwnedChannels(all);
 
     // Emit runtime message for UI updates
     chrome.runtime
       .sendMessage({
         type: 'pb:ownedChannelsUpdated',
-        payload: { channels: data.channels },
+        payload: { channels: all },
       })
       .catch(() => {
         // Ignore errors if no listeners
       });
 
-    return data.channels;
+    return all;
   } catch (error) {
     console.error('Failed to fetch owned channels:', error);
     await reportError(PBError.Unknown, {

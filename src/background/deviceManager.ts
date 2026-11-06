@@ -3,6 +3,7 @@
  * Handles Chrome device registration and management with Pushbullet
  */
 
+import { currentAccountEpoch } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { clearSmsCache, syncSmsHistoryFromApi } from './smsBridge';
@@ -43,6 +44,7 @@ interface DeviceApiResponse {
 
 // Cache duration: 24 hours in milliseconds
 const CACHE_DURATION = 24 * 60 * 60 * 1000;
+const MAX_PAGES = 50;
 
 /**
  * Register or get the Chrome device with Pushbullet
@@ -139,7 +141,13 @@ export async function getDevices(
     }
 
     // Fetch fresh data with cursor support
+    const accountEpoch = currentAccountEpoch();
     const devices = await fetchDevicesFromAPI(forceRefresh);
+
+    // Signed out meanwhile: don't refill what the reset cleared.
+    if (accountEpoch !== currentAccountEpoch()) {
+      return [];
+    }
 
     // Cache the result
     const cache: DeviceCache = {
@@ -195,7 +203,7 @@ export async function getPushableDevices(
         device.pushable !== false &&
         device.iden !== chromeDeviceIden
     )
-    .sort((a, b) => a.nickname.localeCompare(b.nickname));
+    .sort((a, b) => (a.nickname ?? '').localeCompare(b.nickname ?? ''));
 }
 
 /**
@@ -204,18 +212,14 @@ export async function getPushableDevices(
  * @returns Promise resolving to array of devices
  */
 async function fetchDevicesFromAPI(
-  forceRefresh = false
+  forceRefresh = false,
+  cursor?: string,
+  page = 0
 ): Promise<PushbulletDevice[]> {
   const token = await getLocal<string>('pb_token');
   if (!token) {
-    console.log('No token available, skipping device fetch and returning empty list');
-    return [];
-  }
-
-  // Get stored cursor for pagination (unless force refresh)
-  let cursor: string | undefined;
-  if (!forceRefresh) {
-    cursor = await getLocal<string>('pb_devices_cursor');
+    // Not an empty list: getDevices would cache that as the truth for a day.
+    throw new Error('No token available');
   }
 
   // Build query parameters
@@ -261,7 +265,18 @@ async function fetchDevicesFromAPI(
     await setLocal('pb_devices_has_more', false);
   }
 
-  return data.devices || [];
+  // The caller caches this as the whole list, so it has to be the whole list.
+  const devices = data.devices || [];
+  if (!data.cursor) {
+    return devices;
+  }
+  if (page >= MAX_PAGES) {
+    throw new Error('Too many pages of devices');
+  }
+  return [
+    ...devices,
+    ...(await fetchDevicesFromAPI(forceRefresh, data.cursor, page + 1)),
+  ];
 }
 
 /**

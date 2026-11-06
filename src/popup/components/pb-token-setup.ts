@@ -367,7 +367,10 @@ export class PbTokenSetup extends LitElement {
         token: this.token.trim(),
       });
 
-      if (response.ok) {
+      if (response.restarting) {
+        // A different account: the extension restarts and this page closes.
+        this.isSuccess = true;
+      } else if (response.ok) {
         this.isSuccess = true;
 
         // Show success message briefly before refreshing popup

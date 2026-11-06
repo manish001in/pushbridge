@@ -2,11 +2,20 @@
 console.log('Pushbridge background service worker started');
 
 // Import modules
+import { base64ToBytes } from '../popup/fileTransport';
 import { TransferRecord } from '../types/pushbullet';
 
-import { initializeKeepAlive, registerKeepAliveListener } from './alarm';
 import {
-  clearAllChannelCaches,
+  accountReady,
+  inAccountOrder,
+  isSwitchingAccount,
+  requestAccountChange,
+  restartForAccountChange,
+  takeCompletedChange,
+} from './accountCutover';
+import { bumpAccountEpoch, currentAccountEpoch } from './accountEpoch';
+import { getKeepAliveAlarm, initializeKeepAlive, registerKeepAliveListener } from './alarm';
+import {
   initializeChannelManager,
   getOwnedChannels,
   refreshChannelData,
@@ -14,7 +23,9 @@ import {
 } from './channelManager';
 import { getContacts, clearContactCache, getContactByIden } from './contactManager';
 import { contextManager } from './contextManager';
+import { buildContextMenuPush } from './contextMenuPayload';
 import {
+  getDevices,
   ensureChromeDevice,
   getPushableDevices,
   clearDeviceCache,
@@ -30,7 +41,7 @@ import {
   resumeInterruptedUploads,
   cleanupOldPendingUploads,
 } from './fileUploader';
-import { httpClient } from './httpClient';
+import { httpClient, RateLimitError } from './httpClient';
 import {
   handleUserDismissal,
   isMirrorNotificationId,
@@ -39,9 +50,7 @@ import {
   getActiveMirrors,
 } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
-import { getNotificationPrefs } from './notificationPrefs';
 import { formatToThreeDecimals } from './numberUtils';
-import { operationQueue } from './operationQueue';
 import {
   createPush,
   getPushHistory,
@@ -52,7 +61,20 @@ import {
   requestUpload,
   createFilePush,
 } from './pushManager';
-import { initializeQueue, enqueue, getQueueStatus, clearQueue } from './queue';
+import {
+  addTransferRecord,
+  forgetPushNotification,
+  handlePushNotificationClick,
+  showPushNotification,
+} from './pushNotifications';
+import {
+  initializeQueue,
+  enqueue,
+  getQueueStatus,
+  clearQueue,
+  checkGuidDelivered,
+  type EnqueueOutcome,
+} from './queue';
 import { initializeQuotaMonitor, registerQuotaListener } from './quotaMonitor';
 import { rateLimitManager } from './rateLimitManager';
 // SMS imports moved to simple system
@@ -61,12 +83,20 @@ import {
   getCachedSmsData,
   getThreadById,
   reloadSmsThread,
+  markConversationRead,
 } from './simpleSmsSync';
 import { sendSms } from './smsBridge';
 import {
+  restoreSmsRetryAlarm,
+  runSmsNotificationRetries,
+  SMS_RETRY_ALARM,
+} from './smsNotificationIdentity';
+import {
+  PUSH_SCAN_ALARM,
+  restorePushScanAlarm,
+  resumePushScan,
   initializeWebSocket,
   connectOnWorkerStart,
-  disconnectWebSocket,
   isWebSocketHealthy,
   getConnectionStatus,
 } from './socket';
@@ -80,6 +110,9 @@ import { unifiedNotificationTracker } from './unifiedNotificationTracker';
 
 // Storage key for tracking popup open time
 const POPUP_LAST_OPENED_KEY = 'pb_last_popup_opened';
+const SMS_SYNC_ALARM = 'pb_sms_sync';
+const DEVICE_SETUP_ALARM = 'pb_device_setup';
+const SMS_SYNC_INTERVAL_MINUTES = 6 * 60;
 const ONE_HOUR_MS = 3600000; // 1 hour in milliseconds
 
 
@@ -89,34 +122,11 @@ const ONE_HOUR_MS = 3600000; // 1 hour in milliseconds
  */
 async function initializeSmsSync(): Promise<void> {
   try {
-    console.log('[Background] Initializing SMS sync...');
-
-    const defaultDevice = await getDefaultSmsDevice();
-    if (defaultDevice) {
-      console.log(
-        `[Background] Default SMS device: ${defaultDevice.nickname} (${defaultDevice.iden})`
-      );
-
-      // Initial sync
-      // SMS sync now handled by simple system via triggerSmsSync()
-      console.log(
-        `[Background] SMS-capable device found: ${defaultDevice.nickname}`
-      );
-
-      // Periodic SMS sync every 6 hours using simple system
-      setInterval(
-        async () => {
-          await triggerSmsSync('periodic');
-        },
-        6 * 60 * 60 * 1000
-      ); // 6 hours
-
-      console.log('[Background] SMS sync initialized with 6-hour interval');
-    } else {
-      console.log(
-        '[Background] No SMS-capable device found, skipping SMS sync'
-      );
-    }
+    // An alarm, because a timer would be lost whenever the worker stops. It runs even
+    // with no phone yet: the sync skips quietly until there is one.
+    await chrome.alarms.create(SMS_SYNC_ALARM, {
+      periodInMinutes: SMS_SYNC_INTERVAL_MINUTES,
+    });
   } catch (error) {
     console.error('[Background] Failed to initialize SMS sync:', error);
   }
@@ -134,6 +144,9 @@ function ensureWorkerRuntime(): Promise<void> {
 }
 
 async function initializeWorkerRuntime(): Promise<void> {
+  // Before anything reads account state. If it fails, nothing else starts.
+  await accountReady;
+
   try {
     // Initialize HTTP client with rate limiting
     await httpClient.initialize();
@@ -191,6 +204,10 @@ async function initializeWorkerRuntime(): Promise<void> {
     // Initialize unified notification tracker
     await unifiedNotificationTracker.initialize();
 
+    // Nothing can still be uploading in a worker that just started, so any record
+    // left over was interrupted.
+    await resumeInterruptedUploads();
+
     // Initialize WebSocket connection
     await connectOnWorkerStart();
   } catch (error) {
@@ -223,11 +240,6 @@ async function initializeStartupServices(): Promise<void> {
     await cleanupExpiredMirrors();
     await reconstructMirrors();
 
-    // Resume interrupted uploads
-    const resumedCount = await resumeInterruptedUploads();
-    if (resumedCount > 0) {
-      console.log(`Resumed ${resumedCount} interrupted uploads`);
-    }
 
     // Clean up old pending uploads
     await cleanupOldPendingUploads();
@@ -236,6 +248,69 @@ async function initializeStartupServices(): Promise<void> {
     await createContextMenus();
   } catch (error) {
     console.error('Failed to initialize background services:', error);
+  }
+}
+
+/** What can't wait for an install or browser start, which won't necessarily come. */
+async function finishWorkerStart(): Promise<void> {
+  const change = takeCompletedChange();
+
+  // Alarms don't always survive, and they drive everything below while idle.
+  if (!(await getKeepAliveAlarm())) {
+    await initializeStartupServices();
+  }
+  await restorePushScanAlarm();
+  await restoreSmsRetryAlarm();
+  await ensureDeviceRegistered();
+
+  if (!change) {
+    return;
+  }
+
+  try {
+    if (change.reset) {
+      await chrome.runtime.openOptionsPage();
+      return;
+    }
+    await fetchInitialDataAfterTokenVerification();
+    await chrome.windows.create({
+      url: chrome.runtime.getURL('popup.html?windowMode=1'),
+      type: 'popup',
+      width: 500,
+      height: 700,
+    });
+  } catch (error) {
+    console.error('Failed to finish setting up after an account change:', error);
+  }
+}
+
+/** The retry alarm: each phone with a failed notification, until it's shown. */
+function retrySmsNotifications(): Promise<void> {
+  return runSmsNotificationRetries(async (deviceIden, full) => {
+    const devices = await getDevices();
+    if (!devices.some(device => device.iden === deviceIden)) {
+      // That phone is gone, and so is any way of showing its message.
+      return Number.MAX_SAFE_INTEGER;
+    }
+    const data = await syncAllSmsData(deviceIden, { incremental: !full });
+    return data.lastCompleteSync ?? 0;
+  });
+}
+
+/**
+ * Sends need this browser registered. Worth checking on every start: if it failed once,
+ * or the worker stopped first, every send would fail with nothing to fix it.
+ */
+async function ensureDeviceRegistered(): Promise<void> {
+  const token = await getLocal<string>('pb_token');
+  if (!token || (await getLocal<string>('pb_device_iden'))) {
+    return;
+  }
+  try {
+    await ensureChromeDevice();
+  } catch (error) {
+    console.error('Failed to register this browser, will retry:', error);
+    await chrome.alarms.create(DEVICE_SETUP_ALARM, { delayInMinutes: 1 });
   }
 }
 
@@ -252,42 +327,29 @@ chrome.runtime.onStartup.addListener(() => {
 // Runs on every worker start. Listeners must be registered synchronously or
 // Chrome won't deliver the event that woke the worker.
 registerKeepAliveListener();
+chrome.alarms.onAlarm.addListener(alarm => {
+  void accountReady.then(() => {
+    if (alarm.name === SMS_SYNC_ALARM) {
+      void triggerSmsSync('periodic');
+    } else if (alarm.name === SMS_RETRY_ALARM) {
+      void retrySmsNotifications();
+    } else if (alarm.name === PUSH_SCAN_ALARM) {
+      void resumePushScan();
+    } else if (alarm.name === DEVICE_SETUP_ALARM) {
+      void ensureDeviceRegistered();
+    }
+  });
+});
 registerQuotaListener();
 registerTokenHealthListener();
-void ensureWorkerRuntime();
-
-// Handle notification clicks
-chrome.notifications.onClicked.addListener(async notificationId => {
-  try {
-    const notificationData = await getLocal<{
-      pushIden: string;
-      url?: string;
-      type: string;
-    }>(`notification_${notificationId}`);
-
-    if (!notificationData) {
-      console.log('No notification data found for:', notificationId);
-      return;
-    }
-
-    if (notificationData.url) {
-      // Open link in new tab
-      await chrome.tabs.create({ url: notificationData.url });
-    } else {
-      // Focus popup for note pushes
-      await chrome.action.openPopup();
-    }
-
-    // Clear notification data
-    await setLocal(`notification_${notificationId}`, null);
-  } catch (error) {
-    console.error('Failed to handle notification click:', error);
-  }
-});
+void ensureWorkerRuntime()
+  .then(finishWorkerStart)
+  .catch(error => console.error('Worker start failed:', error));
 
 // Handle notification button clicks (dismiss)
 chrome.notifications.onButtonClicked.addListener(
   async (notificationId, buttonIndex) => {
+    await accountReady;
     try {
       const notificationData = await getLocal<{
         pushIden: string;
@@ -311,58 +373,48 @@ chrome.notifications.onButtonClicked.addListener(
   }
 );
 
-// Handle mirror notification clicks and dismissals
+// Handle notification clicks. Keep this the only click listener: a second one
+// would act on the same click, and open a link twice.
 chrome.notifications.onClicked.addListener(async notificationId => {
-  // Check if this is a mirror notification
-  const isMirrorNotification = await isMirrorNotificationId(notificationId);
-
-  if (isMirrorNotification) {
-    // Handle mirror notification click (dismiss)
+  await accountReady;
+  if (await isMirrorNotificationId(notificationId)) {
     await handleUserDismissal(notificationId);
   } else {
-    // Handle regular push notification click (existing logic)
-    try {
-      const notificationData = await getLocal<{
-        pushIden: string;
-        url?: string;
-        type: string;
-      }>(`notification_${notificationId}`);
-
-      if (!notificationData) {
-        console.log('No notification data found for:', notificationId);
-        return;
-      }
-
-      if (notificationData.url) {
-        // Open link in new tab
-        await chrome.tabs.create({ url: notificationData.url });
-      } else {
-        // Focus popup for note pushes
-        await chrome.action.openPopup();
-      }
-
-      // Clear notification data
-      await setLocal(`notification_${notificationId}`, null);
-    } catch (error) {
-      console.error('Failed to handle notification click:', error);
-    }
+    await handlePushNotificationClick(notificationId);
   }
 });
 
-// Handle mirror notification dismissals (when user closes notification)
+// Handle notifications the user closes
 chrome.notifications.onClosed.addListener(async (notificationId, byUser) => {
-  if (byUser) {
-    // Check if this is a mirror notification
-    const isMirrorNotification = await isMirrorNotificationId(notificationId);
-
-    if (isMirrorNotification) {
-      // Handle mirror notification dismissal
+  await accountReady;
+  if (await isMirrorNotificationId(notificationId)) {
+    // Only the user closing it means dismissing it on the phone too.
+    if (byUser) {
       await handleUserDismissal(notificationId);
     }
+  } else {
+    // Auto-dismissed ones also need their click record removed.
+    await forgetPushNotification(notificationId);
   }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  accountReady.then(
+    () => handleMessage(message, sendResponse),
+    () =>
+      sendResponse({
+        ok: false,
+        success: false,
+        error: 'Pushbridge is restarting. Please try again.',
+      })
+  );
+  return true; // Keep message channel open for async response
+});
+
+function handleMessage(
+  message: any,
+  sendResponse: (response: any) => void
+): void {
   // Messages can hold tokens and message text, so only the command is logged.
   console.log('📨 [Background] Received message:', message?.cmd);
 
@@ -466,11 +518,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         message.payload.message,
         sendResponse,
         message.payload.deviceIden,
-        message.payload.attachments
+        message.payload.attachments,
+        message.payload.guid
       );
       break;
     case 'MARK_CONVERSATION_READ':
-      handleMarkConversationRead(message.conversationId, sendResponse);
+      handleMarkConversationRead(
+        message.conversationId,
+        message.deviceIden,
+        sendResponse
+      );
       break;
     case 'GET_DEFAULT_SMS_DEVICE':
       handleGetDefaultSmsDevice(sendResponse);
@@ -534,9 +591,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     default:
       sendResponse({ status: 'unknown_command' });
   }
-
-  return true; // Keep message channel open for async response
-});
+}
 
 /**
  * Handle token verification from popup
@@ -566,9 +621,32 @@ async function handleTokenVerification(
       const userData = await response.json();
       console.log('Token verified successfully for user:', userData.name);
 
-      // Store the token and user ID
-      await setLocal('pb_token', token);
-      await setLocal('pb_user_iden', userData.iden);
+      // Signing back in as the same user keeps everything. Another account restarts the
+      // extension first, so nothing of the old one can carry over.
+      if (isSwitchingAccount()) {
+        sendResponse({ ok: false, error: 'Pushbridge is restarting. Please try again.' });
+        return;
+      }
+      const changedAccount = await inAccountOrder(async () => {
+        const previous = await getLocal<string>('pb_user_iden');
+        if (previous && previous !== userData.iden) {
+          await requestAccountChange({ token, userIden: userData.iden });
+          return true;
+        }
+        await chrome.storage.local.set({
+          pb_token: token,
+          pb_user_iden: userData.iden,
+        });
+        if (previous !== userData.iden) {
+          bumpAccountEpoch();
+        }
+        return false;
+      });
+      if (changedAccount) {
+        sendResponse({ ok: true, restarting: true, user: userData });
+        restartForAccountChange();
+        return;
+      }
 
       // Register Chrome device
       try {
@@ -782,54 +860,101 @@ async function handleClearContactCache(sendResponse: (response: any) => void) {
  * Handle push creation requests from popup
  */
 async function handleCreatePush(
-  payload: PushPayload,
+  payload: PushPayload & { isRetry?: boolean; attemptStartedAt?: number },
   sendResponse: (response: any) => void
 ) {
+  const accountEpoch = currentAccountEpoch();
+  const startedAt = Date.now();
+  // Fixed before the first attempt, so a retry can tell if that one went through.
+  const { isRetry, attemptStartedAt, ...push } = payload;
+  push.guid = push.guid ?? crypto.randomUUID();
+
+  /** Saved for later, without keeping the composer waiting for it to go out. */
+  const saveForLater = async (mayHaveBeenSent: boolean) => {
+    respondToQueued(
+      await enqueue(
+        {
+          type: 'pushSend',
+          payload: push,
+          mayHaveBeenSent,
+          firstAttemptAt: attemptStartedAt ?? startedAt,
+        },
+        { waitForSend: false, accountEpoch }
+      )
+    );
+  };
+
+  const respondToQueued = (outcome: EnqueueOutcome) => {
+    if (outcome.status === 'rejected') {
+      sendResponse({ ok: false, error: outcome.error });
+    } else {
+      sendResponse({ ok: true, queued: outcome.status === 'queued' });
+    }
+  };
+
   try {
-    // Check if we're online
-    if (!isWebSocketHealthy()) {
-      // Queue the operation for later
-      await enqueue({
-        type: 'pushSend',
-        payload,
-      });
-      sendResponse({
-        ok: true,
-        queued: true,
-        message: 'Push queued for later delivery',
-      });
+    // Before anything that could wait for quota, including the check just below.
+    if (rateLimitManager.isBackoffActive() || !tokenBucket.canConsume(1)) {
+      await saveForLater(!!isRetry);
       return;
     }
 
-    const push = await createPush(payload);
+    // The user retried after a failure that may have been a lost response.
+    if (isRetry) {
+      const delivery = await checkGuidDelivered(push.guid, attemptStartedAt);
+      if (delivery === 'delivered') {
+        sendResponse({ ok: true, queued: false });
+        return;
+      }
+      if (delivery === 'unknown') {
+        await saveForLater(true);
+        return;
+      }
+    }
+
+    // Check if we're online
+    if (!isWebSocketHealthy()) {
+      await saveForLater(false);
+      return;
+    }
+
+    // Failures are reported to the composer that's waiting for this answer.
+    const created = await createPush(push, {
+      silent: true,
+      accountEpoch,
+      failFast: true,
+    });
 
     // Broadcast to any listening popups that a new push was created
     try {
       chrome.runtime.sendMessage({
         cmd: 'pushCreated',
         source: 'background',
-        push: push,
+        push: created,
       });
     } catch {
       // Ignore if no popup is listening
     }
 
-    sendResponse({ ok: true, push });
+    sendResponse({ ok: true, push: created });
   } catch (error) {
     console.error('Failed to create push:', error);
 
-    // If it's a network error, queue the operation
-    if (error instanceof Error && error.message.includes('network')) {
-      await enqueue({
-        type: 'pushSend',
-        payload,
-      });
-      sendResponse({
-        ok: true,
-        queued: true,
-        message: 'Push queued due to network error',
-      });
-      return;
+    // No answer from the server. It may still have accepted this, so keep it and
+    // let its send ID settle that. Chrome reports this as a TypeError.
+    const noAnswer =
+      error instanceof TypeError ||
+      (error instanceof Error && /network/i.test(error.message));
+    // Refused for now, not for good: the queue sends it once the backoff ends.
+    const rateLimited = error instanceof RateLimitError;
+    if (noAnswer || rateLimited) {
+      try {
+        // A clear refusal wasn't delivered, unless an earlier attempt already might be.
+        await saveForLater(noAnswer || !!isRetry);
+        return;
+      } catch (queueError) {
+        console.error('Failed to queue push:', queueError);
+      }
     }
 
     sendResponse({
@@ -959,7 +1084,13 @@ async function handleGetEnhancedPushHistory(
               );
 
               // Show Chrome notification (only if it passes device check)
-              const notificationShown = await showPushNotification(push);
+              let notificationShown: boolean;
+              try {
+                notificationShown = await showPushNotification(push);
+              } catch {
+                // Not shown. Leave it unprocessed so the next check retries it.
+                continue;
+              }
 
               // Only update badge if notification was actually shown or it's a valid push for this device
               if (
@@ -1021,7 +1152,8 @@ async function handleDismissPush(
 
     // Update notification badge when push is dismissed
     console.log('🔔 [Background] Push dismissed, updating badge');
-    await notificationBadge.addPushNotifications(-1);
+    // The badge isn't touched: opening the popup already cleared what this row
+    // counted for, so a decrement would take away a newer push instead.
 
     sendResponse({ ok: true });
   } catch (error) {
@@ -1042,7 +1174,8 @@ async function handleDeletePush(
 
     // Update notification badge when push is deleted
     console.log('🔔 [Background] Push deleted, updating badge');
-    await notificationBadge.addPushNotifications(-1);
+    // The badge isn't touched: opening the popup already cleared what this row
+    // counted for, so a decrement would take away a newer push instead.
 
     sendResponse({ ok: true });
   } catch (error) {
@@ -1130,7 +1263,13 @@ async function handleSyncHistory(sendResponse: (response: any) => void) {
             console.log(
               `🔔 [Background] Processing push: ${push.iden} (type: ${push.type})`
             );
-            const notificationShown = await showPushNotification(push);
+            let notificationShown: boolean;
+            try {
+              notificationShown = await showPushNotification(push);
+            } catch {
+              // Not shown. Leave it unprocessed so the next check retries it.
+              continue;
+            }
 
             // Update badge if notification was shown or it's a valid push for this device
             if (
@@ -1190,160 +1329,6 @@ async function handleSyncHistory(sendResponse: (response: any) => void) {
 }
 
 /**
- * Show Chrome notification for a new push
- */
-async function showPushNotification(push: any): Promise<boolean> {
-  try {
-    console.log('🔔 [Background] Showing push notification:', {
-      type: push.type,
-      title: push.title,
-      channel_tag: push.channel_tag,
-    });
-
-    const chromeDeviceIden = await getLocal<string>('pb_device_iden');
-
-    // Only show notifications for pushes received by our Chrome device
-    if (push.receiver_iden !== chromeDeviceIden) {
-      console.log(
-        '🔔 [Background] Push not for this device, skipping notification'
-      );
-      return false;
-    }
-
-    let title: string;
-    let message: string;
-    let iconUrl: string;
-
-    if (push.type === 'file') {
-      // Handle file push
-      title = 'File received';
-      message = push.file_name || 'New file';
-      iconUrl = '/icons/48.png';
-
-      // Add transfer record for received file
-      const transferRecord: TransferRecord = {
-        id: push.iden,
-        type: 'received',
-        fileName: push.file_name,
-        fileSize: 0, // We don't have file size in the push
-        fileType: push.file_type || 'application/octet-stream',
-        timestamp: Date.now(),
-        status: 'completed',
-        sourceDevice: push.source_device_iden,
-      };
-
-      await addTransferRecord(transferRecord);
-
-      // Auto-download the file
-      await downloadReceivedFile(push);
-    } else if (push.channel_tag) {
-      // Handle channel push (M6-04)
-      title = `${push.channel_tag}: ${push.title ?? 'New post'}`;
-      message = push.body ?? '';
-      iconUrl = '/icons/48.png'; // Use existing icon as fallback
-
-      // Store in recent list with channel badge
-      await addChannelPushToRecent(push);
-    } else {
-      // Handle regular pushes
-      title = push.title || (push.type === 'link' ? push.url : 'New push');
-      message = push.body || '';
-      iconUrl = '/icons/48.png';
-    }
-
-    const notificationId = `push_${push.iden}`;
-
-    const prefs = await getNotificationPrefs();
-    if (prefs.enabled) {
-      await chrome.notifications.create(notificationId, {
-        type: 'basic',
-        iconUrl: iconUrl,
-        title: title,
-        message: message,
-        requireInteraction: !prefs.autoDismiss,
-        silent: !prefs.sound,
-      });
-    }
-
-    // Store notification mapping for click handling
-    await setLocal(`notification_${notificationId}`, {
-      pushIden: push.iden,
-      url: push.url,
-      type: push.type,
-      channelTag: push.channel_tag,
-    });
-
-    // Update notification badge for new push
-    console.log('🔔 [Background] Updating badge for new push notification');
-    await notificationBadge.addPushNotifications(1);
-
-    console.log('🔔 [Background] Push notification created:', notificationId);
-    return true; // Indicate that the notification was shown
-  } catch (error) {
-    console.error('Failed to show push notification:', error);
-    return false; // Indicate that the notification was not shown
-  }
-}
-
-/**
- * Download received file
- */
-async function downloadReceivedFile(filePush: any): Promise<void> {
-  try {
-    // Use chrome.downloads.download for service worker context
-    await chrome.downloads.download({
-      url: filePush.file_url,
-      filename: filePush.file_name,
-    });
-
-    await chrome.notifications.create({
-      type: 'basic',
-      iconUrl: '/icons/48.png',
-      title: 'File Downloaded',
-      message: `File "${filePush.file_name}" has been downloaded`,
-    });
-  } catch (error) {
-    console.error('Failed to download received file:', error);
-
-    // Fallback: just show notification with download link
-    await chrome.notifications.create({
-      type: 'basic',
-      iconUrl: '/icons/48.png',
-      title: 'File Available',
-      message: `Click to view file "${filePush.file_name}"`,
-    });
-  }
-}
-
-/**
- * Add channel push to recent list with channel badge
- */
-async function addChannelPushToRecent(push: any): Promise<void> {
-  try {
-    const recentPushes = (await getLocal<any[]>('pb_recent_pushes')) || [];
-
-    // Add channel badge to push data
-    const pushWithBadge = {
-      ...push,
-      isChannelPush: true,
-      channelTag: push.channel_tag,
-    };
-
-    // Add to beginning of list
-    recentPushes.unshift(pushWithBadge);
-
-    // Keep only last 100 pushes
-    if (recentPushes.length > 500) {
-      recentPushes.splice(500);
-    }
-
-    await setLocal('pb_recent_pushes', recentPushes);
-  } catch (error) {
-    console.error('Failed to add channel push to recent list:', error);
-  }
-}
-
-/**
  * Handle queue status requests
  */
 async function handleGetQueueStatus(sendResponse: (response: any) => void) {
@@ -1389,27 +1374,6 @@ async function handleGetActiveMirrors(sendResponse: (response: any) => void) {
 }
 
 /**
- * Add transfer record to storage
- */
-async function addTransferRecord(transfer: TransferRecord): Promise<void> {
-  try {
-    const transfers = (await getLocal<TransferRecord[]>('pb_transfers')) || [];
-
-    // Add new transfer at the beginning
-    transfers.unshift(transfer);
-
-    // Keep only last 50 transfers
-    if (transfers.length > 50) {
-      transfers.splice(50);
-    }
-
-    await setLocal('pb_transfers', transfers);
-  } catch (error) {
-    console.error('Failed to add transfer record:', error);
-  }
-}
-
-/**
  * Handle file upload request from popup
  */
 async function handleUploadFile(
@@ -1419,27 +1383,51 @@ async function handleUploadFile(
       type: string;
       size: number;
       lastModified: number;
-      buffer: number[];
+      base64: string;
     };
     targetDeviceIden?: string;
     email?: string;
     title?: string;
     body?: string;
     channel_tag?: string;
+    guid?: string;
+    isRetry?: boolean;
+    attemptStartedAt?: number;
   },
   sendResponse: (response: any) => void
 ) {
+  const accountEpoch = currentAccountEpoch();
   try {
-    const { fileData, targetDeviceIden, email, title, body, channel_tag } = payload;
+    const { fileData, targetDeviceIden, email, title, body, channel_tag, isRetry } =
+      payload;
+    const guid = payload.guid ?? crypto.randomUUID();
+
+    // The user retried after a failure that may have been a lost response.
+    if (isRetry) {
+      const delivery = await checkGuidDelivered(guid, payload.attemptStartedAt);
+      if (delivery === 'delivered') {
+        sendResponse({ success: true });
+        return;
+      }
+      if (delivery === 'unknown') {
+        sendResponse({
+          success: false,
+          error:
+            "Couldn't confirm whether the file already went through. Please check before sending it again.",
+        });
+        return;
+      }
+    }
 
     // Reconstruct the File object from the ArrayBuffer data
-    const file = new File([new Uint8Array(fileData.buffer)], fileData.name, {
+    const file = new File([base64ToBytes(fileData.base64)], fileData.name, {
       type: fileData.type,
       lastModified: fileData.lastModified,
     });
 
     // Request upload from Pushbullet
-    const uploadInfo = await requestUpload(file);
+    // Files aren't kept for later, so a rate limit is an immediate, visible failure.
+    const uploadInfo = await requestUpload(file, { failFast: true });
 
     // Upload file to S3 with progress tracking
     const progressCallback: ProgressCallback = progress => {
@@ -1456,6 +1444,16 @@ async function handleUploadFile(
 
     const uploadResult = await uploadFile(uploadInfo, file, progressCallback);
 
+    // A file uploaded for one account must not be sent from another.
+    if (accountEpoch !== currentAccountEpoch()) {
+      sendResponse({
+        ok: false,
+        success: false,
+        error: 'Account changed during upload',
+      });
+      return;
+    }
+
     if (uploadResult.success) {
       // Create file push after successful upload
       const filePush = await createFilePush(
@@ -1466,7 +1464,10 @@ async function handleUploadFile(
         title,
         body,
         channel_tag,
-        email
+        email,
+        guid,
+        accountEpoch,
+        { failFast: true }
       );
 
       // Add transfer record
@@ -1481,7 +1482,15 @@ async function handleUploadFile(
         targetDevice: targetDeviceIden,
       };
 
-      await addTransferRecord(transferRecord);
+      // The file is delivered: nothing after this may report it as failed, or
+      // the user would send it again.
+      sendResponse({ success: true, filePush });
+
+      try {
+        await addTransferRecord(transferRecord);
+      } catch (error) {
+        console.error('Failed to record the file transfer:', error);
+      }
 
       // Broadcast to any listening popups that a new file push was created
       try {
@@ -1494,15 +1503,16 @@ async function handleUploadFile(
         // Ignore if no popup is listening
       }
 
-      // Show success notification
-      await chrome.notifications.create({
-        type: 'basic',
-        iconUrl: '/icons/48.png',
-        title: 'File Sent',
-        message: `File "${file.name}" sent successfully`,
-      });
-
-      sendResponse({ success: true, filePush });
+      try {
+        await chrome.notifications.create({
+          type: 'basic',
+          iconUrl: '/icons/48.png',
+          title: 'File Sent',
+          message: `File "${file.name}" sent successfully`,
+        });
+      } catch (error) {
+        console.error('Failed to show file sent notification:', error);
+      }
     } else {
       sendResponse({ success: false, error: uploadResult.error });
     }
@@ -1525,7 +1535,7 @@ async function handleUploadFileForSms(
       type: string;
       size: number;
       lastModified: number;
-      buffer: number[];
+      base64: string;
     };
     targetDeviceIden?: string;
   },
@@ -1535,13 +1545,14 @@ async function handleUploadFileForSms(
     const { fileData } = payload;
 
     // Reconstruct the File object from the ArrayBuffer data
-    const file = new File([new Uint8Array(fileData.buffer)], fileData.name, {
+    const file = new File([base64ToBytes(fileData.base64)], fileData.name, {
       type: fileData.type,
       lastModified: fileData.lastModified,
     });
 
     // Request upload from Pushbullet
-    const uploadInfo = await requestUpload(file);
+    const accountEpoch = currentAccountEpoch();
+    const uploadInfo = await requestUpload(file, { failFast: true });
 
     // Upload file to S3 with progress tracking
     const progressCallback: ProgressCallback = progress => {
@@ -1557,6 +1568,16 @@ async function handleUploadFileForSms(
     };
 
     const uploadResult = await uploadFile(uploadInfo, file, progressCallback);
+
+    // A file uploaded for one account must not be sent from another.
+    if (accountEpoch !== currentAccountEpoch()) {
+      sendResponse({
+        ok: false,
+        success: false,
+        error: 'Account changed during upload',
+      });
+      return;
+    }
 
     if (uploadResult.success) {
       // Return just the file URL without creating a push notification
@@ -1713,99 +1734,36 @@ async function createContextMenus() {
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  await accountReady;
   console.log('🔄 [Background] Context menu clicked:', info, tab);
   if (!tab) return;
 
   console.log('🔄 [Background] Context menu processing:', info, tab);
   try {
-    const menuId = info.menuItemId as string;
-    let payload: PushPayload;
-    let baseAction: string;
-
-    // Determine base payload based on menu ID prefix
-    if (menuId.startsWith('push-page')) {
-      baseAction = 'push-page';
-      payload = {
-        type: 'link',
-        url: tab.url!,
-        title: tab.title,
-        body: `Page shared from ${new URL(tab.url!).hostname}`,
-      };
-    } else if (menuId.startsWith('push-link')) {
-      baseAction = 'push-link';
-      payload = {
-        type: 'link',
-        url: info.linkUrl!,
-        title: (info as any).linkText || info.linkUrl,
-        body: `Link shared from ${new URL(tab.url!).hostname}`,
-      };
-    } else if (menuId.startsWith('push-image')) {
-      baseAction = 'push-image';
-      payload = {
-        type: 'link',
-        url: info.srcUrl!,
-        title: (info as any).altText || 'Image',
-        body: `Image shared from ${new URL(tab.url!).hostname}`,
-      };
-    } else if (menuId.startsWith('push-selection')) {
-      baseAction = 'push-selection';
-      payload = {
-        type: 'note',
-        body: info.selectionText!,
-        title: `Text from ${new URL(tab.url!).hostname}`,
-      };
-    } else {
-      console.warn('🔄 [Background] Unknown context menu ID:', menuId);
+    const push = buildContextMenuPush(info.menuItemId as string, info, tab);
+    if (!push) {
+      console.warn('🔄 [Background] Unknown context menu ID:', info.menuItemId);
       return;
     }
 
-    // Handle targeting based on menu ID structure
-    if (menuId.endsWith('-all')) {
-      // Send to all devices (default behavior) - no targeting needed
-      console.log('🔄 [Background] Sending to all devices');
-    } else if (menuId.includes('-device-')) {
-      // Extract device iden from menu ID
-      const deviceMatch = menuId.match(new RegExp(`${baseAction}-device-(.+)`));
-      if (deviceMatch && deviceMatch[1]) {
-        const deviceIden = deviceMatch[1];
-        payload.targetDeviceIden = deviceIden;
-        console.log('🔄 [Background] Sending to device:', deviceIden);
-      } else {
-        console.error('🔄 [Background] Failed to extract device ID from menu ID:', menuId);
+    const { payload, contactIden } = push;
+    if (contactIden) {
+      const contact = await getContactByIden(contactIden);
+      if (!contact) {
+        console.error('🔄 [Background] Contact not found for ID:', contactIden);
         return;
       }
-    } else if (menuId.includes('-contact-')) {
-      // Extract contact iden from menu ID
-      const contactMatch = menuId.match(new RegExp(`${baseAction}-contact-(.+)`));
-      if (contactMatch && contactMatch[1]) {
-        const contactIden = contactMatch[1];
-        const contact = await getContactByIden(contactIden);
-        if (contact) {
-          payload.email = contact.email;
-          console.log('🔄 [Background] Sending to contact:', contact.email);
-        } else {
-          console.error('🔄 [Background] Contact not found for ID:', contactIden);
-          return;
-        }
-      } else {
-        console.error('🔄 [Background] Failed to extract contact ID from menu ID:', menuId);
-        return;
-      }
-    } else {
-      // This is a parent menu item (like 'push-page' without suffix)
-      // Send to all devices by default
-      console.log('🔄 [Background] Parent menu clicked, sending to all devices');
+      payload.email = contact.email;
     }
 
-    // Create the push
-    await createPush(payload);
+    // Through the saved queue, so a rate limit or worker restart can't lose it.
+    await enqueue({ type: 'pushSend', payload }, { waitForSend: false });
 
-    // Show success notification
     await chrome.notifications.create({
       type: 'basic',
       iconUrl: '/icons/48.png',
-      title: 'Push Sent',
-      message: 'Your push has been sent successfully!',
+      title: 'Push queued',
+      message: 'It will send as soon as it can.',
     });
   } catch (error) {
     console.error('❌ [Background] Failed to handle context menu click:', error);
@@ -1924,8 +1882,10 @@ export async function triggerSmsSync(reason: string = 'manual'): Promise<void> {
       return;
     }
 
-    // Always sync when explicitly triggered
-    await syncAllSmsData(defaultDevice.iden);
+    // Opening the popup only needs what changed. The periodic sync checks everything.
+    await syncAllSmsData(defaultDevice.iden, {
+      incremental: reason === 'popup_open',
+    });
   } catch (error) {
     console.error(`❌ [Background] SMS sync failed (${reason}):`, error);
   }
@@ -1936,11 +1896,18 @@ export async function triggerSmsSync(reason: string = 'manual'): Promise<void> {
  */
 async function handleMarkConversationRead(
   conversationId: string,
+  deviceIden: string | undefined,
   sendResponse: (response: any) => void
 ) {
   try {
-    // Conversation read marking now handled by simple system
     console.log(`[Background] Marking conversation ${conversationId} as read`);
+    const targetDevice = deviceIden ?? (await getDefaultSmsDevice())?.iden;
+    if (!targetDevice) {
+      sendResponse({ success: false, error: 'No SMS device available' });
+      return;
+    }
+
+    await markConversationRead(targetDevice, conversationId);
     sendResponse({ success: true });
   } catch (error) {
     console.error('Failed to mark conversation as read:', error);
@@ -2110,7 +2077,8 @@ async function handleSendSms(
   message: string,
   sendResponse: (response: any) => void,
   deviceIden?: string,
-  attachments?: Array<{ content_type: string; name: string; url: string }>
+  attachments?: Array<{ content_type: string; name: string; url: string }>,
+  guid?: string
 ) {
   try {
     console.log('📱 [Background] Sending SMS:', {
@@ -2138,12 +2106,16 @@ async function handleSendSms(
     }
 
     // Send SMS using smsBridge
-    await sendSms(targetDeviceIden, conversationId, message, attachments);
+    await sendSms(targetDeviceIden, conversationId, message, attachments, guid);
 
     console.log('📱 [Background] SMS sent successfully to:', conversationId);
     sendResponse({ success: true });
   } catch (error) {
-    console.error('📱 [Background] Failed to send SMS:', error);
+    // The error can contain a phone number, so only its type is logged.
+    console.error(
+      '📱 [Background] Failed to send SMS:',
+      error instanceof Error ? error.name : 'unknown'
+    );
 
     // Handle specific error types
     if (error instanceof Error) {
@@ -2537,55 +2509,14 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
   try {
     console.log('🧹 [Background] Starting complete data clear...');
 
-    // Stop the stream first, or it keeps delivering the old account's
-    // notifications and writing to storage after the reset.
-    disconnectWebSocket();
-    operationQueue.clearQueue();
-    await clearAllChannelCaches();
-
-    // Clear ALL storage from chrome.storage.local (this clears everything)
-    await chrome.storage.local.clear();
-    console.log('🧹 [Background] All chrome.storage.local data cleared');
-
-    // Clear ALL storage from chrome.storage.session
-    await chrome.storage.session.clear();
-    console.log('🧹 [Background] All chrome.storage.session data cleared');
-
-    // Reset essential in-memory state
-    try {
-      // Reset token bucket
-      tokenBucket.reset();
-      console.log('🧹 [Background] Token bucket reset');
-    } catch (error) {
-      console.warn('🧹 [Background] Failed to reset token bucket:', error);
-    }
-
-    try {
-      // Reset rate limit manager
-      await rateLimitManager.clearState();
-      console.log('🧹 [Background] Rate limit manager reset');
-    } catch (error) {
-      console.warn('🧹 [Background] Failed to reset rate limit manager:', error);
-    }
-
-    try {
-      // Reset notification tracker
-      await unifiedNotificationTracker.clearAllNotifications();
-      console.log('🧹 [Background] Notification tracker reset');
-    } catch (error) {
-      console.warn('🧹 [Background] Failed to reset notification tracker:', error);
-    }
-
-    // Clear any active operations
-    try {
-      await clearQueue();
-      console.log('🧹 [Background] Operation queue cleared');
-    } catch (error) {
-      console.warn('🧹 [Background] Failed to clear operation queue:', error);
-    }
-
-    console.log('🎉 [Background] All extension data cleared successfully');
-    sendResponse({ success: true, message: 'All extension data has been cleared' });
+    // Cleared at the next start, once nothing from before can still be running.
+    await inAccountOrder(() => requestAccountChange({ reset: true }));
+    sendResponse({
+      success: true,
+      restarting: true,
+      message: 'All extension data has been cleared',
+    });
+    restartForAccountChange();
   } catch (error) {
     console.error('❌ [Background] Failed to clear all data:', error);
     sendResponse({ 
@@ -2602,8 +2533,20 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
 async function handleTestWebSocket(sendResponse: (response: any) => void) {
   try {
     // Get the last heartbeat time from the socket manager
-    const lastHeartbeat = await getLastHeartbeat();
-    sendResponse({ ok: true, lastHeartbeat });
+    const status = getConnectionStatus();
+    if (!isWebSocketHealthy()) {
+      sendResponse({
+        ok: false,
+        error: status.isPolling
+          ? 'Not connected to the stream; checking for pushes periodically'
+          : 'Not connected to the stream',
+      });
+      return;
+    }
+    sendResponse({
+      ok: true,
+      lastHeartbeat: new Date(status.lastHeartbeat).toISOString(),
+    });
   } catch (error) {
     console.error('WebSocket test failed:', error);
     sendResponse({ ok: false, error: 'WebSocket test failed' });
@@ -2675,15 +2618,6 @@ async function handlePopupOpen(sendResponse: (response: any) => void) {
 }
 
 /**
- * Get last WebSocket heartbeat time
- */
-async function getLastHeartbeat(): Promise<string> {
-  // This would need to be implemented in the socket manager
-  // For now, return a placeholder
-  return new Date().toISOString();
-}
-
-/**
  * Handle getting unified tracker state for debugging
  */
 async function handleGetUnifiedTrackerState(
@@ -2707,7 +2641,7 @@ async function collectDebugLog(): Promise<string> {
   // Add basic system info
   logEntries.push(`=== Pushbridge Debug Log ===`);
   logEntries.push(`Generated: ${new Date().toISOString()}`);
-  logEntries.push(`Extension Version: 1.0.0`);
+  logEntries.push(`Extension Version: ${chrome.runtime.getManifest().version}`);
   logEntries.push(`Chrome Version: Chrome Extension`);
   logEntries.push(``);
 
@@ -2745,9 +2679,14 @@ async function collectDebugLog(): Promise<string> {
 
   // Add recent console logs (this would need to be implemented with a log collector)
   logEntries.push(`=== Recent Activity ===`);
-  logEntries.push(`WebSocket status: Connected`); // This would be dynamic
+  const wsStatus = getConnectionStatus();
+  logEntries.push(
+    `WebSocket status: ${wsStatus.isConnected ? 'Connected' : wsStatus.isPolling ? 'Polling' : 'Disconnected'}`
+  );
   logEntries.push(`Last push received: ${new Date().toISOString()}`);
-  logEntries.push(`Queue status: Active`);
+  logEntries.push(
+    `Queue: ${(await getQueueStatus()).pendingCount ?? 'unknown'} pending`
+  );
 
   return logEntries.join('\n');
 }

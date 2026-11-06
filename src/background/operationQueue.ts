@@ -30,6 +30,8 @@ export interface PendingOperation {
   options: RequestInit;
 }
 
+const LOST_SENDS_KEY = 'pb_unreported_legacy_sends';
+
 class OperationQueue {
   private queue: QueuedOperation[] = [];
   private isProcessing: boolean = false;
@@ -315,8 +317,10 @@ class OperationQueue {
         console.error(
           `[OperationQueue] Rate limited (429) for operation ${operation.id}`
         );
+        // Processing keeps running: each tick skips until the backoff ends, and then
+        // this retry goes out. Nothing else would restart it.
+        rateLimitManager.parseHeaders(response);
         rateLimitManager.startBackoff();
-        this.stopProcessing();
 
         // Re-queue the operation if retry count not exceeded
         if (operation.retryCount < this.maxRetryCount) {
@@ -406,56 +410,56 @@ class OperationQueue {
   /**
    * Persist queue to storage
    */
-  private async persistQueue(): Promise<void> {
-    try {
-      // Only persist operation data, not resolve/reject functions
-      const queueData = this.queue.map(op => ({
-        id: op.id,
-        url: op.url,
-        options: op.options,
-        timestamp: op.timestamp,
-        retryCount: op.retryCount,
-      }));
-
-      await setLocal('pb_operation_queue', queueData);
-    } catch (error) {
-      console.error('Failed to persist operation queue:', error);
-    }
-  }
+  /**
+   * Requests aren't kept across worker restarts. A restored request has no caller
+   * waiting on it, so its follow-up work never runs, and a queued send would go out
+   * twice because `pb_pending_ops` is already its durable record. Callers whose
+   * worker stopped see the failure and can retry.
+   */
+  private async persistQueue(): Promise<void> {}
 
   /**
-   * Load queue from storage
+   * Older versions saved requests here, with no caller left to finish them. Replaying
+   * could send them twice, so they go, but not silently: the count is saved first, so
+   * the user still hears about them if the notification or the worker fails.
    */
   async loadQueue(): Promise<void> {
     try {
-      const queueData =
-        await getLocal<Array<Omit<QueuedOperation, 'resolve' | 'reject'>>>(
-          'pb_operation_queue'
+      const legacy = await getLocal<any[]>('pb_operation_queue');
+      if (Array.isArray(legacy) && legacy.length) {
+        const pending =
+          (await getLocal<any[]>('pb_pending_ops')) ?? [];
+        const known = new Set(
+          pending.map((op: any) => op.payload?.guid).filter(Boolean)
         );
+        const lost = legacy.filter(entry => {
+          if (entry.options?.method !== 'POST') return false;
+          try {
+            // No ID proves nothing: it doesn't mean the saved queue has this one.
+            const guid = JSON.parse(entry.options.body)?.guid;
+            return !guid || !known.has(guid);
+          } catch {
+            return true;
+          }
+        }).length;
+        const earlier = (await getLocal<number>(LOST_SENDS_KEY)) ?? 0;
+        await setLocal(LOST_SENDS_KEY, earlier + lost);
+      }
+      await setLocal('pb_operation_queue', null);
 
-      if (queueData && Array.isArray(queueData)) {
-        // Convert back to QueuedOperation format (without resolve/reject)
-        // Keep anything queued while storage was being read; it has live callers.
-        this.queue = [
-          ...queueData.map(op => ({
-            ...op,
-            resolve: () => {}, // Placeholder - these operations will be lost on restart
-            reject: () => {}, // This is expected behavior for service worker restarts
-          })),
-          ...this.queue.filter(
-            current => !queueData.some(stored => stored.id === current.id)
-          ),
-        ];
-
-        console.log(`Loaded ${this.queue.length} operations from storage`);
-
-        // Start processing if there are operations
-        if (this.queue.length > 0) {
-          this.startProcessing();
-        }
+      const unreported = await getLocal<number>(LOST_SENDS_KEY);
+      if (unreported) {
+        await chrome.notifications.create('pb_legacy_sends', {
+          type: 'basic',
+          iconUrl: 'icons/48.png',
+          title: 'Some queued sends may not have gone out',
+          message:
+            'They were waiting when Pushbridge updated. Please check and send them again if needed.',
+        });
+        await setLocal(LOST_SENDS_KEY, 0);
       }
     } catch (error) {
-      console.error('Failed to load operation queue:', error);
+      console.error('Failed to clear saved operation queue:', error);
     }
   }
 

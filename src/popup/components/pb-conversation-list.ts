@@ -27,6 +27,11 @@ export class PbConversationList extends LitElement {
 
   static styles = css`
     /* === Light mode base === */
+    .conversation-item:focus-visible {
+      outline: 2px solid #3b82f6;
+      outline-offset: -2px;
+    }
+
     :host {
       display: flex;
       flex-direction: column;
@@ -422,7 +427,11 @@ export class PbConversationList extends LitElement {
     // Dispatch custom event to parent
     this.dispatchEvent(
       new CustomEvent('conversation-selected', {
-        detail: { conversationId, conversationName },
+        detail: {
+          conversationId,
+          conversationName,
+          deviceIden: conversation?.deviceIden,
+        },
         bubbles: true,
         composed: true,
       })
@@ -432,7 +441,14 @@ export class PbConversationList extends LitElement {
     chrome.runtime.sendMessage({
       cmd: 'MARK_CONVERSATION_READ',
       conversationId,
+      // The phone this list is showing, even if the default has since changed.
+      deviceIden: this.conversations.find(c => c.id === conversationId)
+        ?.deviceIden,
     });
+    this.conversations = this.conversations.map(c =>
+      c.id === conversationId ? { ...c, unreadCount: 0 } : c
+    );
+    this.filterConversations();
   }
 
   getInitials(name: string): string {
@@ -539,7 +555,15 @@ export class PbConversationList extends LitElement {
               this.selectedConversationId
                 ? 'selected'
                 : ''}"
+              role="button"
+              tabindex="0"
               @click="${() => this.selectConversation(conversation.id)}"
+              @keydown="${(e: KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  this.selectConversation(conversation.id);
+                }
+              }}"
             >
               <div class="avatar">${this.getInitials(conversation.name)}</div>
 

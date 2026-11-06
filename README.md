@@ -18,7 +18,7 @@ A Manifest V3 compatible Chrome extension that replicates core Pushbullet functi
 
 ## 📋 Requirements
 
-- Chrome 110 or higher
+- Chrome 116 or higher
 - Pushbullet account with Access Token
 - Android device with Pushbullet app (for SMS/notification mirroring)
 

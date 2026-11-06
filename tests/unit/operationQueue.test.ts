@@ -119,6 +119,37 @@ describe('OperationQueue Deduplication', () => {
       expect(queuedOps[0].url).toBe('https://api.pushbullet.com/v2/permanents/device1_threads');
     });
 
+    it('every caller of a deduplicated request can read its own response', async () => {
+      const url = 'https://api.pushbullet.com/v2/permanents/device1_threads';
+      // Jest's environment has no fetch Response, so this keeps its rule: one read.
+      const response = (): any => {
+        let used = false;
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: () => null },
+          clone: response,
+          json: async () => {
+            if (used) throw new TypeError('Body is unusable');
+            used = true;
+            return { threads: [1] };
+          },
+        };
+      };
+      (global.fetch as jest.Mock).mockResolvedValue(response());
+      const results = Array.from({ length: 7 }, () =>
+        operationQueue.enqueue({ url, options: { method: 'GET' } })
+      );
+      operationQueue.stopProcessing();
+      await (operationQueue as any).deduplicateQueue();
+      await (operationQueue as any).processNextOperation();
+
+      const bodies = await Promise.all(
+        (await Promise.all(results)).map(response => response.json())
+      );
+      expect(bodies).toEqual(Array(7).fill({ threads: [1] }));
+    });
+
     it('should not deduplicate non-permanents operations', async () => {
       // Add 6 operations with only 2 being permanents
       const operations: PendingOperation[] = [
@@ -325,4 +356,74 @@ describe('OperationQueue Deduplication', () => {
       expect(otherOps.length).toBe(2);
     });
   });
+
+  describe('requests saved by an older version', () => {
+    const { getLocal, setLocal } = jest.requireMock('../../src/background/storage');
+    let local: Record<string, any>;
+    const post = (guid?: string) => ({
+      url: 'https://api.pushbullet.com/v2/pushes',
+      options: { method: 'POST', body: JSON.stringify({ guid }) },
+    });
+
+    beforeEach(() => {
+      local = {};
+      (getLocal as jest.Mock).mockImplementation(async key => local[key]);
+      (setLocal as jest.Mock).mockImplementation(async (key, value) => {
+        local[key] = value;
+      });
+      (chrome.notifications.create as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue('id');
+    });
+
+    afterEach(() => {
+      (getLocal as jest.Mock).mockResolvedValue(null);
+      (setLocal as jest.Mock).mockResolvedValue(undefined);
+    });
+
+    test('a lost send is reported, then removed', async () => {
+      local.pb_operation_queue = [post('a')];
+      await operationQueue.loadQueue();
+      expect(chrome.notifications.create).toHaveBeenCalledWith(
+        'pb_legacy_sends',
+        expect.objectContaining({ title: expect.stringContaining('may not') })
+      );
+      expect(local.pb_operation_queue).toBeNull();
+      expect(local.pb_unreported_legacy_sends).toBe(0);
+    });
+
+    test('a send the durable queue also holds is not reported', async () => {
+      local.pb_operation_queue = [post('a')];
+      local.pb_pending_ops = [{ payload: { guid: 'a' } }];
+      await operationQueue.loadQueue();
+      expect(chrome.notifications.create).not.toHaveBeenCalled();
+    });
+
+    test('a missing ID never counts as a match', async () => {
+      local.pb_operation_queue = [post(undefined)];
+      local.pb_pending_ops = [{ payload: {} }];
+      await operationQueue.loadQueue();
+      expect(chrome.notifications.create).toHaveBeenCalledTimes(1);
+    });
+
+    test('reads are not sends', async () => {
+      local.pb_operation_queue = [
+        { url: 'https://api.pushbullet.com/v2/devices', options: { method: 'GET' } },
+      ];
+      await operationQueue.loadQueue();
+      expect(chrome.notifications.create).not.toHaveBeenCalled();
+    });
+
+    test('if the report fails, it is tried again next start', async () => {
+      local.pb_operation_queue = [post('a')];
+      (chrome.notifications.create as jest.Mock).mockRejectedValueOnce(new Error('no'));
+      await operationQueue.loadQueue();
+      expect(local.pb_unreported_legacy_sends).toBe(1);
+
+      await operationQueue.loadQueue();
+      expect(chrome.notifications.create).toHaveBeenCalledTimes(2);
+      expect(local.pb_unreported_legacy_sends).toBe(0);
+    });
+  });
+
 }); 

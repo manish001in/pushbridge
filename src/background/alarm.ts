@@ -3,10 +3,12 @@
  * Ensures service worker stays active and can monitor WebSocket connections
  */
 
+import { accountReady } from './accountCutover';
 import { refreshChannelData } from './channelManager';
 import { reportError, PBError } from './errorManager';
 import { cleanupExpiredMirrors } from './mirrorManager';
 import { notificationBadge } from './notificationBadge';
+import { rateLimitManager } from './rateLimitManager';
 import {
   initializeWebSocket,
   isWebSocketHealthy,
@@ -15,7 +17,7 @@ import {
 import { getLocal } from './storage';
 import { tokenBucket } from './tokenBucket';
 
-const KEEPALIVE_ALARM_NAME = 'keepalive';
+export const KEEPALIVE_ALARM_NAME = 'keepalive';
 const CHANNEL_REFRESH_ALARM_NAME = 'channel-refresh';
 const TOKEN_BUCKET_REFILL_ALARM_NAME = 'token-bucket-refill';
 const KEEPALIVE_INTERVAL_MINUTES = 5;
@@ -61,12 +63,17 @@ export async function initializeKeepAlive(): Promise<void> {
   }
 }
 
+// One function, so adding it twice has no effect.
+function onAlarmWhenReady(alarm: chrome.alarms.Alarm): void {
+  void accountReady.then(() => handleAlarm(alarm));
+}
+
 /**
  * Alarms outlive the worker, so this must run every time the worker starts.
  * Adding the same listener twice has no effect.
  */
 export function registerKeepAliveListener(): void {
-  chrome.alarms.onAlarm.addListener(handleAlarm);
+  chrome.alarms.onAlarm.addListener(onAlarmWhenReady);
 }
 
 /**
@@ -193,6 +200,11 @@ export async function clearKeepAlive(): Promise<void> {
  */
 async function handleChannelRefresh(): Promise<void> {
   console.log('channel-refresh - refreshing channel data');
+
+  // It comes round again in a few hours.
+  if (rateLimitManager.isQuotaLow()) {
+    return;
+  }
 
   try {
     await refreshChannelData();

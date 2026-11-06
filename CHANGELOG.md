@@ -1,5 +1,68 @@
 # Changelog
 
+## [1.3.3] - 2026-11-06
+
+### Added
+- Desktop notifications for live pushes. They skip pushes sent from this browser or to another device, and links that opened in a tab. After time away at most 10 show, plus one summary of the rest
+
+### Changed
+- Needs Chrome 116 or newer (was 110), which Pushbridge's notification handling relies on
+- Signing in as a different account, or Reset All Data, restarts the extension, so nothing from the old account can carry over. Open Pushbridge windows close, and it reopens by itself
+- A push that can't send right now is saved and goes out automatically. A file or SMS during a rate limit fails straight away and keeps what you wrote, so nothing goes out later without you knowing
+- Uses far less of your Pushbullet quota. Checking for pushes reads only what changed, a new SMS fetches only its own conversation (a full check still runs every 6 hours), and optional background syncs pause when quota runs low
+- After hitting the rate limit, requests wait for the limit to reset instead of retrying sooner. A push sent meanwhile is saved and goes out afterwards
+- Received files only notify, and are downloaded from Messages. The old auto-download code never ran in practice and has been removed
+
+### Fixed
+- An attachment or reply could go to the wrong SMS conversation if you switched conversations while it was sending or loading. Drafts now stay with their conversation
+- Choosing a device when sending had no effect: every push went to all your devices. Pushes now go only to the chosen device
+- Posts to a channel went to all your own devices instead of the channel
+- Pressing Cmd/Ctrl+Enter twice sent a push twice
+- Retrying a push or file after a lost response no longer sends it twice
+- A push that can't send right now says it's saved, instead of "sent". One the server rejects now shows as failed
+- Files near the 25 MB limit could fail to reach the worker. Files now move in a smaller format, and arrive byte for byte
+- A failed "file sent" notification no longer makes a delivered file look failed
+- Choosing a conversation now always uses its phone, so two phones with the same conversation ID don't get mixed up
+- Retrying a picture message keeps its ID only if it's the same file
+- A sent SMS stays visible until the phone reports it, instead of vanishing when a newer message arrives
+- A rate limited push is now sent once the limit passes
+- The send form is locked while sending, so text typed meanwhile isn't cleared afterwards
+- A queued message that has to be dropped always warns you, even if the first warning can't be shown
+- Registering this browser retries by itself, instead of leaving sends failing
+- Failed notifications and interrupted push checks recover by themselves, without waiting for the next push or SMS
+- A queued push could send twice after a worker restart or a failed storage write. One interrupted mid-send now checks whether it got through, then sends only if it didn't
+- A queued push is never sent from a different account, and a retry first checks whether the earlier attempt went through
+- SMS failures now show in the conversation, and a failed queue save is reported instead of showing as queued
+- Queued pushes are no longer dropped after repeated network failures
+- Signing out or changing account stops work already running for the old account, and clears its notifications
+- Refreshing devices, contacts or channels could lose everything on earlier pages
+- The SMS tab could go missing because a device lookup before sign-in was cached as an empty list
+- Device names can no longer inject markup into the settings page
+- SMS notifications: fewer duplicates, a reply from your phone no longer hides a new incoming message, and the same words sent twice notify twice
+- A notification that fails to show is tried again, instead of the push counting as handled
+- Clicking an SMS or backlog notification opens the extension, with a window on Chrome versions that can't open the popup
+- Live pushes aren't missed in a burst of more than one page
+- Deleted pushes and subscriptions no longer appear as empty rows, and loading more history keeps its place
+- The Messages tab no longer looks empty when recent history is all deleted pushes
+- Settings no longer fail on a device with no type
+- The connection test and diagnostics report the real state and version
+- Mirrored notifications and images in the popup can be used from the keyboard
+- End-to-end encrypted mirrors now explain once why they can't be shown
+- Open SMS conversations update when a sync finishes, and the 6-hour SMS sync survives worker restarts
+- Interrupted uploads are reported instead of silently disappearing
+- A rate limit on any request no longer stalls other queued requests
+- Far fewer API calls when pushes come from sources the extension doesn't recognize
+- Pushes meant for another device no longer raise the badge count
+- SMS conversations can be opened from the keyboard
+- Updates to a mirrored notification replace it instead of adding another, and count once on the badge
+- SMS sync no longer loses newer messages, or threads it failed to fetch
+- Opening an SMS conversation now marks it read, and it stays read after a sync
+- A queued request that got HTTP 429 now retries by itself after the backoff
+- One click on a push notification opens one tab, and only web links can open
+
+### Security
+- Routine logs are removed from production builds, because they included message contents. The 1.3.2 notes said this was already done, which was wrong
+
 ## [1.3.2] - 2026-11-06
 
 ### Added
@@ -22,7 +85,7 @@
 - Auto-open only opens web links meant for this browser
 
 ### Security
-- Access tokens and message contents are no longer written to the console
+- Access tokens are no longer written to the console
 - Removed the unused content script and web-accessible resources, so websites can no longer detect the extension
 ## [1.3.1] - 2026-11-05
 

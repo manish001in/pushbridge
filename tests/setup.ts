@@ -1,4 +1,6 @@
 // Mock Chrome API for testing
+const sessionStore: Record<string, unknown> = {};
+
 global.chrome = {
   storage: {
     local: {
@@ -9,8 +11,17 @@ global.chrome = {
       getBytesInUse: jest.fn(),
     },
     session: {
-      get: jest.fn(),
-      set: jest.fn(),
+      // Remembers, like the real one, so code using it can be tested through it.
+      get: jest.fn((key: string, callback?: (result: any) => void) => {
+        const result = { [key]: sessionStore[key] };
+        callback?.(result);
+        return Promise.resolve(result);
+      }),
+      set: jest.fn((values: Record<string, unknown>, callback?: () => void) => {
+        Object.assign(sessionStore, values);
+        callback?.();
+        return Promise.resolve();
+      }),
       remove: jest.fn(),
       clear: jest.fn(),
     },

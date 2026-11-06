@@ -540,4 +540,42 @@ describe('UnifiedNotificationTracker', () => {
       expect(await unifiedNotificationTracker.hasBaseline()).toBe(true);
     });
   });
+
+  describe('claims that are not yet handled', () => {
+    const data = (id: string) => ({
+      id,
+      type: 'sms' as const,
+      created: Date.now() + 60000,
+    });
+
+    test('are not saved, even when something else saves', async () => {
+      const tracker = UnifiedNotificationTracker.getInstance();
+      await tracker.initialize();
+      await tracker.claimNotification(data('claim-1'));
+      await tracker.setCount('sms', 1);
+      const saved = (chrome.storage.local.set as jest.Mock).mock.calls
+        .flat()
+        .map(call => JSON.stringify(call));
+      expect(saved.some(text => text?.includes('claim-1'))).toBe(false);
+    });
+
+    test('block a second claim until released', async () => {
+      const tracker = UnifiedNotificationTracker.getInstance();
+      await tracker.initialize();
+      expect(await tracker.claimNotification(data('claim-2'))).toBe(true);
+      expect(await tracker.claimNotification(data('claim-2'))).toBe(false);
+      tracker.releaseClaim('sms', 'claim-2');
+      expect(await tracker.claimNotification(data('claim-2'))).toBe(true);
+    });
+
+    test('become permanent once handled', async () => {
+      const tracker = UnifiedNotificationTracker.getInstance();
+      await tracker.initialize();
+      await tracker.claimNotification(data('claim-3'));
+      await tracker.markAsProcessed('sms', 'claim-3', Date.now());
+      tracker.releaseClaim('sms', 'claim-3');
+      expect(await tracker.claimNotification(data('claim-3'))).toBe(false);
+    });
+  });
+
 });

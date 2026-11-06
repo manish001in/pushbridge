@@ -102,42 +102,31 @@ describe('Device Manager', () => {
     );
   });
 
-  test('getDevices should use cursor when available', async () => {
-    // Mock the cache check first (no cache)
-    (getLocal as jest.Mock).mockResolvedValueOnce(undefined); // pb_device_cache (no cache)
-
-    // Mock the API call
-    (getLocal as jest.Mock)
-      .mockResolvedValueOnce('test-token') // token for fetchDevicesFromAPI
-      .mockResolvedValueOnce('test-cursor') // pb_devices_cursor
-      .mockResolvedValueOnce(false) // pb_devices_has_more
-      .mockResolvedValueOnce(undefined) // cached data (no cache)
-      .mockResolvedValueOnce('test-cursor'); // pb_devices_cursor for cache
-
-    const mockDevices = [
-      { iden: 'device1', nickname: 'Phone', type: 'android', active: true },
-      { iden: 'device2', nickname: 'Chrome', type: 'chrome', active: true },
-    ];
-
-    (global.fetch as jest.Mock).mockResolvedValueOnce(
-      new Response(JSON.stringify({ devices: mockDevices }), {
-        status: 200,
-        headers: {},
-      })
+  test('getDevices fetches every page from the start, ignoring any saved cursor', async () => {
+    (getLocal as jest.Mock).mockImplementation(async (key: string) =>
+      key === 'pb_token'
+        ? 'test-token'
+        : key === 'pb_devices_cursor'
+          ? 'stale-cursor'
+          : undefined
     );
+    const page1 = [{ iden: 'device1', nickname: 'Phone', type: 'android', active: true }];
+    const page2 = [{ iden: 'device2', nickname: 'Laptop', type: 'chrome', active: true }];
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ devices: page1, cursor: 'next' }), {
+          status: 200,
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ devices: page2 }), { status: 200 })
+      );
 
-    const result = await getDevices();
-
-    expect(result).toEqual(mockDevices);
-    expect(global.fetch).toHaveBeenCalledWith(
-      'https://api.pushbullet.com/v2/devices?cursor=test-cursor',
-      expect.objectContaining({
-        method: 'GET',
-        headers: expect.objectContaining({
-          'Access-Token': 'test-token',
-        }),
-      })
-    );
+    expect(await getDevices()).toEqual([...page1, ...page2]);
+    expect((global.fetch as jest.Mock).mock.calls.map(call => call[0])).toEqual([
+      'https://api.pushbullet.com/v2/devices',
+      'https://api.pushbullet.com/v2/devices?cursor=next',
+    ]);
   });
 
   test('getDevices should force refresh and ignore cursor', async () => {
@@ -273,5 +262,14 @@ describe('Device Manager', () => {
 
       expect(result).toBe(false);
     });
+  });
+
+  test('a lookup before sign-in does not cache an empty device list', async () => {
+    (getLocal as jest.Mock).mockResolvedValue(undefined);
+    expect(await getDevices()).toEqual([]);
+    expect(setLocal).not.toHaveBeenCalledWith(
+      'pb_device_cache',
+      expect.anything()
+    );
   });
 });

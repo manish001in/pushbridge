@@ -299,9 +299,19 @@ export class PushEnricher {
       reason?: string;
     }
   ): Promise<EnhancedPush[]> {
-    // Check for unknown sources and refresh if needed
+    // One refresh covers every unknown source in the batch.
     for (const push of pushes) {
-      await this.checkAndHandleUnknownSource(push);
+      const isKnown = await contextManager.isKnownSource(
+        push.source_device_iden,
+        push.channel_iden
+      );
+      if (!isKnown) {
+        await contextManager.handleUnknownSource(
+          push.source_device_iden,
+          push.channel_iden
+        );
+        break;
+      }
     }
 
     // Get fresh context after potential refresh

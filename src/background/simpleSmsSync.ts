@@ -6,10 +6,16 @@
 
 import { SmsThread, SmsMsg } from '../types/pushbullet';
 
+import { assertSameAccount, currentAccountEpoch } from './accountEpoch';
 import { getDefaultSmsDevice } from './deviceManager';
 import { notificationBadge } from './notificationBadge';
 import { getNotificationPrefs } from './notificationPrefs';
+import { rateLimitManager } from './rateLimitManager';
 import { smsApiClient } from './smsApiClient';
+import {
+  scheduleSmsNotificationRetry,
+  showSmsOnce,
+} from './smsNotificationIdentity';
 import { getLocal, setLocal } from './storage';
 import { fromPushbulletTime, now } from './timestampUtils';
 import { unifiedNotificationTracker } from './unifiedNotificationTracker';
@@ -22,16 +28,91 @@ const SMS_LAST_SYNC_KEY = (deviceIden: string) => `sms_last_sync_${deviceIden}`;
 interface SimpleSmsData {
   threads: SmsThread[];
   lastSync: number;
+  /** When every conversation last fetched without error. */
+  lastCompleteSync?: number;
   deviceIden: string;
+}
+
+// A sent message's local ID differs from the phone's, and the two clocks differ.
+const SENT_MESSAGE_MATCH_WINDOW = 5 * 60 * 1000;
+const NOT_YET_FETCHED_WINDOW = 10 * 60 * 1000;
+const SENT_MESSAGE_WINDOW = 65 * 60 * 1000;
+
+let cacheWrites: Promise<unknown> = Promise.resolve();
+
+/**
+ * Run one read-change-write of the cache at a time. Network requests stay outside,
+ * since they take long enough for other changes to arrive; each writer merges into
+ * whatever is in the cache by then.
+ */
+function withCacheLock<T>(update: () => Promise<T>): Promise<T> {
+  const result = cacheWrites.then(update, update);
+  cacheWrites = result.catch(() => undefined);
+  return result;
 }
 
 /**
  * The ONE function that does everything for SMS
  * Call this from: daily timer, popup open, sms_changed push
  */
-export async function syncAllSmsData(
-  deviceIden: string
+interface RunningSync {
+  promise: Promise<SimpleSmsData>;
+  rerun: boolean;
+  rerunIncremental: boolean;
+}
+
+const syncsInFlight = new Map<string, RunningSync>();
+
+/**
+ * Run one sync per device at a time. Requests arriving during a sync share it, and
+ * one more pass runs afterwards in case its fetches missed what they announced.
+ */
+export function syncAllSmsData(
+  deviceIden: string,
+  { incremental = false }: { incremental?: boolean } = {}
 ): Promise<SimpleSmsData> {
+  const running = syncsInFlight.get(deviceIden);
+  if (running) {
+    // A pass that checks everything covers one that doesn't, not the other way round.
+    running.rerunIncremental =
+      incremental && (running.rerunIncremental || !running.rerun);
+    running.rerun = true;
+    return running.promise;
+  }
+
+  const sync = { rerun: false, rerunIncremental: incremental } as RunningSync;
+  syncsInFlight.set(deviceIden, sync);
+  sync.promise = (async () => {
+    try {
+      let result: SimpleSmsData;
+      do {
+        const passIsIncremental = sync.rerunIncremental;
+        sync.rerun = false;
+        sync.rerunIncremental = false;
+        result = await runSmsSync(deviceIden, passIsIncremental);
+      } while (sync.rerun);
+      return result;
+    } finally {
+      syncsInFlight.delete(deviceIden);
+    }
+  })();
+  return sync.promise;
+}
+
+/**
+ * Each conversation costs a request. An incremental pass fetches only those whose
+ * latest message changed, so a new SMS doesn't refetch every conversation. A full
+ * pass also picks up changes further back, such as messages deleted on the phone.
+ */
+async function runSmsSync(
+  deviceIden: string,
+  incremental: boolean
+): Promise<SimpleSmsData> {
+  const accountEpoch = currentAccountEpoch();
+  if (rateLimitManager.isQuotaLow()) {
+    console.log('[SimpleSMS] Quota is low, skipping this sync');
+    return getCachedSmsData(deviceIden);
+  }
   console.log(
     `🔄 [SimpleSMS] Starting complete SMS sync for device: ${deviceIden}`
   );
@@ -52,10 +133,19 @@ export async function syncAllSmsData(
     console.log(`📱 [SimpleSMS] Fetching SMS threads...`);
     const threadsResponse = await smsApiClient.getSmsThreadsList(deviceIden);
 
-    const threads: SmsThread[] = [];
+    const fetched = new Map<string, SmsThread>();
+    let everyThreadFetched = true;
+    const known = incremental
+      ? (await getCachedSmsData(deviceIden)).threads
+      : [];
 
     // 2. For each thread, get all messages
     for (const apiThread of threadsResponse.threads) {
+      const previous = known.find(thread => thread.id === apiThread.id);
+      if (previous?.latestKey && previous.latestKey === latestKey(apiThread)) {
+        continue;
+      }
+
       console.log(
         `📨 [SimpleSMS] Fetching messages for thread: ${apiThread.id}`
       );
@@ -76,52 +166,67 @@ export async function syncAllSmsData(
           conversation_iden: apiThread.id,
         }));
 
-        // Get lastSeenTimestamp from unified tracker for proper unread count calculation
-        const trackerState = unifiedNotificationTracker.getState();
-        const lastSeenTimestamp = trackerState.timestamps.lastSeenTimestamp;
-
         // Create thread with all messages
-        const thread: SmsThread = {
-          id: apiThread.id,
-          name: getThreadName(apiThread),
-          messages: messages.sort((a, b) => a.timestamp - b.timestamp), // Sort by time
-          lastMessageTime:
-            messages.length > 0
-              ? Math.max(...messages.map(m => m.timestamp))
-              : 0,
-          unreadCount: calculateUnreadCount(messages, lastSeenTimestamp),
-          deviceIden,
-          recipients: apiThread.recipients,
-        };
-
-        threads.push(thread);
+        const thread = buildThread(deviceIden, apiThread, messages);
+        fetched.set(apiThread.id, thread);
 
         // Check for new messages and create notifications
-        await checkForNewMessages(thread);
+        if (accountEpoch === currentAccountEpoch()) {
+          const handled = await checkForNewMessages(thread, accountEpoch);
+          if (!handled) {
+            // So an incremental pass looks at this thread again.
+            thread.latestKey = undefined;
+            await scheduleSmsNotificationRetry(deviceIden);
+          }
+        }
       } catch (error) {
         console.warn(
           `⚠️ [SimpleSMS] Failed to fetch messages for thread ${apiThread.id}:`,
           error
         );
-        // Continue with other threads
+        // Continue with other threads; this one keeps what the cache has
+        everyThreadFetched = false;
       }
     }
 
-    // 3. Save everything to cache
-    const smsData: SimpleSmsData = {
-      threads,
-      lastSync: now(),
-      deviceIden,
-    };
+    // 3. Save everything to cache. The phone's list decides which threads exist.
+    const smsData = await withCacheLock(async () => {
+      const cached = await getCachedSmsData(deviceIden);
+      // Signed out meanwhile: don't refill what the reset cleared.
+      if (accountEpoch !== currentAccountEpoch()) {
+        return cached;
+      }
+      const threads: SmsThread[] = [];
 
-    await setLocal(SMS_DATA_KEY(deviceIden), smsData);
-    await setLocal(SMS_LAST_SYNC_KEY(deviceIden), smsData.lastSync);
+      for (const { id } of threadsResponse.threads) {
+        const previous = cached.threads.find(t => t.id === id);
+        const thread = fetched.get(id);
+        if (thread) {
+          threads.push(mergeThread(thread, previous));
+        } else if (previous) {
+          threads.push(previous);
+        }
+      }
+
+      const syncedAt = now();
+      const data: SimpleSmsData = {
+        threads,
+        lastSync: syncedAt,
+        lastCompleteSync: everyThreadFetched
+          ? syncedAt
+          : cached.lastCompleteSync,
+        deviceIden,
+      };
+      await setLocal(SMS_DATA_KEY(deviceIden), data);
+      await setLocal(SMS_LAST_SYNC_KEY(deviceIden), data.lastSync);
+      return data;
+    });
 
     // Update SMS notification badge with current unread count
     await updateSmsNotificationBadge();
 
     console.log(
-      `✅ [SimpleSMS] Sync complete: ${threads.length} threads, total messages: ${threads.reduce((sum, t) => sum + t.messages.length, 0)}`
+      `✅ [SimpleSMS] Sync complete: ${smsData.threads.length} threads, total messages: ${smsData.threads.reduce((sum, t) => sum + t.messages.length, 0)}`
     );
 
     return smsData;
@@ -178,12 +283,26 @@ export async function updateThreadWithSentMessage(
   message: SmsMsg
 ): Promise<void> {
   try {
-    const smsData = await getCachedSmsData(deviceIden);
-    const threadIndex = smsData.threads.findIndex(t => t.id === conversationId);
+    await withCacheLock(async () => {
+      const smsData = await getCachedSmsData(deviceIden);
+      const thread = smsData.threads.find(t => t.id === conversationId);
 
-    if (threadIndex !== -1) {
-      // Update existing thread
-      const thread = smsData.threads[threadIndex];
+      if (!thread) {
+        console.warn(
+          `📝 [SimpleSMS] Thread ${conversationId} not found for sent message update`
+        );
+        return;
+      }
+
+      // A retry the API recognized comes back with the same identity.
+      if (
+        thread.messages.some(
+          m => m.pb_guid === message.pb_guid || m.id === message.id
+        )
+      ) {
+        return;
+      }
+
       thread.messages.push(message);
       thread.messages.sort((a, b) => a.timestamp - b.timestamp); // Keep messages sorted
       thread.lastMessageTime = Math.max(
@@ -196,11 +315,7 @@ export async function updateThreadWithSentMessage(
       console.log(
         `📝 [SimpleSMS] Updated thread ${conversationId} with sent message`
       );
-    } else {
-      console.warn(
-        `📝 [SimpleSMS] Thread ${conversationId} not found for sent message update`
-      );
-    }
+    });
   } catch (error) {
     console.error('Failed to update thread with sent message:', error);
   }
@@ -224,6 +339,7 @@ export async function reloadSmsThread(
   deviceIden: string,
   threadId: string
 ): Promise<SmsThread | null> {
+  const accountEpoch = currentAccountEpoch();
   console.log(
     `🔄 [SimpleSMS] Reloading specific thread: ${threadId} for device: ${deviceIden}`
   );
@@ -236,6 +352,18 @@ export async function reloadSmsThread(
     const isOnline = await smsApiClient.isDeviceOnline(deviceIden);
     if (!isOnline) {
       console.warn(`⚠️ [SimpleSMS] Device ${deviceIden} is offline`);
+      return null;
+    }
+
+    // The list first. If a message arrives between the two requests, the messages are
+    // newer than the list says, and that only costs another fetch.
+    const threadsResponse = await smsApiClient.getSmsThreadsList(deviceIden);
+    const apiThread = threadsResponse.threads.find(t => t.id === threadId);
+
+    if (!apiThread) {
+      console.warn(
+        `⚠️ [SimpleSMS] Thread ${threadId} not found in threads list`
+      );
       return null;
     }
 
@@ -258,51 +386,59 @@ export async function reloadSmsThread(
       conversation_iden: threadId,
     }));
 
-    // Get lastSeenTimestamp from unified tracker for proper unread count calculation
-    const trackerState = unifiedNotificationTracker.getState();
-    const lastSeenTimestamp = trackerState.timestamps.lastSeenTimestamp;
-
-    // Find thread info from threads list (we need recipients info)
-    const threadsResponse = await smsApiClient.getSmsThreadsList(deviceIden);
-    const apiThread = threadsResponse.threads.find(t => t.id === threadId);
-
-    if (!apiThread) {
-      console.warn(
-        `⚠️ [SimpleSMS] Thread ${threadId} not found in threads list`
-      );
-      return null;
-    }
-
-    // Create updated thread
-    const updatedThread: SmsThread = {
-      id: threadId,
-      name: getThreadName(apiThread),
-      messages: messages.sort((a, b) => a.timestamp - b.timestamp), // Sort by time
-      lastMessageTime:
-        messages.length > 0 ? Math.max(...messages.map(m => m.timestamp)) : 0,
-      unreadCount: calculateUnreadCount(messages, lastSeenTimestamp),
-      deviceIden,
-      recipients: apiThread.recipients,
-    };
-
     // Update the cached data with this specific thread
-    const cachedData = await getCachedSmsData(deviceIden);
-    const threadIndex = cachedData.threads.findIndex(t => t.id === threadId);
+    const updatedThread = await withCacheLock(async () => {
+      // Signed out meanwhile: don't refill what the reset cleared.
+      if (accountEpoch !== currentAccountEpoch()) {
+        throw new Error('Account changed during reload');
+      }
+      const cachedData = await getCachedSmsData(deviceIden);
+      const threadIndex = cachedData.threads.findIndex(t => t.id === threadId);
+      const merged = mergeThread(
+        buildThread(deviceIden, apiThread, messages),
+        cachedData.threads[threadIndex]
+      );
 
-    if (threadIndex >= 0) {
-      cachedData.threads[threadIndex] = updatedThread;
-    } else {
-      cachedData.threads.push(updatedThread);
-    }
+      if (threadIndex >= 0) {
+        cachedData.threads[threadIndex] = merged;
+      } else {
+        cachedData.threads.push(merged);
+      }
 
-    // Save updated cache
-    await setLocal(SMS_DATA_KEY(deviceIden), cachedData);
+      await setLocal(SMS_DATA_KEY(deviceIden), cachedData);
+      return merged;
+    });
 
     console.log(`✅ [SimpleSMS] Successfully reloaded thread: ${threadId}`);
     return updatedThread;
   } catch (error) {
     console.error(`❌ [SimpleSMS] Failed to reload thread ${threadId}:`, error);
     return null;
+  }
+}
+
+/**
+ * Mark a conversation read, here only: the API has no way to tell the phone.
+ * Remembered per thread because a sync recalculates the unread count.
+ */
+export async function markConversationRead(
+  deviceIden: string,
+  conversationId: string
+): Promise<void> {
+  const changed = await withCacheLock(async () => {
+    const smsData = await getCachedSmsData(deviceIden);
+    const thread = smsData.threads.find(t => t.id === conversationId);
+    if (!thread) return false;
+
+    // Not the current time: a message that hasn't reached this cache isn't read.
+    thread.readThroughTime = thread.lastMessageTime;
+    thread.unreadCount = 0;
+    await setLocal(SMS_DATA_KEY(deviceIden), smsData);
+    return true;
+  });
+
+  if (changed) {
+    await updateSmsNotificationBadge();
   }
 }
 
@@ -385,12 +521,123 @@ function getThreadName(apiThread: any): string {
   return `Thread ${apiThread.id}`;
 }
 
+function buildThread(
+  deviceIden: string,
+  apiThread: any,
+  messages: SmsMsg[]
+): SmsThread {
+  return {
+    id: apiThread.id,
+    name: getThreadName(apiThread),
+    messages: [...messages].sort((a, b) => a.timestamp - b.timestamp),
+    lastMessageTime:
+      messages.length > 0 ? Math.max(...messages.map(m => m.timestamp)) : 0,
+    unreadCount: 0, // Set by mergeThread, which knows what was read
+    deviceIden,
+    recipients: apiThread.recipients,
+    // Only if these messages really include it, or later syncs would skip what's
+    // missing. `messages` here is what was just fetched, before any merging.
+    latestKey: messages.some(m => m.id === apiThread.latest?.id)
+      ? latestKey(apiThread)
+      : undefined,
+  };
+}
+
+/** Changes whenever a conversation has something new. */
+function latestKey(apiThread: any): string | undefined {
+  const latest = apiThread.latest;
+  return latest
+    ? `${latest.id}|${latest.timestamp}|${latest.status ?? ''}`
+    : undefined;
+}
+
+/** True if this cached message is the phone's copy of one sent from here. */
+function isSameSentMessage(cached: SmsMsg, fetched: SmsMsg): boolean {
+  return (
+    !cached.inbound &&
+    !fetched.inbound &&
+    cached.text === fetched.text &&
+    Math.abs(cached.timestamp - fetched.timestamp) <= SENT_MESSAGE_MATCH_WINDOW
+  );
+}
+
+/**
+ * Missing from what the phone returned. A sent message can take a while to appear
+ * on the phone, even behind newer incoming ones, and Pushbullet gives up on it after
+ * an hour. An incoming one was on the phone first, so if it's older than what came
+ * back, or not recent, it was deleted there.
+ */
+function mayStillBeOnItsWay(message: SmsMsg, newestFetched: number): boolean {
+  const age = Date.now() - message.timestamp;
+  return message.inbound
+    ? message.timestamp > newestFetched && age < NOT_YET_FETCHED_WINDOW
+    : age < SENT_MESSAGE_WINDOW;
+}
+
+function claimSentMatch(message: SmsMsg, unmatched: Set<SmsMsg>): boolean {
+  for (const m of unmatched) {
+    if (isSameSentMessage(message, m)) {
+      unmatched.delete(m);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Combine what the phone returned with what is cached. The phone decides everything
+ * up to its newest message, so older ones it no longer has go away. Cached messages
+ * after that may not have reached it yet, such as one just sent, so recent ones stay.
+ */
+function mergeThread(fetched: SmsThread, cached?: SmsThread): SmsThread {
+  const newestFetched = Math.max(0, ...fetched.messages.map(m => m.timestamp));
+  // Each fetched message can stand for one cached message only, or a second "ok"
+  // sent a minute later would disappear into the first.
+  const unmatched = new Set(fetched.messages);
+  for (const message of cached?.messages ?? []) {
+    for (const m of unmatched) {
+      if (m.id === message.id || m.pb_guid === message.pb_guid) {
+        unmatched.delete(m);
+        break;
+      }
+    }
+  }
+  const notYetFetched = (cached?.messages ?? []).filter(
+    message =>
+      mayStillBeOnItsWay(message, newestFetched) &&
+      !fetched.messages.some(
+        m => m.id === message.id || m.pb_guid === message.pb_guid
+      ) &&
+      !claimSentMatch(message, unmatched)
+  );
+  const messages = [...fetched.messages, ...notYetFetched].sort(
+    (a, b) => a.timestamp - b.timestamp
+  );
+  const readThroughTime = cached?.readThroughTime;
+
+  return {
+    ...fetched,
+    messages,
+    lastMessageTime: Math.max(0, ...messages.map(m => m.timestamp)),
+    unreadCount: calculateUnreadCount(
+      messages,
+      unifiedNotificationTracker.getState().timestamps.lastSeenTimestamp,
+      readThroughTime
+    ),
+    ...(readThroughTime === undefined ? {} : { readThroughTime }),
+  };
+}
+
 function calculateUnreadCount(
   messages: SmsMsg[],
-  lastSeenTimestamp?: number
+  lastSeenTimestamp?: number,
+  readThroughTime = 0
 ): number {
-  // Count only inbound messages that are newer than lastSeenTimestamp
-  const cutoffTimestamp = lastSeenTimestamp ? lastSeenTimestamp * 1000 : 0; // Convert seconds to milliseconds
+  // Count only inbound messages newer than both the last look and the last read
+  const cutoffTimestamp = Math.max(
+    lastSeenTimestamp ? lastSeenTimestamp * 1000 : 0, // Convert seconds to milliseconds
+    readThroughTime
+  );
 
   const unreadMessages = messages.filter(m => {
     const isInbound = m.inbound;
@@ -411,13 +658,22 @@ function calculateUnreadCount(
   return unreadMessages.length;
 }
 
-async function checkForNewMessages(thread: SmsThread): Promise<void> {
+async function checkForNewMessages(
+  thread: SmsThread,
+  accountEpoch: number
+): Promise<boolean> {
   if (thread.messages.length === 0) {
     console.log(`📱 [SMSNotif] No messages in thread: ${thread.name}`);
-    return;
+    return true;
   }
 
-  const latestMessage = thread.messages[thread.messages.length - 1];
+  // The newest incoming message, even if the user has replied from the phone since.
+  const latestMessage = [...thread.messages]
+    .reverse()
+    .find(message => message.inbound);
+  if (!latestMessage) {
+    return true;
+  }
 
   // Get current tracker state for logging
   const trackerState = unifiedNotificationTracker.getState();
@@ -440,7 +696,7 @@ async function checkForNewMessages(thread: SmsThread): Promise<void> {
   });
 
   // Check if this message should trigger a notification
-  const shouldShow = await unifiedNotificationTracker.shouldShowNotification({
+  const shouldShow = await unifiedNotificationTracker.claimNotification({
     id: latestMessage.id,
     type: 'sms',
     created: latestMessage.timestamp,
@@ -467,16 +723,34 @@ async function checkForNewMessages(thread: SmsThread): Promise<void> {
     const notificationId = `sms_sync_${latestMessage.id}`;
 
     // Create Chrome notification
-    const prefs = await getNotificationPrefs();
-    if (prefs.enabled) {
-      await chrome.notifications.create(notificationId, {
-        type: 'basic',
-        title: `SMS from ${thread.name}`,
-        message: latestMessage.text,
-        iconUrl: 'icons/48.png',
-        requireInteraction: false,
-        silent: !prefs.sound,
-      });
+    try {
+      const prefs = await getNotificationPrefs();
+      if (prefs.enabled) {
+        await showSmsOnce(
+          {
+            sender: thread.name,
+            text: latestMessage.text,
+            sentAt: latestMessage.timestamp,
+            source: 'history',
+          },
+          async () => {
+            assertSameAccount(accountEpoch);
+            await chrome.notifications.create(notificationId, {
+              type: 'basic',
+              title: `SMS from ${thread.name}`,
+              message: latestMessage.text,
+              iconUrl: 'icons/48.png',
+              requireInteraction: false,
+              silent: !prefs.sound,
+            });
+          }
+        );
+      }
+    } catch (error) {
+      // Not shown, so a later sync should try again.
+      console.error('Failed to show SMS notification:', error);
+      unifiedNotificationTracker.releaseClaim('sms', latestMessage.id);
+      return false;
     }
 
     // Update SMS notifications and tracker
@@ -497,4 +771,6 @@ async function checkForNewMessages(thread: SmsThread): Promise<void> {
       `⏭️ [SMSNotif] Skipping notification (shouldShow=false): ${latestMessage.id}`
     );
   }
+
+  return true;
 }

@@ -15,12 +15,15 @@ import {
   FilePush,
 } from '../types/pushbullet';
 
+import { assertSameAccount } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { PushEnricher } from './pushEnricher';
 import { getLocal } from './storage';
 
 export interface PushPayload {
+  /** Identifies this send, so a retry can tell whether it already went out. */
+  guid?: string;
   type: 'note' | 'link' | 'broadcast';
   title?: string;
   body?: string;
@@ -51,8 +54,23 @@ export interface EnhancedPushHistoryResponse {
  * @param payload - The push payload
  * @returns Promise resolving to the created push
  */
+/** The server answered, and said no. Carries the status so callers needn't parse text. */
+export class PushApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
+}
+
 export async function createPush(
-  payload: PushPayload
+  payload: PushPayload,
+  {
+    silent = false,
+    accountEpoch,
+    failFast = false,
+  }: { silent?: boolean; accountEpoch?: number; failFast?: boolean } = {}
 ): Promise<PushbulletPush> {
   try {
     // Validate payload
@@ -83,11 +101,18 @@ export async function createPush(
       throw new Error('Chrome device not registered');
     }
 
+    // The token and device above must belong to whoever this message came from.
+    assertSameAccount(accountEpoch);
+
     // Prepare push data
     const pushData: Record<string, unknown> = {
       type: payload.type === 'broadcast' ? 'note' : payload.type, // Broadcasts are sent as notes with channel_tag
       source_device_iden: sourceDeviceIden,
     };
+
+    if (payload.guid) {
+      pushData.guid = payload.guid;
+    }
 
     if (payload.title) {
       pushData.title = payload.title;
@@ -101,11 +126,14 @@ export async function createPush(
       pushData.url = payload.url;
     }
 
-    // Handle broadcast vs regular push targeting
-    if (payload.type === 'broadcast') {
+    // A channel post can be a note or a link; without the tag it would go to all
+    // of the user's own devices instead.
+    if (payload.channel_tag) {
       pushData.channel_tag = payload.channel_tag;
     } else if (payload.targetDeviceIden) {
-      pushData.target_device_iden = payload.targetDeviceIden;
+      // `device_iden` is the request field; `target_device_iden` only appears in
+      // responses. The API ignores it here and sends to every device.
+      pushData.device_iden = payload.targetDeviceIden;
     } else if (payload.email) {
       pushData.email = payload.email;
     }
@@ -119,7 +147,8 @@ export async function createPush(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(pushData),
-      }
+      },
+      { failFast }
     );
 
     if (!response.ok) {
@@ -128,28 +157,33 @@ export async function createPush(
           message: 'Token revoked while creating push',
           code: response.status,
         });
-        throw new Error('Token is invalid or revoked');
+        throw new PushApiError('Token is invalid or revoked', 401);
       }
 
       if (response.status === 400) {
         const errorData = await response.json();
-        throw new Error(
-          `Invalid push data: ${errorData.error?.message || 'Bad request'}`
+        throw new PushApiError(
+          `Invalid push data: ${errorData.error?.message || 'Bad request'}`,
+          400
         );
       }
 
-      throw new Error(
-        `Failed to create push: ${response.status} ${response.statusText}`
+      throw new PushApiError(
+        `Failed to create push: ${response.status} ${response.statusText}`,
+        response.status
       );
     }
 
     const push: PushbulletPush = await response.json();
     return push;
   } catch (error) {
-    await reportError(PBError.Unknown, {
-      message: 'Failed to create push',
-      code: error instanceof Error ? undefined : 500,
-    });
+    // The queue reports once it gives up, not on every attempt.
+    if (!silent) {
+      await reportError(PBError.Unknown, {
+        message: 'Failed to create push',
+        code: error instanceof Error ? undefined : 500,
+      });
+    }
     throw error;
   }
 }
@@ -159,7 +193,10 @@ export async function createPush(
  * @param file - The file to upload
  * @returns Promise resolving to upload information
  */
-export async function requestUpload(file: File): Promise<UploadInfo> {
+export async function requestUpload(
+  file: File,
+  { failFast = false }: { failFast?: boolean } = {}
+): Promise<UploadInfo> {
   try {
     // Validate file size (25MB limit)
     const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -189,7 +226,8 @@ export async function requestUpload(file: File): Promise<UploadInfo> {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-      }
+      },
+      { failFast }
     );
 
     if (!response.ok) {
@@ -223,7 +261,7 @@ export async function requestUpload(file: File): Promise<UploadInfo> {
     const uploadInfo: UploadInfo = {
       uploadUrl: uploadResponse.upload_url,
       fileUrl: uploadResponse.file_url,
-      s3Fields: uploadResponse.data,
+      s3Fields: uploadResponse.data ?? {},
     };
 
     console.log('Upload request successful:', uploadInfo.fileUrl);
@@ -254,10 +292,14 @@ export async function createFilePush(
   title?: string,
   body?: string,
   channel_tag?: string,
-  email?: string
+  email?: string,
+  guid?: string,
+  accountEpoch?: number,
+  { failFast = false }: { failFast?: boolean } = {}
 ): Promise<FilePush> {
   try {
     const token = await getLocal<string>('pb_token');
+    assertSameAccount(accountEpoch);
     if (!token) {
       throw new Error('No token available');
     }
@@ -277,7 +319,7 @@ export async function createFilePush(
     };
 
     if (targetDeviceIden) {
-      pushData.target_device_iden = targetDeviceIden;
+      pushData.device_iden = targetDeviceIden;
     }
 
     if (email) {
@@ -290,6 +332,10 @@ export async function createFilePush(
 
     if (body) {
       pushData.body = body + ' (File: ' + fileName + ')';
+    }
+
+    if (guid) {
+      pushData.guid = guid;
     }
 
     if (channel_tag) {
@@ -305,7 +351,8 @@ export async function createFilePush(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(pushData),
-      }
+      },
+      { failFast }
     );
 
     if (!response.ok) {
