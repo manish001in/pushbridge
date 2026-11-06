@@ -316,18 +316,24 @@ const worker = async () => {
 let cdp = await control.createCDPSession();
 await cdp.send('ServiceWorker.enable');
 const stopWorker = async () => {
-  const target = browser
-    .targets()
-    .find(t => t.type() === 'service_worker');
-  if (target && attached.has(target)) {
-    await (await target.worker()).close().catch(() => {});
-  } else {
-    await cdp.send('ServiceWorker.stopAllWorkers');
+  const deadline = Date.now() + 20000;
+  for (let attempt = 0; ; attempt++) {
+    const target = browser
+      .targets()
+      .find(t => t.type() === 'service_worker');
+    if (!target) break;
+    if (Date.now() > deadline) throw new Error('Timed out waiting for the worker to stop');
+    // Either way can occasionally do nothing on a busy machine, so try the other next.
+    if (attached.has(target) && attempt % 2 === 0) {
+      await Promise.race([
+        target.worker().then(running => running.close()).catch(() => {}),
+        sleep(2000),
+      ]);
+    } else {
+      await cdp.send('ServiceWorker.stopAllWorkers').catch(() => {});
+    }
+    await sleep(1000);
   }
-  await waitUntil(
-    () => !browser.targets().some(t => t.type() === 'service_worker'),
-    'the worker to stop'
-  );
   await sleep(200);
 };
 const wakeWorker = () =>
