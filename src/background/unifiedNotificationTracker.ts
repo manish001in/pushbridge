@@ -77,6 +77,8 @@ class UnifiedNotificationTracker {
   private counts: UnreadCounts;
   private isInitialized = false;
 
+  private readonly claims = new Set<string>();
+
   private constructor() {
     // Initialize with default values
     this.timestamps = {
@@ -190,19 +192,22 @@ class UnifiedNotificationTracker {
     if (!(await this.shouldShowNotification(notification))) {
       return false;
     }
+    const claim = `${notification.type}:${notification.id}`;
     // Nothing can interleave from this check to the reservation.
-    if (this.isRecentlyProcessed(notification.id, notification.type)) {
+    if (
+      this.claims.has(claim) ||
+      this.isRecentlyProcessed(notification.id, notification.type)
+    ) {
       return false;
     }
-    this.addToCache(notification.type, notification.id);
+    // In memory only. It reaches saved state through markAsProcessed, once it's handled.
+    this.claims.add(claim);
     return true;
   }
 
   /** Undo a claim whose notification couldn't be shown, so it can be retried. */
   releaseClaim(type: NotificationType, id: string): void {
-    const cache = this.cache[`${type}Ids` as keyof RecentlyProcessedCache] as string[];
-    const index = cache.indexOf(id);
-    if (index !== -1) cache.splice(index, 1);
+    this.claims.delete(`${type}:${id}`);
   }
 
   wasProcessed(type: NotificationType, id: string): boolean {
@@ -308,6 +313,7 @@ class UnifiedNotificationTracker {
     id: string,
     timestamp: number
   ): Promise<void> {
+    this.claims.delete(`${type}:${id}`);
     await this.ensureInitialized();
 
     console.log(

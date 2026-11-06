@@ -1,6 +1,7 @@
 // Options page entry point
 console.log('Pushbridge options page loaded');
 
+import { waitForAccountChange } from '../popup/accountReady';
 import {
   DEFAULT_ORDER as DEFAULT_OPTION_ORDER,
   normalizeOrder,
@@ -693,7 +694,13 @@ class OptionsPage {
     ) {
       try {
         // Clear all data including cursors
-        await chrome.runtime.sendMessage({ cmd: 'clearAllData' });
+        const response = await chrome.runtime.sendMessage({
+          cmd: 'clearAllData',
+        });
+        if (response?.restarting) {
+          // The extension restarts, closing this page, and opens settings again.
+          return;
+        }
         this.showMessage(
           'All data cleared successfully. Please refresh the page.',
           'success'
@@ -933,8 +940,9 @@ class OptionsPage {
 }
 
 // Initialize options page
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   console.log('Options DOM ready');
+  await waitForAccountChange();
   const optionsPage = new OptionsPage();
   optionsPage.init();
 });

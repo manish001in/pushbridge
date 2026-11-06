@@ -1,6 +1,9 @@
 import { createPush } from '../../src/background/pushManager';
 import {
   clearSmsSightings,
+  restoreSmsRetryAlarm,
+  runSmsNotificationRetries,
+  scheduleSmsNotificationRetry,
   showSmsOnce,
 } from '../../src/background/smsNotificationIdentity';
 import { setLocal } from '../../src/background/storage';
@@ -72,6 +75,87 @@ describe('storage writes', () => {
       cb()
     );
     await expect(setLocal('k', 'v')).resolves.toBeUndefined();
+  });
+});
+
+describe('retrying a failed SMS notification', () => {
+  let local: Record<string, any>;
+
+  beforeEach(() => {
+    local = {};
+    (chrome.storage.local.get as jest.Mock).mockImplementation((key, cb) => {
+      cb?.({ [key]: local[key] });
+      return Promise.resolve({ [key]: local[key] });
+    });
+    (chrome.storage.local.set as jest.Mock).mockImplementation((values, cb) => {
+      Object.assign(local, values);
+      cb?.();
+      return Promise.resolve();
+    });
+    (chrome.alarms.get as jest.Mock).mockResolvedValue(undefined);
+    (chrome.alarms.create as jest.Mock).mockClear();
+  });
+
+  const pending = () => local.pb_sms_notification_retries ?? {};
+
+  test('it remembers the phone, and survives a restart', async () => {
+    await scheduleSmsNotificationRetry('phone-2');
+    expect(Object.keys(pending())).toEqual(['phone-2']);
+    expect(chrome.alarms.create).toHaveBeenCalledTimes(1);
+
+    (chrome.alarms.create as jest.Mock).mockClear();
+    await restoreSmsRetryAlarm();
+    expect(chrome.alarms.create).toHaveBeenCalledTimes(1);
+  });
+
+  test('a completed pass finishes it, on the right phone', async () => {
+    await scheduleSmsNotificationRetry('phone-2');
+    const sync = jest.fn().mockImplementation(async () => Date.now());
+    await runSmsNotificationRetries(sync);
+    expect(sync).toHaveBeenCalledWith('phone-2', false);
+    expect(pending()).toEqual({});
+  });
+
+  test('a skipped pass keeps it, and keeps the alarm', async () => {
+    await scheduleSmsNotificationRetry('phone-2');
+    (chrome.alarms.create as jest.Mock).mockClear();
+    await runSmsNotificationRetries(async () => 0);
+    expect(Object.keys(pending())).toEqual(['phone-2']);
+    expect(chrome.alarms.create).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed pass keeps it', async () => {
+    await scheduleSmsNotificationRetry('phone-2');
+    await runSmsNotificationRetries(() => Promise.reject(new Error('down')));
+    expect(Object.keys(pending())).toEqual(['phone-2']);
+  });
+
+  test('failing again during the pass keeps it', async () => {
+    await scheduleSmsNotificationRetry('phone-2');
+    await runSmsNotificationRetries(async device => {
+      await scheduleSmsNotificationRetry(device);
+      return Date.now();
+    });
+    expect(Object.keys(pending())).toEqual(['phone-2']);
+  });
+
+  test('a mirror asks for one full look, then not again', async () => {
+    await scheduleSmsNotificationRetry('phone-2', { full: true });
+    const sync = jest.fn().mockImplementation(async device => {
+      await scheduleSmsNotificationRetry(device);
+      return Date.now();
+    });
+    await runSmsNotificationRetries(sync);
+    expect(sync).toHaveBeenCalledWith('phone-2', true);
+    expect(pending()['phone-2'].full).toBe(false);
+  });
+
+  test('it gives up eventually', async () => {
+    await scheduleSmsNotificationRetry('phone-2');
+    local.pb_sms_notification_retries['phone-2'].since =
+      Date.now() - 7 * 60 * 60 * 1000;
+    await runSmsNotificationRetries(async () => 0);
+    expect(pending()).toEqual({});
   });
 });
 

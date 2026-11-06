@@ -378,7 +378,9 @@ export async function sendSms(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(smsData),
-      }
+      },
+      // Never held in memory waiting for quota: the draft stays, and the user decides.
+      { failFast: true }
     );
 
     if (!response.ok) {

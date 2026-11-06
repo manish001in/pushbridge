@@ -405,7 +405,8 @@ describe('SMS Bridge', () => {
               message: 'Hello world',
             },
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
 
@@ -642,7 +643,8 @@ describe('SMS Bridge', () => {
               message: 'Hello group!',
             },
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
   });
@@ -1212,7 +1214,8 @@ describe('Group MMS and Attachments', () => {
             },
             file_url: attachments[0].url,
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
 
@@ -1293,7 +1296,8 @@ describe('Group MMS and Attachments', () => {
             },
             file_url: attachments[0].url,
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
 
@@ -1358,7 +1362,8 @@ describe('Group MMS and Attachments', () => {
             },
             file_url: attachments[0].url,
           }),
-        })
+        }),
+        { failFast: true }
       );
     });
 
@@ -1430,7 +1435,8 @@ describe('Group MMS and Attachments', () => {
             'Access-Token': 'test-token',
             'Content-Type': 'application/json',
           }),
-        })
+        }),
+        { failFast: true }
       );
 
       // Verify the call was made (indicating attachments were processed)

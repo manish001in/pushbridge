@@ -579,7 +579,7 @@ async function handleIncomingSms(
       console.error('Failed to show SMS notification:', error);
       notificationFailed = true;
       unifiedNotificationTracker.releaseClaim('sms', smsNotificationId);
-      await scheduleSmsNotificationRetry();
+      await scheduleSmsNotificationRetry(push.source_device_iden, { full: true });
     }
 
     // Create SMS message object

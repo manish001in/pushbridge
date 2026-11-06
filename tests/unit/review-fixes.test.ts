@@ -51,6 +51,32 @@ describe('token health check', () => {
   });
 });
 
+describe('token revocation', () => {
+  test('a token saved while the check ran is left alone', async () => {
+    const tokens = ['old', 'new'];
+    local.mockImplementation(async (key: string) =>
+      key === 'pb_token' ? tokens.shift() : undefined
+    );
+    (chrome.storage.local.set as jest.Mock).mockClear();
+    fetchMock.mockResolvedValue({ ok: false, status: 401 });
+    await checkTokenHealth();
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  test('the token actually checked is cleared', async () => {
+    local.mockImplementation(async (key: string) =>
+      key === 'pb_token' ? 'same' : undefined
+    );
+    (chrome.storage.local.set as jest.Mock) = jest.fn().mockResolvedValue(undefined);
+    fetchMock.mockResolvedValue({ ok: false, status: 401 });
+    await checkTokenHealth();
+    expect(chrome.storage.local.set).toHaveBeenCalledWith({
+      pb_token: '',
+      pb_device_iden: '',
+    });
+  });
+});
+
 describe('quota', () => {
   const headers = (remaining: number, resetInSeconds: number) =>
     ({

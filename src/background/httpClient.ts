@@ -16,6 +16,9 @@ import { rateLimitManager } from './rateLimitManager';
 import { tokenBucket } from './tokenBucket';
 import { userFeedback } from './userFeedback';
 
+const RATE_LIMIT_MESSAGE =
+  'Pushbullet rate limit reached. Please try again in a few minutes.';
+
 export class RateLimitError extends Error {
   constructor(message: string) {
     super(message);
@@ -69,7 +72,7 @@ class HttpClient {
       failFast &&
       (rateLimitManager.isBackoffActive() || !tokenBucket.canConsume(1))
     ) {
-      throw new RateLimitError('Rate limited');
+      throw new RateLimitError(RATE_LIMIT_MESSAGE);
     }
 
     // 1. Check if backoff is active
@@ -144,7 +147,7 @@ class HttpClient {
         };
         console.log(`[HTTP-${requestId}] Rate limit headers on 429:`, headers);
         await this.handle429Error();
-        throw new RateLimitError('Rate limited');
+        throw new RateLimitError(RATE_LIMIT_MESSAGE);
       }
 
       // 7. Reset backoff on successful request
@@ -211,7 +214,7 @@ class HttpClient {
           `[HTTP-${requestId}] 429 error caught in catch block (unexpected)`
         );
         await this.handle429Error();
-        throw new RateLimitError('Rate limited');
+        throw new RateLimitError(RATE_LIMIT_MESSAGE);
       }
 
       // Re-throw other errors

@@ -733,7 +733,7 @@ export class PushComposer extends LitElement {
         this.failedAttempt = null;
         this.setMessageWithTimeout(
           response.queued
-            ? "No connection right now. It's saved and will send automatically."
+            ? 'Saved. It will send automatically.'
             : 'Push sent successfully!'
         );
         this.resetForm();

@@ -258,7 +258,7 @@ const { browser, target: workerTarget } = await launchExtension([
   `--host-resolver-rules=MAP api.pushbullet.com 127.0.0.1:${port},MAP stream.pushbullet.com 127.0.0.1:${port},MAP * 127.0.0.1:9`,
 ]);
 const base = workerTarget.url().replace('/background.js', '');
-const control = await browser.newPage();
+let control = await browser.newPage();
 await control.goto(`${base}/options.html`);
 
 const waitUntil = async (test, what, ms = 15000) => {
@@ -270,6 +270,39 @@ const waitUntil = async (test, what, ms = 15000) => {
     await sleep(50);
   }
 };
+// Chrome shuts down an extension that reloads several times within seconds. Nobody
+// changes account that fast, so the tests just leave room between reloads.
+const RELOAD_SPACING_MS = 12000;
+let lastReloadAt = 0;
+const leaveRoomForReload = async () => {
+  await sleep(Math.max(0, lastReloadAt + RELOAD_SPACING_MS - Date.now()));
+  lastReloadAt = Date.now();
+};
+
+/** After the extension reloads: every page is gone, so open a new one to drive it. */
+const afterReload = async () => {
+  await waitUntil(() => control.isClosed(), 'old pages to close');
+  await waitUntil(
+    () => browser.targets().some(t => t.type() === 'service_worker'),
+    'the new worker'
+  );
+  for (let attempt = 0; ; attempt++) {
+    try {
+      control = await browser.newPage();
+      await control.goto(`${base}/options.html`);
+      break;
+    } catch (error) {
+      if (attempt === 5) throw error;
+      await sleep(300);
+    }
+  }
+  cdp = await control.createCDPSession();
+  await cdp.send('ServiceWorker.enable');
+  await waitUntil(
+    async () => !(await stored('pb_account_change_pending')),
+    'the change to finish'
+  );
+};
 const attached = new WeakSet();
 const worker = async () => {
   const target = browser
@@ -280,7 +313,7 @@ const worker = async () => {
 };
 // Attaching to a worker just as it starts can hang, so don't attach only to stop it.
 // But one that's attached stays alive until it's closed through that attachment.
-const cdp = await control.createCDPSession();
+let cdp = await control.createCDPSession();
 await cdp.send('ServiceWorker.enable');
 const stopWorker = async () => {
   const target = browser
@@ -301,10 +334,18 @@ const wakeWorker = () =>
   control.evaluate(() =>
     chrome.runtime.sendMessage({ cmd: 'getDevices' }).catch(() => {})
   );
+/** A message sent as the old worker dies can be lost, so keep asking. */
+const wakeAndConnect = async () => {
+  const deadline = Date.now() + 15000;
+  while (api.sockets.size === 0) {
+    if (Date.now() > deadline) throw new Error('Timed out waiting for the stream');
+    await wakeWorker();
+    await sleep(500);
+  }
+};
 const restartWorker = async () => {
   await stopWorker();
-  await wakeWorker();
-  await waitUntil(() => api.sockets.size > 0, 'the stream to reconnect');
+  await wakeAndConnect();
 };
 const phone = (iden, nickname = iden) => ({
   iden,
@@ -487,7 +528,8 @@ try {
     when('POST', '/v2/pushes', { drop: true });
     await fill(popup, { to: 'phone', body: 'lost answer' });
     await clickSend(popup);
-    await composerSays(popup, 'sent successfully');
+    await composerSays(popup, 'will send automatically');
+    await waitUntil(async () => !(await stored('pb_pending_ops'))?.length, 'an empty queue');
     assert.equal(api.pushes.length, 1);
     assert.equal(api.pushes[0].target_device_iden, 'phone');
     await popup.close();
@@ -696,10 +738,13 @@ try {
       () => api.requests.some(r => r.url.includes('/v2/devices')),
       'the fetch'
     );
+    await leaveRoomForReload();
     await control.evaluate(() => chrome.runtime.sendMessage({ cmd: 'clearAllData' }));
     release();
+    await afterReload();
     await sleep(500);
     assert.ok(!(await stored('pb_device_cache'))?.devices?.length, 'Stays empty');
+    assert.equal(await stored('pb_token'), undefined);
   });
 
   const threadId = '+15550100';
@@ -931,8 +976,7 @@ try {
 
     // A new worker picks it up where it was.
     await stopWorker();
-    await wakeWorker();
-    await waitUntil(() => api.sockets.size > 0, 'the stream');
+    await wakeAndConnect();
     for (let i = 0; i < 5 && (await stored('pb_push_scan_progress')); i++) {
       await fireAlarm('pb_push_scan_resume');
       await sleep(500);
@@ -966,30 +1010,6 @@ try {
     pb_push_scan_watermark: 123,
   });
 
-  await test("another account's sign-in clears the old one's data", async () => {
-    api.devices = [];
-    await seed(accountAData());
-    const running = await worker();
-    await running.evaluate(() =>
-      chrome.notifications.create('from-a', {
-        type: 'basic', iconUrl: 'icons/48.png', title: 'A', message: 'A',
-      })
-    );
-    const answer = await control.evaluate(() =>
-      chrome.runtime.sendMessage({ cmd: 'verifyToken', token: 'token-b' })
-    );
-    assert.equal(answer.ok, true);
-    assert.equal(await stored('pb_user_iden'), 'user-b');
-    assert.equal(await stored('pb_token'), 'token-b');
-    assert.equal(await stored('pb_recent_pushes_state'), undefined);
-    assert.equal(await stored('sms_data_phone'), undefined);
-    assert.equal(await stored('pb_push_scan_watermark'), undefined);
-    const settings = await stored('pb_settings');
-    assert.equal(settings.soundEnabled, false, 'Preferences stay');
-    assert.equal(settings.defaultDevice, undefined, 'Devices do not');
-    assert.equal((await notifications())['from-a'], undefined);
-  });
-
   await test('signing back in as the same user keeps everything', async () => {
     api.devices = [];
     await seed({ ...accountAData(), pb_user_iden: 'me' });
@@ -997,6 +1017,7 @@ try {
       chrome.runtime.sendMessage({ cmd: 'verifyToken', token: 'token-a' })
     );
     assert.equal(answer.ok, true);
+    assert.equal(answer.restarting, undefined, 'No restart');
     assert.ok(await stored('pb_recent_pushes_state'));
     assert.equal((await stored('pb_settings')).defaultDevice, 'device-of-a');
   });
@@ -1026,10 +1047,12 @@ try {
       'the delivery check',
       30000
     );
+    await leaveRoomForReload();
     await control.evaluate(() =>
       chrome.runtime.sendMessage({ cmd: 'verifyToken', token: 'token-b' })
     );
     release();
+    await afterReload();
     await sleep(1000);
     assert.equal(
       posted('/v2/pushes').filter(r => r.body?.body === 'private to A').length,
@@ -1049,8 +1072,7 @@ try {
           backoffSeconds: 30,
         },
       });
-      await wakeWorker();
-      await waitUntil(() => api.sockets.size > 0, 'the stream');
+      await wakeAndConnect();
       const popup = await openPopup();
       if (!socketUp) {
         for (const socket of api.sockets) socket.terminate();
@@ -1062,9 +1084,173 @@ try {
       assert.equal(posted('/v2/pushes').length, 0);
       assert.equal((await stored('pb_pending_ops')).length, 1);
       await popup.close();
-      await control.evaluate(() => chrome.runtime.sendMessage({ cmd: 'clearAllData' }));
     });
   }
+
+  await test('a file during a rate limit fails at once and stays selected', async () => {
+    singlePhone();
+    await stopWorker();
+    await seed({
+      pb_backoff_state: { isActive: true, expiresAt: Date.now() + 120000, backoffSeconds: 30 },
+    });
+    await wakeAndConnect();
+    const popup = await openPopup();
+    await chooseFile(popup, 'pb-composer', smallFile);
+    await fill(popup, { to: 'phone', body: 'a file' });
+    await clickSend(popup);
+    await composerSays(popup, 'rate limit', 3000);
+    assert.equal(posted('/v2/upload-request').length, 0);
+    assert.ok(
+      await popup.evaluate(() => document.querySelector('pb-composer').selectedFile),
+      'The file is still selected'
+    );
+    assert.ok(!(await stored('pb_pending_ops'))?.length, 'Nothing hidden for later');
+    await popup.close();
+  });
+
+  await test('an SMS during a rate limit fails at once and keeps the draft', async () => {
+    api.devices = [phone('phone2')];
+    await stopWorker();
+    await seed({
+      defaultSmsDevice: 'phone2',
+      sms_data_phone2: {
+        deviceIden: 'phone2',
+        lastSync: Date.now(),
+        threads: [{ ...smsThread('+1555', 'Robin', 'hi'), deviceIden: 'phone2' }],
+      },
+      pb_backoff_state: { isActive: true, expiresAt: Date.now() + 120000, backoffSeconds: 30 },
+    });
+    await wakeAndConnect();
+    const popup = await openPopup();
+    await openThread(popup, 'Robin');
+    await replyAndSend(popup, 'keep me');
+    await popup.waitForFunction(
+      () => document.querySelector('pb-sms-thread').shadowRoot.querySelector('.send-error'),
+      { timeout: 3000 }
+    );
+    assert.equal(api.texts.length, 0);
+    assert.equal(
+      await popup.evaluate(
+        () => document.querySelector('pb-sms-thread').shadowRoot.querySelector('textarea').value
+      ),
+      'keep me'
+    );
+    await popup.close();
+  });
+
+  await test('a context menu send is saved and goes out once', async () => {
+    singlePhone();
+    await seed();
+    await restartWorker();
+    const running = await worker();
+    await running.evaluate(() =>
+      chrome.contextMenus.onClicked.dispatch(
+        { menuItemId: 'push-page', pageUrl: 'https://example.test/page' },
+        { id: 1, url: 'https://example.test/page', title: 'Page' }
+      )
+    );
+    await waitUntil(() => api.pushes.length === 1, 'the push', 20000);
+    await sleep(300);
+    assert.equal(api.pushes.length, 1);
+    assert.ok(api.pushes[0].guid, 'It went through the queue');
+  });
+
+  await test('sends left by an older version are reported on upgrade', async () => {
+    singlePhone();
+    await stopWorker();
+    await seed({
+      pb_operation_queue: [
+        {
+          url: 'https://api.pushbullet.com/v2/texts',
+          options: { method: 'POST', body: '{"data":{"message":"old"}}' },
+        },
+      ],
+    });
+    await wakeAndConnect();
+    await waitUntil(async () => (await notifications()).pb_legacy_sends, 'the report');
+    assert.equal(await stored('pb_operation_queue'), null);
+    assert.equal(api.texts.length, 0, 'It was not replayed');
+  });
+
+  await test('a push scan that fails finishes without another tickle', async () => {
+    singlePhone();
+    await seed();
+    await restartWorker();
+    await setBaseline();
+    api.pushes = [newPush('recovered')];
+    when('GET', '/v2/pushes?', { status: 500, sticky: false });
+    stream({ type: 'tickle', subtype: 'push' });
+    await waitUntil(() => stored('pb_push_scan_progress'), 'the saved checkpoint');
+    assert.ok(await hasAlarm('pb_push_scan_resume'));
+    await fireAlarm('pb_push_scan_resume');
+    await waitUntil(async () => (await notifications()).push_recovered, 'the push');
+  });
+
+  await test('switching account restarts everything and carries nothing over', async () => {
+    api.devices = [phone('phone')];
+    await seed({ ...accountAData(), pb_token: 'token-a' });
+    await restartWorker();
+    // Pages from the old account, including one that would write its history back.
+    const oldPopup = await browser.newPage();
+    await oldPopup.goto(`${base}/popup.html`);
+    const oldWindow = await browser.newPage();
+    await oldWindow.goto(`${base}/popup.html?windowMode=1`);
+    const socketsBefore = [...api.sockets];
+    await leaveRoomForReload();
+    const answer = await control.evaluate(() =>
+      chrome.runtime.sendMessage({ cmd: 'verifyToken', token: 'token-b' })
+    );
+    assert.equal(answer.restarting, true);
+    await afterReload();
+    assert.ok(oldPopup.isClosed() && oldWindow.isClosed(), 'Old pages are gone');
+    assert.ok(socketsBefore.every(s => s.readyState !== 1), 'The old stream is gone');
+
+    assert.equal(await stored('pb_user_iden'), 'user-b');
+    assert.equal(await stored('pb_token'), 'token-b');
+    assert.equal(await stored('pb_recent_pushes_state'), undefined);
+    // Account A's copy had this marker. B's own sync may have written its own since.
+    assert.notEqual((await stored('sms_data_phone'))?.lastSync, 1);
+    const settings = await stored('pb_settings');
+    assert.equal(settings.soundEnabled, false, 'Preferences stay');
+    assert.notEqual(settings.defaultDevice, 'device-of-a', 'Devices do not');
+
+    // Setup that the old sign-in page would have done.
+    await waitUntil(async () => await stored('pb_device_iden'), 'this browser registering');
+    await waitUntil(() => api.sockets.size > 0, 'the new stream');
+    await waitUntil(
+      () => browser.targets().some(t => t.url().includes('windowMode=1')),
+      'the window to reopen'
+    );
+  });
+
+  await test('a worker that died before reloading still reloads first', async () => {
+    api.devices = [];
+    await seed(accountAData());
+    await control.evaluate(async () => {
+      await chrome.storage.session.set({ pb_account_reload_required: 'g1' });
+      await chrome.storage.local.set({
+        pb_account_change_pending: { token: 'token-b', userIden: 'user-b', generation: 'g1' },
+      });
+    });
+    const oldPage = await browser.newPage();
+    await oldPage.goto(`${base}/popup.html`).catch(() => {});
+    await leaveRoomForReload();
+    await stopWorker();
+    await wakeWorker().catch(() => {});
+    await afterReload();
+    assert.ok(oldPage.isClosed(), 'The old page is gone');
+    assert.equal(await stored('pb_user_iden'), 'user-b');
+  });
+
+  await test('Reset All Data restarts and leaves nothing', async () => {
+    api.devices = [];
+    await seed({ pb_user_iden: 'me', pb_settings: { soundEnabled: false } });
+    await leaveRoomForReload();
+    await control.evaluate(() => chrome.runtime.sendMessage({ cmd: 'clearAllData' }));
+    await afterReload();
+    assert.equal(await stored('pb_token'), undefined);
+    assert.notEqual((await stored('pb_settings'))?.soundEnabled, false);
+  });
 
   const textThread = (id, name, latestId, body) => ({
     id,
@@ -1123,8 +1309,7 @@ try {
     stream(smsMirror('301', 'on my way', { title: 'Robin' }));
     await waitUntil(async () => Object.keys(await notifications()).length === 1, 'the mirror');
     await stopWorker();
-    await wakeWorker();
-    await waitUntil(() => api.sockets.size > 0, 'the stream');
+    await wakeAndConnect();
     api.threads.phone = [textThread('t2', 'Robin', 'm2', 'on my way')];
     stream(smsChanged);
     await waitUntil(

@@ -155,8 +155,7 @@ interface HistorySearch {
  */
 async function searchHistoryForGuids(
   guids: Set<string>,
-  sinceMs: number,
-  { failFast = false }: { failFast?: boolean } = {}
+  sinceMs: number
 ): Promise<HistorySearch> {
   const token = await getLocal<string>('pb_token');
   const found = new Set<string>();
@@ -175,7 +174,8 @@ async function searchHistoryForGuids(
     const response = await httpClient.fetch(
       `https://api.pushbullet.com/v2/pushes?${params}`,
       { method: 'GET', headers: { 'Access-Token': token as string } },
-      { failFast }
+      // Never waits for quota: the operation is saved and can try again later.
+      { failFast: true }
     );
     if (!response.ok) {
       throw new Error(`Could not check for an earlier send: ${response.status}`);
@@ -199,8 +199,7 @@ export async function checkGuidDelivered(
 ): Promise<DeliveryCheck> {
   const { found, complete } = await searchHistoryForGuids(
     new Set([guid]),
-    startedAt - DELIVERY_CHECK_MARGIN_MS,
-    { failFast: true }
+    startedAt - DELIVERY_CHECK_MARGIN_MS
   );
   return found.has(guid) ? 'delivered' : complete ? 'absent' : 'unknown';
 }
@@ -486,6 +485,7 @@ async function processOperation(
       await createPush(op.payload as PushPayload, {
         silent: true,
         accountEpoch,
+        failFast: true,
       });
       break;
 

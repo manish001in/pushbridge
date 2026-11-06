@@ -1,4 +1,4 @@
-import { getSession, setSession } from './storage';
+import { getLocal, getSession, setLocal, setSession } from './storage';
 
 /**
  * One incoming SMS can arrive twice: as a mirrored notification and through history
@@ -17,8 +17,9 @@ const SAME_MESSAGE_WINDOW_MS = 2 * 60 * 1000;
 const FORGET_AFTER_MS = 10 * 60 * 1000;
 
 export const SMS_RETRY_ALARM = 'pb_sms_notification_retry';
-const MAX_RETRIES = 5;
-let retriesLeft = MAX_RETRIES;
+const RETRIES_KEY = 'pb_sms_notification_retries';
+// The periodic sync has come round by then.
+const GIVE_UP_AFTER_MS = 6 * 60 * 60 * 1000;
 
 interface Sighting {
   source: SmsSource;
@@ -79,7 +80,6 @@ export function showSmsOnce(
     }
 
     await show();
-    retriesLeft = MAX_RETRIES;
     sightings[key] = [...list, { source, sentAt, seenAt: Date.now() }];
     await setSession(SIGHTINGS_KEY, sightings);
     return true;
@@ -92,14 +92,87 @@ export function clearSmsSightings(): Promise<void> {
   });
 }
 
+interface PendingRetry {
+  since: number;
+  /** Needs a look past the latest-message check: a mirror has no thread to mark. */
+  full: boolean;
+  /** Changes when another failure arrives, so a pass can tell it wasn't the last. */
+  failures: number;
+}
+
+type PendingRetries = Record<string, PendingRetry>;
+
+function loadRetries(): Promise<PendingRetries> {
+  return getLocal<PendingRetries>(RETRIES_KEY).then(found => found ?? {});
+}
+
+async function ensureRetryAlarm(): Promise<void> {
+  if (!(await chrome.alarms.get(SMS_RETRY_ALARM))) {
+    await chrome.alarms.create(SMS_RETRY_ALARM, { delayInMinutes: 1 });
+  }
+}
+
 /**
  * After a notification fails: look again in a minute, without waiting for another SMS
- * or the 6-hour sync. Coalesced, and gives up after a few tries in a row.
+ * or the 6-hour sync, on the phone it came from. Saved, so a worker restart keeps it.
  */
-export async function scheduleSmsNotificationRetry(): Promise<void> {
-  if (retriesLeft <= 0 || (await chrome.alarms.get(SMS_RETRY_ALARM))) {
-    return;
+export function scheduleSmsNotificationRetry(
+  deviceIden: string,
+  { full = false }: { full?: boolean } = {}
+): Promise<void> {
+  return inOrder(async () => {
+    const retries = await loadRetries();
+    const earlier = retries[deviceIden];
+    retries[deviceIden] = {
+      since: earlier?.since ?? Date.now(),
+      full: earlier?.full || full,
+      failures: (earlier?.failures ?? 0) + 1,
+    };
+    await setLocal(RETRIES_KEY, retries);
+    await ensureRetryAlarm();
+  });
+}
+
+/**
+ * What the alarm does. `sync` returns when that phone's sync last completed, which
+ * stays old if it was skipped for low quota, an offline phone or an error.
+ */
+export async function runSmsNotificationRetries(
+  sync: (deviceIden: string, full: boolean) => Promise<number>
+): Promise<void> {
+  const retries = await inOrder(loadRetries);
+
+  for (const [deviceIden, retry] of Object.entries(retries)) {
+    const startedAt = Date.now();
+    let synced = false;
+    try {
+      synced = (await sync(deviceIden, retry.full)) >= startedAt;
+    } catch (error) {
+      console.error('SMS notification retry failed:', error);
+    }
+
+    await inOrder(async () => {
+      const current = await loadRetries();
+      const entry = current[deviceIden];
+      if (!entry) return;
+      const givenUp = Date.now() - entry.since > GIVE_UP_AFTER_MS;
+      if (givenUp || (synced && entry.failures === retry.failures)) {
+        delete current[deviceIden];
+      } else if (synced) {
+        entry.full = false;
+      }
+      await setLocal(RETRIES_KEY, current);
+    });
   }
-  retriesLeft--;
-  await chrome.alarms.create(SMS_RETRY_ALARM, { delayInMinutes: 1 });
+
+  await restoreSmsRetryAlarm();
+}
+
+/** At worker start, and after each pass: anything still pending needs its alarm. */
+export function restoreSmsRetryAlarm(): Promise<void> {
+  return inOrder(async () => {
+    if (Object.keys(await loadRetries()).length) {
+      await ensureRetryAlarm();
+    }
+  });
 }

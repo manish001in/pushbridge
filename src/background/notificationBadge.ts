@@ -4,6 +4,7 @@
  * Now fully integrated with UnifiedNotificationTracker for centralized state management
  */
 
+import { accountReady } from './accountCutover';
 import { getTotalUnreadCount } from './smsBridge';
 import { getLocal, setLocal } from './storage';
 import {
@@ -30,7 +31,7 @@ class NotificationBadgeManager {
   };
 
   private constructor() {
-    this.initializeBadge();
+    void accountReady.then(() => this.initializeBadge());
   }
 
   public static getInstance(): NotificationBadgeManager {

@@ -13,6 +13,7 @@ import './components/pb-channels';
 import type { PushbulletDevice } from '../background/deviceManager';
 import { getLocal } from '../background/storage';
 
+import { waitForAccountChange } from './accountReady';
 import {
   getOptionOrder,
   getHiddenTabs,
@@ -49,6 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.error('🪟 [Popup] Failed to send POPUP_OPEN message:', error)
     );
 
+  await waitForAccountChange();
   await initializePopup();
 });
 

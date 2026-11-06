@@ -173,7 +173,7 @@ async function runSmsSync(
           if (!handled) {
             // So an incremental pass looks at this thread again.
             thread.latestKey = undefined;
-            await scheduleSmsNotificationRetry();
+            await scheduleSmsNotificationRetry(deviceIden);
           }
         }
       } catch (error) {

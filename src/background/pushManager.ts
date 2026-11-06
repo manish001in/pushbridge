@@ -193,7 +193,10 @@ export async function createPush(
  * @param file - The file to upload
  * @returns Promise resolving to upload information
  */
-export async function requestUpload(file: File): Promise<UploadInfo> {
+export async function requestUpload(
+  file: File,
+  { failFast = false }: { failFast?: boolean } = {}
+): Promise<UploadInfo> {
   try {
     // Validate file size (25MB limit)
     const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
@@ -223,7 +226,8 @@ export async function requestUpload(file: File): Promise<UploadInfo> {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-      }
+      },
+      { failFast }
     );
 
     if (!response.ok) {
@@ -290,7 +294,8 @@ export async function createFilePush(
   channel_tag?: string,
   email?: string,
   guid?: string,
-  accountEpoch?: number
+  accountEpoch?: number,
+  { failFast = false }: { failFast?: boolean } = {}
 ): Promise<FilePush> {
   try {
     const token = await getLocal<string>('pb_token');
@@ -346,7 +351,8 @@ export async function createFilePush(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(pushData),
-      }
+      },
+      { failFast }
     );
 
     if (!response.ok) {

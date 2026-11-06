@@ -118,7 +118,8 @@ describe('pushManager', () => {
             file_name: 'test.txt',
             file_type: 'text/plain',
           }),
-        })
+        }),
+        { failFast: false }
       );
     });
 
@@ -233,7 +234,8 @@ describe('pushManager', () => {
             body: 'Test Body (File: test.txt)',
             channel_tag: 'test-channel',
           }),
-        }
+        },
+        { failFast: false }
       );
     });
 
@@ -280,7 +282,8 @@ describe('pushManager', () => {
             source_device_iden: 'device-123',
             // No device_iden
           }),
-        })
+        }),
+        { failFast: false }
       );
     });
 

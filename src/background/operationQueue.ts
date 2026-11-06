@@ -12,7 +12,7 @@ interface RequestInit {
 }
 
 import { rateLimitManager } from './rateLimitManager';
-import { setLocal } from './storage';
+import { getLocal, setLocal } from './storage';
 import { tokenBucket } from './tokenBucket';
 
 export interface QueuedOperation {
@@ -29,6 +29,8 @@ export interface PendingOperation {
   url: string;
   options: RequestInit;
 }
+
+const LOST_SENDS_KEY = 'pb_unreported_legacy_sends';
 
 class OperationQueue {
   private queue: QueuedOperation[] = [];
@@ -417,11 +419,41 @@ class OperationQueue {
   private async persistQueue(): Promise<void> {}
 
   /**
-   * Clear anything an older version saved.
+   * Older versions saved requests here, with no caller left to finish them. Replaying
+   * could send them twice, so they go, but not silently: the count is saved first, so
+   * the user still hears about them if the notification or the worker fails.
    */
   async loadQueue(): Promise<void> {
     try {
+      const legacy = await getLocal<any[]>('pb_operation_queue');
+      if (Array.isArray(legacy) && legacy.length) {
+        const pending =
+          (await getLocal<any[]>('pb_pending_ops')) ?? [];
+        const known = new Set(pending.map((op: any) => op.payload?.guid));
+        const lost = legacy.filter(entry => {
+          if (entry.options?.method !== 'POST') return false;
+          try {
+            return !known.has(JSON.parse(entry.options.body)?.guid);
+          } catch {
+            return true;
+          }
+        }).length;
+        const earlier = (await getLocal<number>(LOST_SENDS_KEY)) ?? 0;
+        await setLocal(LOST_SENDS_KEY, earlier + lost);
+      }
       await setLocal('pb_operation_queue', null);
+
+      const unreported = await getLocal<number>(LOST_SENDS_KEY);
+      if (unreported) {
+        await chrome.notifications.create('pb_legacy_sends', {
+          type: 'basic',
+          iconUrl: 'icons/48.png',
+          title: 'Some queued sends may not have gone out',
+          message:
+            'They were waiting when Pushbridge updated. Please check and send them again if needed.',
+        });
+        await setLocal(LOST_SENDS_KEY, 0);
+      }
     } catch (error) {
       console.error('Failed to clear saved operation queue:', error);
     }

@@ -8,6 +8,7 @@ import {
   connectOnWorkerStart,
   disconnectWebSocket,
   initializeWebSocket,
+  restorePushScanAlarm,
   resumePushScan,
 } from '../../src/background/socket';
 import { unifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
@@ -337,6 +338,72 @@ describe('catching up when the stream connects', () => {
       await connect();
       // The older one was processed first, and it's the one that failed.
       expect(stored.pb_push_scan_watermark).toBe(994);
+    });
+
+    test('a resumed pass that fails sets its alarm again', async () => {
+      serve(7);
+      await connect();
+      expect(stored.pb_push_scan_progress.cursor).toBe('5');
+      (chrome.alarms.create as jest.Mock).mockClear();
+      (getPushHistory as jest.Mock).mockRejectedValueOnce(new TypeError('down'));
+      await pass();
+      expect(stored.pb_push_scan_progress.cursor).toBe('5');
+      expect(chrome.alarms.create).toHaveBeenCalledWith('pb_push_scan_resume', {
+        delayInMinutes: 1,
+      });
+    });
+
+    test('a first pass that fails is saved and retried by the alarm', async () => {
+      (getPushHistory as jest.Mock).mockRejectedValueOnce(new TypeError('down'));
+      await connect();
+      expect(stored.pb_push_scan_progress.cursor).toBe('');
+      expect(chrome.alarms.create).toHaveBeenCalledWith('pb_push_scan_resume', {
+        delayInMinutes: 1,
+      });
+
+      serve(2);
+      await pass();
+      expect(tracker.markAsProcessed).toHaveBeenCalledTimes(2);
+      expect(stored.pb_push_scan_progress).toBeNull();
+    });
+
+    test('a failure partway restarts from before the pass, skipping nothing', async () => {
+      (getPushHistory as jest.Mock)
+        .mockResolvedValueOnce({ pushes: [note(0)], cursor: 'later' })
+        .mockRejectedValueOnce(new TypeError('down'));
+      await connect();
+      expect(stored.pb_push_scan_progress.cursor).toBe('');
+    });
+
+    test('a notification that failed comes back through the alarm', async () => {
+      showPush().mockRejectedValueOnce(new Error('no'));
+      serve(1);
+      await connect();
+      expect(chrome.alarms.create).toHaveBeenCalledWith('pb_push_scan_resume', {
+        delayInMinutes: 1,
+      });
+      expect(tracker.markAsProcessed).not.toHaveBeenCalled();
+
+      await pass();
+      expect(showPush()).toHaveBeenCalledTimes(2);
+      expect(tracker.markAsProcessed).toHaveBeenCalledTimes(1);
+      expect(stored.pb_push_scan_progress).toBeNull();
+    });
+
+    test('one that keeps failing is eventually let go', async () => {
+      showPush().mockRejectedValue(new Error('no'));
+      serve(1);
+      await connect();
+      for (let i = 0; i < 6; i++) await pass();
+      expect(stored.pb_push_scan_progress).toBeNull();
+      expect(stored.pb_push_scan_watermark).toBe(1000);
+    });
+
+    test('at worker start, saved work gets its alarm back', async () => {
+      stored.pb_push_scan_progress = { cursor: '5' };
+      (chrome.alarms.create as jest.Mock).mockClear();
+      await restorePushScanAlarm();
+      expect(chrome.alarms.create).toHaveBeenCalledTimes(1);
     });
 
     test('later scans ask only for what changed', async () => {

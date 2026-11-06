@@ -289,10 +289,13 @@ const PUSH_SCAN_OVERLAP_SECONDS = 5;
 const PUSH_SCAN_STATE_KEY = 'pb_push_scan_progress';
 export const PUSH_SCAN_ALARM = 'pb_push_scan_resume';
 const PAGES_PER_SCAN_PASS = 5;
+const MAX_FAILED_ROW_RETRIES = 5;
 
-/** Forget how far scans have got, because the account changed. */
-export async function resetPushScan(): Promise<void> {
-  await chrome.alarms.clear(PUSH_SCAN_ALARM);
+/** At worker start: saved work needs its alarm, which may not have survived. */
+export async function restorePushScanAlarm(): Promise<void> {
+  if (await getLocal<PushScan | null>(PUSH_SCAN_STATE_KEY)) {
+    await ensureScanAlarm();
+  }
 }
 
 /** One more pass of a long scan, from its alarm. */
@@ -330,6 +333,7 @@ interface PushScan {
   tabsOpened: number;
   notificationsShown: number;
   heldBack: number;
+  failedRetries?: number;
 }
 
 /**
@@ -398,6 +402,8 @@ async function handlePushTickle(
   catchUp = false,
   fromAlarm = false
 ): Promise<void> {
+  let checkpoint: PushScan | undefined;
+  const scanEpoch = currentAccountEpoch();
   try {
     console.log(
       catchUp
@@ -409,6 +415,10 @@ async function handlePushTickle(
     // a tab for every old link in the account.
     if (catchUp && !(await unifiedNotificationTracker.hasBaseline())) {
       await unifiedNotificationTracker.markAsSeen();
+      return;
+    }
+
+    if (!(await getLocal<string>('pb_token'))) {
       return;
     }
 
@@ -435,6 +445,8 @@ async function handlePushTickle(
     // Get recent pushes and process them
     const accountEpoch = currentAccountEpoch();
     const deviceIden = await getLocal<string>('pb_device_iden');
+    // Where to start again if this pass fails. Reading moves the cursor on.
+    checkpoint = { ...scan };
     const { pushes, done } = await readScanPages(scan, catchUp);
     // Only a backlog is capped. A scan long enough to need resuming is one.
     const capped = catchUp || !!saved || !done;
@@ -506,13 +518,18 @@ async function handlePushTickle(
                   if (await showPushNotification(push)) {
                     scan.notificationsShown++;
                   }
-                } catch {
-                  // Not shown. Leave it unprocessed so the next scan retries.
-                  scan.oldestFailed = Math.min(
-                    scan.oldestFailed ?? Infinity,
-                    push.modified ?? 0
-                  );
-                  continue;
+                } catch (error) {
+                  // Not shown. Leave it unprocessed so the next scan retries, unless
+                  // that has been tried enough. Then it counts as handled, or the
+                  // next scan would read it again and start all over.
+                  if ((scan.failedRetries ?? 0) < MAX_FAILED_ROW_RETRIES) {
+                    scan.oldestFailed = Math.min(
+                      scan.oldestFailed ?? Infinity,
+                      push.modified ?? 0
+                    );
+                    continue;
+                  }
+                  console.error('Giving up on a push notification:', error);
                 }
               }
             }
@@ -580,8 +597,21 @@ async function handlePushTickle(
       scan.oldestFailed === undefined
         ? scan.newestSeen
         : Math.max(scan.since, scan.oldestFailed - 1);
-    if (reachedTo > (scannedUpTo ?? 0)) {
+    if (scan.oldestFailed !== undefined) {
+      // Nothing else would look again on a quiet connection.
       await setLocal(PUSH_SCAN_WATERMARK_KEY, reachedTo);
+      await setLocal(PUSH_SCAN_STATE_KEY, {
+        ...scan,
+        since: reachedTo - PUSH_SCAN_OVERLAP_SECONDS,
+        cursor: '',
+        oldestFailed: undefined,
+        failedRetries: (scan.failedRetries ?? 0) + 1,
+      });
+      await ensureScanAlarm();
+      return;
+    }
+    if (scan.newestSeen > (scannedUpTo ?? 0)) {
+      await setLocal(PUSH_SCAN_WATERMARK_KEY, scan.newestSeen);
     }
     if (saved) {
       await setLocal(PUSH_SCAN_STATE_KEY, null);
@@ -590,6 +620,15 @@ async function handlePushTickle(
     }
   } catch (error) {
     console.error('Failed to handle push tickle:', error);
+    // An alarm alone does nothing without saved work, and nothing else may come along.
+    if (checkpoint && scanEpoch === currentAccountEpoch()) {
+      try {
+        await setLocal(PUSH_SCAN_STATE_KEY, checkpoint);
+        await ensureScanAlarm();
+      } catch (saveError) {
+        console.error('Failed to save the push scan:', saveError);
+      }
+    }
   }
 }
 

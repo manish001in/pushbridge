@@ -3,6 +3,7 @@
  * Periodically checks token validity and handles revocation
  */
 
+import { accountReady, inAccountOrder } from './accountCutover';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { getLocal, setLocal } from './storage';
@@ -42,9 +43,14 @@ export async function initializeTokenHealthMonitor(): Promise<void> {
 /**
  * Handle token health check alarm
  */
+// One function, so adding it twice has no effect.
+function onTokenAlarmWhenReady(alarm: chrome.alarms.Alarm): void {
+  void accountReady.then(() => handleTokenHealthAlarm(alarm));
+}
+
 /** Must run every time the worker starts; alarms outlive it. */
 export function registerTokenHealthListener(): void {
-  chrome.alarms.onAlarm.addListener(handleTokenHealthAlarm);
+  chrome.alarms.onAlarm.addListener(onTokenAlarmWhenReady);
 }
 
 function handleTokenHealthAlarm(alarm: chrome.alarms.Alarm): void {
@@ -93,16 +99,11 @@ export async function checkTokenHealth(): Promise<TokenHealthStatus> {
       // Store health status
       await setLocal('pb_token_health', status);
     } else if (response.status === 401) {
-      // The user may have signed in again while this was in flight. Only the token
-      // actually checked can be declared revoked.
-      if ((await getLocal<string>('pb_token')) !== token) {
-        return status;
-      }
       console.error('Token health check failed: Token revoked');
       status.error = 'Token revoked';
 
       // Handle token revocation
-      await handleTokenRevocation();
+      await handleTokenRevocation(token);
     } else {
       console.error(
         'Token health check failed:',
@@ -133,19 +134,28 @@ export async function checkTokenHealth(): Promise<TokenHealthStatus> {
 /**
  * Handle token revocation
  */
-async function handleTokenRevocation(): Promise<void> {
+async function handleTokenRevocation(checkedToken: string): Promise<void> {
   try {
     console.log('Handling token revocation...');
+
+    // In the same order as saving a token. Only the token actually checked can be
+    // declared revoked: the user may have signed in again since.
+    const cleared = await inAccountOrder(async () => {
+      if ((await getLocal<string>('pb_token')) !== checkedToken) {
+        return false;
+      }
+      await chrome.storage.local.set({ pb_token: '', pb_device_iden: '' });
+      return true;
+    });
+    if (!cleared) {
+      return;
+    }
 
     // Report the error
     await reportError(PBError.TokenRevoked, {
       message: 'Token has been revoked by Pushbullet',
       code: 401,
     });
-
-    // Clear the token
-    await setLocal('pb_token', '');
-    await setLocal('pb_device_iden', '');
 
     // Update badge to show auth error
     await chrome.action.setBadgeText({ text: 'AUTH' });
