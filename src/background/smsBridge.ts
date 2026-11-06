@@ -224,15 +224,6 @@ export async function addMessageToThread(
     //   await unifiedNotificationTracker.markAsProcessed('sms', message.pb_guid, message.timestamp);
     // }
 
-    // Just mark as processed for deduplication, don't increment count
-    if (message.inbound) {
-      await unifiedNotificationTracker.markAsProcessed(
-        'sms',
-        message.pb_guid,
-        message.timestamp
-      );
-      console.log(`📝 [SMSBridge] Marked SMS as processed: ${message.pb_guid}`);
-    }
 
     console.log(
       `✅ [SMSBridge] Added message to thread: ${conversationId}, total messages: ${thread.messages.length}`

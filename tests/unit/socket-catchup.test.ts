@@ -3,10 +3,12 @@
  * has to catch up. Covers issue #9 and link safety.
  */
 import { getPushHistory } from '../../src/background/pushManager';
+import { rateLimitManager } from '../../src/background/rateLimitManager';
 import {
   connectOnWorkerStart,
   disconnectWebSocket,
   initializeWebSocket,
+  resumePushScan,
 } from '../../src/background/socket';
 import { unifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
 
@@ -45,6 +47,7 @@ jest.mock('../../src/background/unifiedNotificationTracker', () => ({
     markAsSeen: jest.fn(),
     shouldShowNotification: jest.fn(),
     markAsProcessed: jest.fn(),
+    wasProcessed: jest.fn().mockReturnValue(false),
   },
 }));
 
@@ -212,6 +215,140 @@ describe('catching up when the stream connects', () => {
     (getPushHistory as jest.Mock).mockResolvedValue({ pushes: [link('a')] });
     await connect();
     expect(chrome.tabs.create).not.toHaveBeenCalled();
+  });
+
+  describe('a scan too long for one pass', () => {
+    const note = (i: number) =>
+      link(`n${i}`, {
+        type: 'note',
+        url: undefined,
+        modified: 1000 - i,
+        created: 1000 - i,
+      });
+    /** Pages of `size`, newest first, each pointing at the next by number. */
+    const serve = (total: number, size = 1) =>
+      (getPushHistory as jest.Mock).mockImplementation(
+        async (_limit: number, since: number, cursor: string) => {
+          const rows = Array.from({ length: total }, (_, i) => note(i)).filter(
+            push => push.modified > since
+          );
+          const start = Number(cursor || 0);
+          return {
+            pushes: rows.slice(start, start + size),
+            ...(start + size < rows.length
+              ? { cursor: String(start + size) }
+              : {}),
+          };
+        }
+      );
+    const showPush = () =>
+      jest.requireMock('../../src/background/pushNotifications')
+        .showPushNotification as jest.Mock;
+    const pass = async () => {
+      await resumePushScan();
+      for (let i = 0; i < 20; i++) await settle();
+    };
+
+    beforeEach(() => {
+      const handled = new Set<string>();
+      tracker.shouldShowNotification.mockImplementation(
+        async ({ id }: any) => !handled.has(id)
+      );
+      tracker.markAsProcessed.mockImplementation(async (_type: any, id: any) => {
+        handled.add(id);
+      });
+      showPush().mockReset();
+      showPush().mockResolvedValue(true);
+      (chrome.alarms.get as jest.Mock).mockResolvedValue(undefined);
+      (chrome.notifications.create as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue('id');
+    });
+
+    test('nothing older is skipped: the watermark waits for the end', async () => {
+      serve(7);
+      await connect();
+      expect(getPushHistory).toHaveBeenCalledTimes(5);
+      expect(stored.pb_push_scan_watermark).toBeUndefined();
+      expect(stored.pb_push_scan_progress.cursor).toBe('5');
+      expect(chrome.alarms.create).toHaveBeenCalledWith('pb_push_scan_resume', {
+        delayInMinutes: 1,
+      });
+
+      await pass();
+      expect(getPushHistory).toHaveBeenCalledWith(50, 0, '6');
+      expect(tracker.markAsProcessed).toHaveBeenCalledTimes(7);
+      expect(stored.pb_push_scan_watermark).toBe(1000);
+      expect(stored.pb_push_scan_progress).toBeNull();
+    });
+
+    test('an empty page with a cursor is not the end', async () => {
+      (getPushHistory as jest.Mock)
+        .mockResolvedValueOnce({ pushes: [note(0)], cursor: 'a' })
+        .mockResolvedValueOnce({ pushes: [], cursor: 'b' })
+        .mockResolvedValueOnce({ pushes: [note(1)] });
+      await connect();
+      expect(getPushHistory).toHaveBeenCalledTimes(3);
+      expect(tracker.markAsProcessed).toHaveBeenCalledTimes(2);
+    });
+
+    test('a reconnect or tickle during the scan reads nothing', async () => {
+      serve(7);
+      await connect();
+      (getPushHistory as jest.Mock).mockClear();
+      socket.onmessage({
+        data: JSON.stringify({ type: 'tickle', subtype: 'push' }),
+      });
+      for (let i = 0; i < 20; i++) await settle();
+      expect(getPushHistory).not.toHaveBeenCalled();
+    });
+
+    test('low quota pauses it, and it stays reachable', async () => {
+      serve(7);
+      await connect();
+      (getPushHistory as jest.Mock).mockClear();
+      const low = jest.spyOn(rateLimitManager, 'isQuotaLow').mockReturnValue(true);
+      await pass();
+      expect(getPushHistory).not.toHaveBeenCalled();
+      expect(stored.pb_push_scan_progress.cursor).toBe('5');
+      low.mockRestore();
+      await pass();
+      expect(stored.pb_push_scan_progress).toBeNull();
+    });
+
+    test('notification limits apply across the whole scan', async () => {
+      serve(60, 5);
+      await connect();
+      await pass();
+      await pass();
+      expect(showPush()).toHaveBeenCalledTimes(10);
+      expect(stored.pb_push_scan_progress).toBeNull();
+      const summary = (chrome.notifications.create as jest.Mock).mock.calls
+        .filter(call => call[0] === 'push_backlog_summary')
+        .pop();
+      expect(summary).toBeDefined();
+    });
+
+    test('a push that failed to show keeps the watermark behind it', async () => {
+      showPush().mockRejectedValueOnce(new Error('no'));
+      (getPushHistory as jest.Mock).mockResolvedValue({
+        pushes: [note(0), note(5)],
+      });
+      await connect();
+      // The older one was processed first, and it's the one that failed.
+      expect(stored.pb_push_scan_watermark).toBe(994);
+    });
+
+    test('later scans ask only for what changed', async () => {
+      (getPushHistory as jest.Mock).mockResolvedValue({ pushes: [note(0)] });
+      await connect();
+      (getPushHistory as jest.Mock).mockClear();
+      socket.onmessage({
+        data: JSON.stringify({ type: 'tickle', subtype: 'push' }),
+      });
+      for (let i = 0; i < 20; i++) await settle();
+      expect((getPushHistory as jest.Mock).mock.calls[0][1]).toBe(995);
+    });
   });
 });
 

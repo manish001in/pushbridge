@@ -92,6 +92,11 @@ try {
               };
             case 'getContacts':
               return { ok: true, contacts: [] };
+            case 'UPLOAD_FILE':
+              window.__sent.push({ cmd: 'UPLOAD_FILE', ...message.payload });
+              return window.__failUpload
+                ? { success: false, error: 'Failed' }
+                : { success: true };
             case 'createPush':
               window.__sent.push({ cmd: 'createPush', ...message.payload });
               await hold('createPush');
@@ -298,6 +303,74 @@ try {
     1,
     'One send despite two presses'
   );
+  await popup.close();
+
+  console.log('Testing a different file with the same details is a new message');
+  await seed();
+  popup = await openPopup();
+  await popup.waitForSelector('pb-composer >>> textarea');
+  const sendFile = (contents, failing) =>
+    popup.evaluate(
+      async (contents, failing) => {
+        const composer = document.querySelector('pb-composer');
+        window.__failUpload = failing;
+        if (contents !== null) {
+          composer.selectedFile = new File([contents], 'report.txt', {
+            type: 'text/plain',
+            lastModified: 1000,
+          });
+        }
+        await composer.updateComplete;
+        composer.shadowRoot.querySelector('.send-button').click();
+        while (composer.isSending || !window.__sent.length) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          if (!composer.isSending) break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return window.__sent.at(-1);
+      },
+      contents,
+      failing
+    );
+  const firstFile = await sendFile('AAA', true);
+  assert.equal(firstFile.isRetry, false);
+  const retried = await sendFile(null, true);
+  assert.equal(retried.isRetry, true, 'The same file is a retry');
+  assert.equal(retried.guid, firstFile.guid);
+  const otherFile = await sendFile('BBB', false);
+  assert.equal(otherFile.isRetry, false, 'Another file is not');
+  assert.notEqual(otherFile.guid, firstFile.guid);
+  await popup.close();
+
+  console.log('Testing edits while a file is read do not change what is sent');
+  await seed();
+  popup = await openPopup();
+  await popup.waitForSelector('pb-composer >>> textarea');
+  const edited = await popup.evaluate(async () => {
+    const composer = document.querySelector('pb-composer');
+    const box = composer.shadowRoot.querySelector('textarea');
+    box.value = 'original';
+    box.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    const file = new File(['x'], 'photo.txt', { type: 'text/plain' });
+    let finishRead = () => {};
+    const realRead = file.arrayBuffer.bind(file);
+    file.arrayBuffer = () =>
+      new Promise(resolve => {
+        finishRead = () => realRead().then(resolve);
+      });
+    composer.selectedFile = file;
+    await composer.updateComplete;
+    composer.shadowRoot.querySelector('.send-button').click();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    box.value = 'changed meanwhile';
+    box.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    finishRead();
+    while (!window.__sent.length) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    return window.__sent[0];
+  });
+  assert.equal(edited.body, 'original');
   await popup.close();
 
   console.log('Testing device names cannot inject markup into settings');

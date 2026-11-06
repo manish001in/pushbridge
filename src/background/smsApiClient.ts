@@ -49,6 +49,11 @@ export interface ThreadMessagesResponse {
 export class SmsApiClient {
   private token: string | null = null;
 
+  /** Forget the token, because the account changed. */
+  reset(): void {
+    this.token = null;
+  }
+
   /**
    * Initialize the SMS API client
    */

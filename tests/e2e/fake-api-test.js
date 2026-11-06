@@ -57,6 +57,7 @@ const reset = () => {
   Object.assign(api, {
     pushes: [], texts: [], uploads: [], ephemerals: [], devices: [],
     chats: [], channels: [], threads: {}, requests: [], rules: [],
+    emptyPages: new Set(),
   });
 };
 const posted = urlPart =>
@@ -91,7 +92,12 @@ const respond = async (req, body) => {
   const json = body.length && !req.url.includes('/upload-target')
     ? JSON.parse(body.toString())
     : {};
-  if (url.pathname === '/v2/users/me') return { iden: 'me', name: 'Test' };
+  if (url.pathname === '/v2/users/me') {
+    return { iden: req.headers['access-token'] === 'token-b' ? 'user-b' : 'me', name: 'Test' };
+  }
+  if (url.pathname === '/v2/devices' && req.method === 'POST') {
+    return { iden: 'this-browser' };
+  }
   if (url.pathname === '/v2/devices') return list('devices', api.devices);
   if (url.pathname === '/v2/chats') return list('chats', api.chats);
   if (url.pathname === '/v2/subscriptions') return list('subscriptions', []);
@@ -128,7 +134,13 @@ const respond = async (req, body) => {
   if (permanent) {
     return { threads: api.threads[permanent[1]] ?? [] };
   }
-  if (url.pathname.startsWith('/v2/permanents/')) return { thread: [] };
+  const threadRead = url.pathname.match(/^\/v2\/permanents\/(.+)_thread_(.+)$/);
+  if (threadRead) {
+    const thread = (api.threads[threadRead[1]] ?? []).find(
+      t => t.id === threadRead[2]
+    );
+    return { thread: thread?.latest ? [thread.latest] : [] };
+  }
   if (url.pathname === '/v2/pushes' && req.method === 'POST') {
     const now = Date.now() / 1000;
     const { device_iden: device, ...rest } = json;
@@ -150,7 +162,13 @@ const respond = async (req, body) => {
     const start = Number(url.searchParams.get('cursor') ?? 0);
     const limit = Number(url.searchParams.get('limit') ?? 20);
     const matching = api.pushes.filter(p => p.modified > after);
-    const pushes = matching.slice(start, start + limit);
+    const pushes = api.emptyPages?.has(start)
+      ? []
+      : matching.slice(start, start + limit);
+    if (api.emptyPages?.has(start)) {
+      api.emptyPages.delete(start);
+      return { pushes, cursor: String(start) };
+    }
     return {
       pushes,
       ...(start + limit < matching.length
@@ -650,7 +668,14 @@ try {
     singlePhone();
     await stopWorker();
     api.pushes = [
-      { iden: 'done', guid: 'got-through', type: 'note', active: true, created: 1, modified: 1 },
+      {
+        iden: 'done',
+        guid: 'got-through',
+        type: 'note',
+        active: true,
+        created: Date.now() / 1000,
+        modified: Date.now() / 1000,
+      },
     ];
     await seed({ pb_pending_ops: [interrupted('got-through')] });
     await wakeWorker();
@@ -852,6 +877,264 @@ try {
     assert.deepEqual(threadFetches(), ['b']);
   });
 
+  const smsMirror = (id, body, extra = {}) => ({
+    type: 'push',
+    push: {
+      type: 'mirror',
+      application_name: 'SMS',
+      package_name: 'com.android.messages',
+      notification_id: id,
+      notification_tag: 'sms',
+      source_device_iden: 'phone',
+      source_user_iden: 'me',
+      title: 'Alex',
+      body,
+      ...extra,
+    },
+  });
+
+  const fireAlarm = async name => {
+    const running = await worker();
+    await running.evaluate(name => {
+      chrome.alarms.onAlarm.dispatch({ name });
+    }, name);
+  };
+  const hasAlarm = async name => {
+    const running = await worker();
+    return running.evaluate(name => chrome.alarms.get(name).then(a => !!a), name);
+  };
+
+  await test('a very long backlog is all read, past the page limit', async () => {
+    singlePhone();
+    await seed();
+    await restartWorker();
+    await setBaseline();
+    const at = Date.now() / 1000 + 5;
+    api.pushes = Array.from({ length: 300 }, (_, i) =>
+      newPush(`old${i}`, { modified: at + 300 - i, created: at + 300 - i })
+    );
+    api.emptyPages = new Set([100]);
+    stream({ type: 'tickle', subtype: 'push' });
+    await waitUntil(() => stored('pb_push_scan_progress'), 'the scan to pause');
+    assert.equal(
+      await stored('pb_push_scan_watermark'),
+      undefined,
+      'Nothing is marked read yet'
+    );
+    assert.ok(await hasAlarm('pb_push_scan_resume'));
+
+    // A tickle mid-scan doesn't start reading again.
+    const before = api.requests.length;
+    stream({ type: 'tickle', subtype: 'push' });
+    await sleep(300);
+    assert.equal(api.requests.length, before);
+
+    // A new worker picks it up where it was.
+    await stopWorker();
+    await wakeWorker();
+    await waitUntil(() => api.sockets.size > 0, 'the stream');
+    for (let i = 0; i < 5 && (await stored('pb_push_scan_progress')); i++) {
+      await fireAlarm('pb_push_scan_resume');
+      await sleep(500);
+    }
+    assert.equal(await stored('pb_push_scan_progress'), null);
+    assert.ok(
+      (await stored('pb_push_scan_watermark')) >= at + 299,
+      'Marked read to the newest'
+    );
+    const reads = api.requests.filter(r => r.url.includes('cursor='));
+    assert.ok(reads.some(r => r.url.includes('cursor=250')), 'Read to the end');
+
+    const shown = Object.keys(await notifications());
+    assert.ok(shown.includes('push_backlog_summary'), 'The rest are summarized');
+    assert.ok(shown.length <= 11, 'Not 300 notifications');
+
+    // And it hasn't stopped working.
+    api.pushes.unshift(newPush('after', { modified: at + 400, created: at + 400 }));
+    stream({ type: 'tickle', subtype: 'push' });
+    await waitUntil(async () => (await notifications()).push_after, 'a new push');
+  });
+
+  const accountAData = () => ({
+    pb_user_iden: 'user-a',
+    pb_token: '',
+    pb_settings: { defaultDevice: 'device-of-a', soundEnabled: false },
+    pb_recent_pushes_state: {
+      pushes: [{ iden: 'private', title: 'From account A', created: 1 }],
+    },
+    sms_data_phone: { deviceIden: 'phone', lastSync: 1, threads: [] },
+    pb_push_scan_watermark: 123,
+  });
+
+  await test("another account's sign-in clears the old one's data", async () => {
+    api.devices = [];
+    await seed(accountAData());
+    const running = await worker();
+    await running.evaluate(() =>
+      chrome.notifications.create('from-a', {
+        type: 'basic', iconUrl: 'icons/48.png', title: 'A', message: 'A',
+      })
+    );
+    const answer = await control.evaluate(() =>
+      chrome.runtime.sendMessage({ cmd: 'verifyToken', token: 'token-b' })
+    );
+    assert.equal(answer.ok, true);
+    assert.equal(await stored('pb_user_iden'), 'user-b');
+    assert.equal(await stored('pb_token'), 'token-b');
+    assert.equal(await stored('pb_recent_pushes_state'), undefined);
+    assert.equal(await stored('sms_data_phone'), undefined);
+    assert.equal(await stored('pb_push_scan_watermark'), undefined);
+    const settings = await stored('pb_settings');
+    assert.equal(settings.soundEnabled, false, 'Preferences stay');
+    assert.equal(settings.defaultDevice, undefined, 'Devices do not');
+    assert.equal((await notifications())['from-a'], undefined);
+  });
+
+  await test('signing back in as the same user keeps everything', async () => {
+    api.devices = [];
+    await seed({ ...accountAData(), pb_user_iden: 'me' });
+    const answer = await control.evaluate(() =>
+      chrome.runtime.sendMessage({ cmd: 'verifyToken', token: 'token-a' })
+    );
+    assert.equal(answer.ok, true);
+    assert.ok(await stored('pb_recent_pushes_state'));
+    assert.equal((await stored('pb_settings')).defaultDevice, 'device-of-a');
+  });
+
+  await test("a queued send can't go out from the next account", async () => {
+    singlePhone();
+    await stopWorker();
+    let release = () => {};
+    when('GET', 'modified_after', { hold: new Promise(r => (release = r)) });
+    await seed({
+      pb_user_iden: 'me',
+      pb_pending_ops: [
+        {
+          id: 'op-a',
+          type: 'pushSend',
+          payload: { type: 'note', body: 'private to A', guid: 'guid-a' },
+          timestamp: Date.now() - 1000,
+          retryCount: 1,
+          mayHaveBeenSent: true,
+          accountIden: 'me',
+        },
+      ],
+    });
+    await wakeWorker();
+    await waitUntil(
+      () => api.requests.some(r => r.url.includes('modified_after')),
+      'the delivery check',
+      30000
+    );
+    await control.evaluate(() =>
+      chrome.runtime.sendMessage({ cmd: 'verifyToken', token: 'token-b' })
+    );
+    release();
+    await sleep(1000);
+    assert.equal(
+      posted('/v2/pushes').filter(r => r.body?.body === 'private to A').length,
+      0,
+      'Must not be sent by account B'
+    );
+  });
+
+  for (const socketUp of [true, false]) {
+    await test(`during backoff the composer answers at once (stream ${socketUp ? 'up' : 'down'})`, async () => {
+      singlePhone();
+      await stopWorker();
+      await seed({
+        pb_backoff_state: {
+          isActive: true,
+          expiresAt: Date.now() + 120000,
+          backoffSeconds: 30,
+        },
+      });
+      await wakeWorker();
+      await waitUntil(() => api.sockets.size > 0, 'the stream');
+      const popup = await openPopup();
+      if (!socketUp) {
+        for (const socket of api.sockets) socket.terminate();
+        await sleep(100);
+      }
+      await fill(popup, { to: 'phone', body: 'during backoff' });
+      await clickSend(popup);
+      await composerSays(popup, 'will send automatically', 3000);
+      assert.equal(posted('/v2/pushes').length, 0);
+      assert.equal((await stored('pb_pending_ops')).length, 1);
+      await popup.close();
+      await control.evaluate(() => chrome.runtime.sendMessage({ cmd: 'clearAllData' }));
+    });
+  }
+
+  const textThread = (id, name, latestId, body) => ({
+    id,
+    recipients: [{ name, number: id, address: id }],
+    latest: {
+      id: latestId,
+      type: 'sms',
+      timestamp: Math.floor(Date.now() / 1000) + 5,
+      direction: 'incoming',
+      body,
+    },
+  });
+  const smsChanged = { type: 'push', push: { type: 'sms_changed', source_device_iden: 'phone', notifications: [] } };
+
+  await test('a failed SMS notification comes back without another SMS', async () => {
+    singlePhone();
+    await seed({ defaultSmsDevice: 'phone' });
+    await restartWorker();
+    await setBaseline();
+    const running = await worker();
+    await running.evaluate(() => {
+      const real = chrome.notifications.create.bind(chrome.notifications);
+      let failed = false;
+      chrome.notifications.create = (id, options) => {
+        if (id.startsWith('sms_') && !failed) {
+          failed = true;
+          return Promise.reject(new Error('Off'));
+        }
+        return real(id, options);
+      };
+    });
+    api.threads.phone = [textThread('t1', 'Robin', 'm1', 'are you there')];
+    stream(smsChanged);
+    await waitUntil(() => hasAlarm('pb_sms_notification_retry'), 'the retry alarm');
+    assert.equal(
+      Object.keys(await notifications()).filter(id => id.startsWith('sms_')).length,
+      0
+    );
+    assert.ok(
+      (await stored('sms_data_phone')).threads[0].messages.length,
+      'The message itself is kept'
+    );
+    await fireAlarm('pb_sms_notification_retry');
+    await waitUntil(
+      async () => Object.keys(await notifications()).some(id => id.startsWith('sms_')),
+      'the notification'
+    );
+    await stopWorker();
+  });
+
+  await test('one SMS by both routes notifies once, even across a restart', async () => {
+    singlePhone();
+    await seed({ defaultSmsDevice: 'phone' });
+    await restartWorker();
+    await setBaseline();
+    stream(smsMirror('301', 'on my way', { title: 'Robin' }));
+    await waitUntil(async () => Object.keys(await notifications()).length === 1, 'the mirror');
+    await stopWorker();
+    await wakeWorker();
+    await waitUntil(() => api.sockets.size > 0, 'the stream');
+    api.threads.phone = [textThread('t2', 'Robin', 'm2', 'on my way')];
+    stream(smsChanged);
+    await waitUntil(
+      async () => (await stored('sms_data_phone'))?.threads?.length === 1,
+      'the sync'
+    );
+    await sleep(300);
+    assert.equal(Object.keys(await notifications()).length, 1);
+  });
+
   await test('deleted pushes and paging work in the Messages tab', async () => {
     singlePhone();
     await seed();
@@ -937,22 +1220,6 @@ try {
     );
     assert.deepEqual(errors, []);
     await options.close();
-  });
-
-  const smsMirror = (id, body, extra = {}) => ({
-    type: 'push',
-    push: {
-      type: 'mirror',
-      application_name: 'SMS',
-      package_name: 'com.android.messages',
-      notification_id: id,
-      notification_tag: 'sms',
-      source_device_iden: 'phone',
-      source_user_iden: 'me',
-      title: 'Alex',
-      body,
-      ...extra,
-    },
   });
 
   await test('the same words twice over the stream notify twice', async () => {

@@ -377,7 +377,8 @@ describe('pushManager', () => {
           body: expect.stringMatching(
             /.*"type":"note".*"source_device_iden":"device-123".*"title":"Test Note".*"body":"Test body".*/
           ),
-        })
+        }),
+        { failFast: false }
       );
     });
 
@@ -420,7 +421,8 @@ describe('pushManager', () => {
           body: expect.stringMatching(
             /.*"type":"link".*"source_device_iden":"device-123".*"title":"Test Link".*"url":"https:\/\/example\.com".*/
           ),
-        })
+        }),
+        { failFast: false }
       );
     });
 
@@ -504,7 +506,8 @@ describe('pushManager', () => {
             'Access-Token': 'test-token',
             'Content-Type': 'application/json',
           },
-        })
+        }),
+        { failFast: false }
       );
 
       // Verify the request body contains the expected fields

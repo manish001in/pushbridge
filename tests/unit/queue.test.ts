@@ -1,6 +1,13 @@
+import {
+  AccountChangedError,
+  bumpAccountEpoch,
+  currentAccountEpoch,
+  setAccountChanging,
+} from '../../src/background/accountEpoch';
 import { httpClient } from '../../src/background/httpClient';
 import { createPush } from '../../src/background/pushManager';
 import { enqueue, processQueue } from '../../src/background/queue';
+import { rateLimitManager } from '../../src/background/rateLimitManager';
 import { getLocal, setLocal } from '../../src/background/storage';
 
 jest.mock('../../src/background/pushManager', () => ({
@@ -152,6 +159,170 @@ describe('outgoing operation queue', () => {
         expect(createPush).not.toHaveBeenCalled();
         expect(ops).toEqual([]);
         expect(reportError).toHaveBeenCalled();
+      });
+    });
+
+    describe('checking whether a send got through', () => {
+      const uncertain = (guid: string, extra = {}) => ({
+        ...op(guid),
+        payload: { guid },
+        mayHaveBeenSent: true,
+        ...extra,
+      });
+      const page = (pushes: any[], cursor?: string) => ({
+        ok: true,
+        json: async () => ({ pushes, cursor }),
+      });
+      const fetchMock = () => httpClient.fetch as jest.Mock;
+
+      test('operations in one pass share one search', async () => {
+        ops = [uncertain('s1'), uncertain('s2')];
+        fetchMock().mockResolvedValue(page([{ guid: 's1' }]));
+        await processQueue();
+        expect(fetchMock()).toHaveBeenCalledTimes(1);
+        expect(createPush).toHaveBeenCalledTimes(1);
+        expect((createPush as jest.Mock).mock.calls[0][0].guid).toBe('s2');
+      }, 15000);
+
+      test('searches from the first attempt, in seconds', async () => {
+        const firstAttemptAt = 1_800_000_000_000;
+        ops = [uncertain('s3', { firstAttemptAt })];
+        fetchMock().mockResolvedValue(page([]));
+        await processQueue();
+        const url = new URL(fetchMock().mock.calls[0][0]);
+        expect(Number(url.searchParams.get('modified_after'))).toBe(
+          firstAttemptAt / 1000 - 300
+        );
+      });
+
+      test('follows empty pages to the answer', async () => {
+        ops = [uncertain('s4')];
+        fetchMock()
+          .mockResolvedValueOnce(page([], 'next'))
+          .mockResolvedValueOnce(page([{ guid: 's4' }]));
+        await processQueue();
+        expect(createPush).not.toHaveBeenCalled();
+        expect(ops).toEqual([]);
+      });
+
+      test('running out of pages proves nothing, so it does not resend', async () => {
+        ops = [uncertain('s5')];
+        fetchMock().mockResolvedValue(page([], 'more'));
+        await processQueue();
+        expect(createPush).not.toHaveBeenCalled();
+        expect(ops[0].inconclusiveChecks).toBe(1);
+        expect(ops[0].mayHaveBeenSent).toBe(true);
+      });
+
+      test('it eventually tells the user instead of waiting forever', async () => {
+        ops = [uncertain('s6', { inconclusiveChecks: 2 })];
+        fetchMock().mockResolvedValue(page([], 'more'));
+        await processQueue();
+        expect(createPush).not.toHaveBeenCalled();
+        expect(ops).toEqual([]);
+        expect(reportError).toHaveBeenCalled();
+      });
+
+      test('a clear refusal needs no check', async () => {
+        ops = [{ ...op('s7'), payload: { guid: 's7' }, retryCount: 1, mayHaveBeenSent: false }];
+        await processQueue();
+        expect(fetchMock()).not.toHaveBeenCalled();
+        expect(createPush).toHaveBeenCalledTimes(1);
+      });
+
+      test('a network failure makes it uncertain', async () => {
+        ops = [{ ...op('s8'), payload: { guid: 's8' } }];
+        (createPush as jest.Mock).mockRejectedValueOnce(new TypeError('offline'));
+        await processQueue();
+        expect(ops[0].mayHaveBeenSent).toBe(true);
+      });
+
+      test('a rate limit refusal does not', async () => {
+        ops = [{ ...op('s9'), payload: { guid: 's9' } }];
+        (createPush as jest.Mock).mockRejectedValueOnce(
+          Object.assign(new Error('Rate limited'), { name: 'RateLimitError' })
+        );
+        await processQueue();
+        expect(ops[0].mayHaveBeenSent).toBe(false);
+      });
+
+      test('a later refusal does not erase earlier uncertainty', async () => {
+        ops = [uncertain('s10')];
+        fetchMock().mockResolvedValue(page([]));
+        (createPush as jest.Mock).mockRejectedValueOnce(
+          Object.assign(new Error('Rate limited'), { name: 'RateLimitError' })
+        );
+        await processQueue();
+        expect(ops[0].mayHaveBeenSent).toBe(true);
+      });
+
+      test('a failed check sends nothing and stays uncertain', async () => {
+        ops = [uncertain('s11')];
+        fetchMock().mockRejectedValue(new TypeError('offline'));
+        await processQueue();
+        expect(createPush).not.toHaveBeenCalled();
+        expect(ops[0].mayHaveBeenSent).toBe(true);
+      });
+
+      test('low quota postpones the check', async () => {
+        const low = jest.spyOn(rateLimitManager, 'isQuotaLow').mockReturnValue(true);
+        ops = [uncertain('s12')];
+        await processQueue();
+        low.mockRestore();
+        expect(fetchMock()).not.toHaveBeenCalled();
+        expect(createPush).not.toHaveBeenCalled();
+        expect(ops[0].nextAttemptAt).toBeGreaterThan(Date.now());
+        expect(ops[0].inconclusiveChecks).toBeUndefined();
+      });
+    });
+
+    describe('when the account changes', () => {
+      test('during the check, the message is not sent', async () => {
+        ops = [
+          { ...op('a1'), payload: { guid: 'a1' }, mayHaveBeenSent: true },
+        ];
+        (httpClient.fetch as jest.Mock).mockImplementation(async () => {
+          bumpAccountEpoch();
+          return { ok: true, json: async () => ({ pushes: [] }) };
+        });
+        await processQueue();
+        expect(createPush).not.toHaveBeenCalled();
+      });
+
+      test('the epoch it started under reaches the send', async () => {
+        ops = [op('a2')];
+        await processQueue();
+        expect((createPush as jest.Mock).mock.calls[0][1].accountEpoch).toBe(
+          currentAccountEpoch()
+        );
+      });
+
+      test('a send stopped by the change is not retried', async () => {
+        ops = [op('a3')];
+        (createPush as jest.Mock).mockRejectedValueOnce(new AccountChangedError());
+        await processQueue();
+        expect(ops[0].retryCount).toBe(0);
+        expect(ops[0].nextAttemptAt).toBeUndefined();
+      });
+
+      test('before saving, it is not saved under the new account', async () => {
+        const started = currentAccountEpoch();
+        bumpAccountEpoch();
+        await expect(
+          enqueue({ type: 'pushSend', payload: {} } as any, {
+            accountEpoch: started,
+          })
+        ).rejects.toBeInstanceOf(AccountChangedError);
+        expect(ops).toEqual([]);
+      });
+
+      test('while old data is clearing, nothing new is saved', async () => {
+        setAccountChanging(true);
+        await expect(
+          enqueue({ type: 'pushSend', payload: {} } as any)
+        ).rejects.toBeInstanceOf(AccountChangedError);
+        setAccountChanging(false);
+        expect(ops).toEqual([]);
       });
     });
 

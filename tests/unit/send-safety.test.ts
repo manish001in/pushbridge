@@ -1,7 +1,7 @@
 import { createPush } from '../../src/background/pushManager';
 import {
-  claimSmsContent,
   clearSmsSightings,
+  showSmsOnce,
 } from '../../src/background/smsNotificationIdentity';
 import { setLocal } from '../../src/background/storage';
 
@@ -76,37 +76,92 @@ describe('storage writes', () => {
 });
 
 describe('recognizing one SMS arriving twice', () => {
+  const see = (
+    sender: string,
+    text: string,
+    sentAt: number,
+    source: 'mirror' | 'history',
+    show: () => Promise<unknown> = async () => {}
+  ) => showSmsOnce({ sender, text, sentAt, source }, show);
+
   beforeEach(() => clearSmsSightings());
 
-  test('one message from both routes is shown once', () => {
-    expect(claimSmsContent('Alex', 'See you soon', 100_000, 'mirror')).toBe(true);
-    expect(claimSmsContent(' alex ', 'See you soon', 130_000, 'history')).toBe(
+  test('one message from both routes is shown once', async () => {
+    await expect(see('Alex', 'See you soon', 100_000, 'mirror')).resolves.toBe(true);
+    await expect(see(' alex ', 'See you soon', 130_000, 'history')).resolves.toBe(
       false
     );
   });
 
-  test('different senders or text are separate messages', () => {
-    expect(claimSmsContent('Sam', 'same words', 1000, 'mirror')).toBe(true);
-    expect(claimSmsContent('Pat', 'same words', 1000, 'history')).toBe(true);
-    expect(claimSmsContent('Sam', 'other words', 1000, 'history')).toBe(true);
+  test('different senders or text are separate messages', async () => {
+    await expect(see('Sam', 'same words', 1000, 'mirror')).resolves.toBe(true);
+    await expect(see('Pat', 'same words', 1000, 'history')).resolves.toBe(true);
+    await expect(see('Sam', 'other words', 1000, 'history')).resolves.toBe(true);
   });
 
-  test('the same words twice from one route are two messages', () => {
-    expect(claimSmsContent('Kim', 'ok', 1000, 'mirror')).toBe(true);
-    expect(claimSmsContent('Kim', 'ok', 2000, 'mirror')).toBe(true);
+  test('the same words twice from one route are two messages', async () => {
+    await expect(see('Kim', 'ok', 1000, 'mirror')).resolves.toBe(true);
+    await expect(see('Kim', 'ok', 2000, 'mirror')).resolves.toBe(true);
   });
 
-  test('each route cancels only one sighting from the other', () => {
-    expect(claimSmsContent('Kim', 'ok', 1000, 'mirror')).toBe(true);
-    expect(claimSmsContent('Kim', 'ok', 2000, 'mirror')).toBe(true);
-    expect(claimSmsContent('Kim', 'ok', 3000, 'history')).toBe(false);
-    expect(claimSmsContent('Kim', 'ok', 4000, 'history')).toBe(false);
+  test('each route cancels only one sighting from the other', async () => {
+    await see('Kim', 'ok', 1000, 'mirror');
+    await see('Kim', 'ok', 2000, 'mirror');
+    await expect(see('Kim', 'ok', 3000, 'history')).resolves.toBe(false);
+    await expect(see('Kim', 'ok', 4000, 'history')).resolves.toBe(false);
     // A third arriving by history has no twin left: it's a new message.
-    expect(claimSmsContent('Kim', 'ok', 5000, 'history')).toBe(true);
+    await expect(see('Kim', 'ok', 5000, 'history')).resolves.toBe(true);
   });
 
-  test('the same words much later are a new message', () => {
-    expect(claimSmsContent('Kim', 'ok', 1000, 'mirror')).toBe(true);
-    expect(claimSmsContent('Kim', 'ok', 5 * 60 * 1000, 'history')).toBe(true);
+  test('the same words much later are a new message', async () => {
+    await see('Kim', 'ok', 1000, 'mirror');
+    await expect(see('Kim', 'ok', 5 * 60 * 1000, 'history')).resolves.toBe(true);
+  });
+
+  test('a notification that failed to show suppresses nothing', async () => {
+    await expect(
+      see('Lee', 'hello', 1000, 'mirror', () => Promise.reject(new Error('no')))
+    ).rejects.toThrow('no');
+    await expect(see('Lee', 'hello', 1000, 'history')).resolves.toBe(true);
+  });
+
+  test('the other route waits to see whether the first one succeeds', async () => {
+    let failFirst: (error: Error) => void = () => {};
+    const first = see(
+      'Lee',
+      'overlap',
+      1000,
+      'mirror',
+      () => new Promise((_, reject) => (failFirst = reject))
+    );
+    const secondShow = jest.fn().mockResolvedValue(undefined);
+    const second = see('Lee', 'overlap', 1000, 'history', secondShow);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(secondShow).not.toHaveBeenCalled();
+
+    failFirst(new Error('no'));
+    await expect(first).rejects.toThrow('no');
+    await expect(second).resolves.toBe(true);
+    expect(secondShow).toHaveBeenCalled();
+  });
+
+  test('a sighting survives a worker restart', async () => {
+    await see('Lee', 'restart', 1000, 'mirror');
+    let restarted: typeof import('../../src/background/smsNotificationIdentity');
+    jest.isolateModules(() => {
+      restarted = require('../../src/background/smsNotificationIdentity');
+    });
+    await expect(
+      restarted!.showSmsOnce(
+        { sender: 'Lee', text: 'restart', sentAt: 1000, source: 'history' },
+        async () => {}
+      )
+    ).resolves.toBe(false);
+  });
+
+  test('clearing forgets every sighting', async () => {
+    await see('Lee', 'clear', 1000, 'mirror');
+    await clearSmsSightings();
+    await expect(see('Lee', 'clear', 1000, 'history')).resolves.toBe(true);
   });
 });

@@ -417,33 +417,15 @@ export class PushComposer extends LitElement {
     }
   }
 
-  // Load combined send targets (devices + owned channels + contacts)
+  // Load combined send targets (devices + owned channels + contacts). Each list shows
+  // as soon as it arrives: during a rate limit one could wait for many minutes, and
+  // that mustn't stop the user choosing from the others.
   private async loadSendTargets() {
-    try {
-      // Get devices, owned channels, and contacts in parallel
-      const [devicesResponse, channelsResponse, contactsResponse] =
-        await Promise.all([
-          chrome.runtime.sendMessage({ cmd: 'getDevices' }),
-          chrome.runtime.sendMessage({ cmd: 'GET_OWNED_CHANNELS' }),
-          chrome.runtime.sendMessage({ cmd: 'getContacts' }),
-        ]);
+    let devices: any[] = [];
+    let channels: any[] = [];
+    let contacts: any[] = [];
 
-      const devices = devicesResponse.ok ? devicesResponse.devices : [];
-      const channels = channelsResponse.success
-        ? channelsResponse.ownedChannels
-        : [];
-      const contacts = contactsResponse.ok ? contactsResponse.contacts : [];
-
-      console.log(
-        'Loaded devices:',
-        devices.length,
-        'channels:',
-        channels.length,
-        'contacts:',
-        contacts.length
-      );
-
-      // Combine into send targets array
+    const showTargets = () => {
       this.sendTargets = [
         ...devices.map((dev: any) => ({
           id: dev.iden,
@@ -464,21 +446,43 @@ export class PushComposer extends LitElement {
           icon: '📢',
         })),
       ];
+    };
 
-      console.log('Total send targets:', this.sendTargets.length);
+    const results = await Promise.allSettled([
+      chrome.runtime.sendMessage({ cmd: 'getDevices' }).then(async response => {
+        devices = response.ok ? response.devices : [];
+        showTargets();
+        await this.applyDefaultTarget();
+      }),
+      chrome.runtime
+        .sendMessage({ cmd: 'GET_OWNED_CHANNELS' })
+        .then(response => {
+          channels = response.success ? response.ownedChannels : [];
+          showTargets();
+        }),
+      chrome.runtime.sendMessage({ cmd: 'getContacts' }).then(response => {
+        contacts = response.ok ? response.contacts : [];
+        showTargets();
+      }),
+    ]);
 
-      // Start from the default device chosen in settings, unless the user has
-      // already picked a target while the list was loading.
-      const stored = await chrome.storage.local.get('pb_settings');
-      const defaultTarget = stored?.pb_settings?.defaultDevice;
-      if (
-        this.sendTo === 'all' &&
-        this.sendTargets.some(target => target.id === defaultTarget)
-      ) {
-        this.sendTo = defaultTarget;
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error('Failed to load send targets:', result.reason);
       }
-    } catch (error) {
-      console.error('Failed to load send targets:', error);
+    }
+  }
+
+  // Start from the default device chosen in settings, unless the user has already
+  // picked a target while the list was loading.
+  private async applyDefaultTarget() {
+    const stored = await chrome.storage.local.get('pb_settings');
+    const defaultTarget = stored?.pb_settings?.defaultDevice;
+    if (
+      this.sendTo === 'all' &&
+      this.sendTargets.some(target => target.id === defaultTarget)
+    ) {
+      this.sendTo = defaultTarget;
     }
   }
 
@@ -585,7 +589,12 @@ export class PushComposer extends LitElement {
   }
 
   /** Set when a send failed, in case the server got it and only the answer was lost. */
-  private failedAttempt: { key: string; guid: string } | null = null;
+  private failedAttempt: {
+    key: string;
+    file: File | null;
+    guid: string;
+    startedAt: number;
+  } | null = null;
 
   /**
    * One ID per message. Sending the unchanged message again reuses it, so the worker
@@ -601,11 +610,23 @@ export class PushComposer extends LitElement {
       file?.size,
       file?.lastModified,
     ]);
-    const isRetry = this.failedAttempt?.key === key;
+    // The same file object, since two files can match in everything shown here.
+    const isRetry =
+      this.failedAttempt?.key === key &&
+      this.failedAttempt.file === (file ?? null);
     if (!isRetry) {
-      this.failedAttempt = { key, guid: crypto.randomUUID() };
+      this.failedAttempt = {
+        key,
+        file: file ?? null,
+        guid: crypto.randomUUID(),
+        startedAt: Date.now(),
+      };
     }
-    return { guid: this.failedAttempt!.guid, isRetry };
+    return {
+      guid: this.failedAttempt!.guid,
+      attemptStartedAt: this.failedAttempt!.startedAt,
+      isRetry,
+    };
   }
 
   private async handleSend() {
@@ -661,8 +682,11 @@ export class PushComposer extends LitElement {
       // Handle file upload if present
       if (this.selectedFile && actualPushType === 'file') {
         // Convert File to ArrayBuffer to preserve data through message passing
-        const fileData = await serializeFile(this.selectedFile);
+        // Fixed before the first wait: the form can change while the file is read.
         const attempt = this.identifyAttempt(selectedTarget?.id);
+        const title = this.pushTitle.trim() || undefined;
+        const body = this.body.trim() || undefined;
+        const fileData = await serializeFile(this.selectedFile);
 
         const uploadResponse = await chrome.runtime.sendMessage({
           cmd: 'UPLOAD_FILE',
@@ -675,8 +699,8 @@ export class PushComposer extends LitElement {
                 ? selectedTarget.id
                 : undefined,
             // Include push metadata for file pushes
-            title: this.pushTitle.trim() || undefined,
-            body: this.body.trim() || undefined,
+            title,
+            body,
             channel_tag:
               selectedTarget?.type === 'channel'
                 ? selectedTarget.id

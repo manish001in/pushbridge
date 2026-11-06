@@ -3,9 +3,15 @@
  * Handles queuing operations during connectivity issues
  */
 
+import {
+  AccountChangedError,
+  assertSameAccount,
+  currentAccountEpoch,
+} from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { createPush, PushPayload } from './pushManager';
+import { rateLimitManager } from './rateLimitManager';
 import { getLocal, setLocal } from './storage';
 
 export interface PushbridgeOp {
@@ -21,6 +27,10 @@ export interface PushbridgeOp {
   accountIden?: string;
   /** A send already tried before queueing, whose outcome is unknown. */
   mayHaveBeenSent?: boolean;
+  /** When the first attempt began. An accepted send can fail locally much later. */
+  firstAttemptAt?: number;
+  /** Delivery checks that ran out of pages before finding an answer. */
+  inconclusiveChecks?: number;
 }
 
 interface QueueState {
@@ -41,6 +51,12 @@ const PROCESSING_INTERVAL = 5000; // 5 seconds between operations (rate limiting
 const RETRY_BASE_DELAY = 30 * 1000;
 const RETRY_MAX_DELAY = 60 * 60 * 1000;
 const MAX_OP_AGE = 7 * 24 * 60 * 60 * 1000;
+const QUOTA_WAIT_MS = 60 * 1000;
+const MAX_DELIVERY_CHECK_PAGES = 5;
+const MAX_INCONCLUSIVE_CHECKS = 3;
+// The server's clock decides what `modified_after` means, not this computer's.
+const DELIVERY_CHECK_MARGIN_MS = 5 * 60 * 1000;
+const DELIVERY_CHECK_DEFAULT_LOOKBACK_MS = 60 * 60 * 1000;
 
 /**
  * Enqueue an operation for later processing
@@ -48,7 +64,10 @@ const MAX_OP_AGE = 7 * 24 * 60 * 60 * 1000;
  */
 export async function enqueue(
   op: Omit<PushbridgeOp, 'id' | 'timestamp' | 'retryCount'>,
-  { waitForSend = true }: { waitForSend?: boolean } = {}
+  {
+    waitForSend = true,
+    accountEpoch = currentAccountEpoch(),
+  }: { waitForSend?: boolean; accountEpoch?: number } = {}
 ): Promise<EnqueueOutcome> {
   try {
     const id = generateOperationId();
@@ -62,7 +81,11 @@ export async function enqueue(
       retryCount: 0,
     };
 
-    await updatePendingOps(ops => [...ops, operation]);
+    await updatePendingOps(ops => {
+      // Checked at the moment of saving, so it can't be saved under the next account.
+      assertSameAccount(accountEpoch);
+      return [...ops, operation];
+    });
 
     console.log('Operation queued:', operation.type, operation.id);
 
@@ -81,6 +104,9 @@ export async function enqueue(
     opOutcomes.delete(id);
     return outcome;
   } catch (error) {
+    if (error instanceof AccountChangedError) {
+      throw error;
+    }
     console.error('Failed to enqueue operation:', error);
     await reportError(PBError.Unknown, {
       message: 'Failed to queue operation',
@@ -115,18 +141,96 @@ const deliveredOps = new Set<string>();
 // earlier worker stopped, so it may already have been delivered.
 const startedOps = new Set<string>();
 
-/** Find out whether an earlier attempt reached the server before its response was lost. */
-export async function wasGuidDelivered(guid: string): Promise<boolean> {
+export type DeliveryCheck = 'delivered' | 'absent' | 'unknown';
+
+interface HistorySearch {
+  found: Set<string>;
+  /** False if it stopped early, so a missing ID proves nothing. */
+  complete: boolean;
+}
+
+/**
+ * Look for send IDs in history, back to `sinceMs`. Pages can be short or empty while
+ * more exists, so only a missing cursor means the end.
+ */
+async function searchHistoryForGuids(
+  guids: Set<string>,
+  sinceMs: number,
+  { failFast = false }: { failFast?: boolean } = {}
+): Promise<HistorySearch> {
   const token = await getLocal<string>('pb_token');
-  const response = await httpClient.fetch(
-    'https://api.pushbullet.com/v2/pushes?limit=100',
-    { method: 'GET', headers: { 'Access-Token': token as string } }
-  );
-  if (!response.ok) {
-    throw new Error(`Could not check for an earlier send: ${response.status}`);
+  const found = new Set<string>();
+  const sinceSeconds = Math.floor(sinceMs / 1000);
+  let cursor: string | undefined;
+
+  for (let page = 0; page < MAX_DELIVERY_CHECK_PAGES; page++) {
+    if (page > 0 && rateLimitManager.isQuotaLow()) {
+      return { found, complete: false };
+    }
+    const params = new URLSearchParams({
+      limit: '100',
+      modified_after: String(sinceSeconds),
+    });
+    if (cursor) params.set('cursor', cursor);
+    const response = await httpClient.fetch(
+      `https://api.pushbullet.com/v2/pushes?${params}`,
+      { method: 'GET', headers: { 'Access-Token': token as string } },
+      { failFast }
+    );
+    if (!response.ok) {
+      throw new Error(`Could not check for an earlier send: ${response.status}`);
+    }
+    const body = await response.json();
+    for (const push of body.pushes ?? []) {
+      if (guids.has(push.guid)) found.add(push.guid);
+    }
+    cursor = body.cursor;
+    if (found.size === guids.size || !cursor) {
+      return { found, complete: true };
+    }
   }
-  const { pushes } = await response.json();
-  return (pushes ?? []).some((push: any) => push.guid === guid);
+  return { found, complete: false };
+}
+
+/** For a retry the user asked for, where someone is waiting on the answer. */
+export async function checkGuidDelivered(
+  guid: string,
+  startedAt: number = Date.now() - DELIVERY_CHECK_DEFAULT_LOOKBACK_MS
+): Promise<DeliveryCheck> {
+  const { found, complete } = await searchHistoryForGuids(
+    new Set([guid]),
+    startedAt - DELIVERY_CHECK_MARGIN_MS,
+    { failFast: true }
+  );
+  return found.has(guid) ? 'delivered' : complete ? 'absent' : 'unknown';
+}
+
+function isUncertain(op: PushbridgeOp): boolean {
+  return op.mayHaveBeenSent ?? op.retryCount > 0;
+}
+
+/** One search per pass, shared by every operation in it that needs an answer. */
+function createDeliveryChecker(ops: PushbridgeOp[]) {
+  let search: Promise<HistorySearch> | null = null;
+  return (op: PushbridgeOp): Promise<DeliveryCheck> => {
+    search ??= (() => {
+      const toCheck = ops.filter(
+        other =>
+          other.payload?.guid &&
+          (other === op || isUncertain(other) || !!other.attemptStartedAt)
+      );
+      const oldest = Math.min(
+        ...toCheck.map(o => o.firstAttemptAt ?? o.timestamp)
+      );
+      return searchHistoryForGuids(
+        new Set(toCheck.map(o => o.payload.guid)),
+        oldest - DELIVERY_CHECK_MARGIN_MS
+      );
+    })();
+    return search.then(({ found, complete }) =>
+      found.has(op.payload.guid) ? 'delivered' : complete ? 'absent' : 'unknown'
+    );
+  };
 }
 
 export type EnqueueOutcome =
@@ -154,7 +258,11 @@ function isPermanentFailure(error: unknown): boolean {
 }
 
 /** Returns false if later operations must wait, so messages stay in order. */
-async function processPendingOp(op: PushbridgeOp): Promise<boolean> {
+async function processPendingOp(
+  op: PushbridgeOp,
+  checkDelivery: ReturnType<typeof createDeliveryChecker>
+): Promise<boolean> {
+  const accountEpoch = currentAccountEpoch();
   if (deliveredOps.has(op.id)) {
     await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
     return true;
@@ -195,29 +303,113 @@ async function processPendingOp(op: PushbridgeOp): Promise<boolean> {
     return true;
   }
 
+  const uncertain = isUncertain(op) || interrupted;
+
+  // Checking costs quota, and waits if there's none. It can wait with the send.
+  if (uncertain && op.payload?.guid && rateLimitManager.isQuotaLow()) {
+    await updatePendingOps(ops =>
+      ops.map(p =>
+        p.id === op.id
+          ? { ...p, mayHaveBeenSent: true, nextAttemptAt: Date.now() + QUOTA_WAIT_MS }
+          : p
+      )
+    );
+    return false;
+  }
+
   startedOps.add(op.id);
   const attemptStartedAt = Date.now();
   await updatePendingOps(ops =>
-    ops.map(p => (p.id === op.id ? { ...p, attemptStartedAt } : p))
+    ops.map(p =>
+      p.id === op.id
+        ? {
+            ...p,
+            attemptStartedAt,
+            firstAttemptAt: p.firstAttemptAt ?? attemptStartedAt,
+            ...(interrupted ? { mayHaveBeenSent: true } : {}),
+          }
+        : p
+    )
   );
 
-  try {
-    // An earlier attempt may have reached the server before its response was lost.
-    if (
-      op.payload?.guid &&
-      (op.retryCount > 0 || op.mayHaveBeenSent || interrupted) &&
-      (await wasGuidDelivered(op.payload.guid))
-    ) {
+  /** Keeps it for later. Nothing was sent by this try. */
+  const tryAgainLater = async (
+    change: Partial<PushbridgeOp> = {}
+  ): Promise<boolean> => {
+    startedOps.delete(op.id);
+    const retryCount = op.retryCount + 1;
+    await updatePendingOps(ops =>
+      ops.map(p =>
+        p.id === op.id
+          ? {
+              ...p,
+              retryCount,
+              nextAttemptAt:
+                Date.now() +
+                Math.min(RETRY_BASE_DELAY * 2 ** retryCount, RETRY_MAX_DELAY),
+              attemptStartedAt: undefined,
+              ...change,
+            }
+          : p
+      )
+    );
+    return false;
+  };
+
+  // An earlier attempt may have reached the server before its response was lost.
+  if (op.payload?.guid && uncertain) {
+    let delivery: DeliveryCheck;
+    try {
+      delivery = await checkDelivery(op);
+    } catch (error) {
+      // No send happened, and what was uncertain still is.
+      console.error('Could not check for an earlier send:', error);
+      return tryAgainLater({ mayHaveBeenSent: true });
+    }
+
+    if (delivery === 'delivered') {
       deliveredOps.add(op.id);
       opOutcomes.set(op.id, { status: 'sent' });
       await updatePendingOps(ops => ops.filter(p => p.id !== op.id));
       return true;
     }
-    await processOperation(op);
+
+    if (delivery === 'unknown') {
+      // It may be further back than the search reached, so sending could repeat it.
+      const inconclusiveChecks = (op.inconclusiveChecks ?? 0) + 1;
+      if (inconclusiveChecks >= MAX_INCONCLUSIVE_CHECKS) {
+        await discardOp(
+          op,
+          "A queued message may or may not have been delivered, and history is too long to tell. Please check and send it again if needed."
+        );
+        return true;
+      }
+      return tryAgainLater({ mayHaveBeenSent: true, inconclusiveChecks });
+    }
+  }
+
+  // The check above takes time. Reset or a sign-in may have happened during it.
+  const stored = (await getLocal<PushbridgeOp[]>('pb_pending_ops')) || [];
+  const storedAccount = await getLocal<string>('pb_user_iden');
+  if (
+    accountEpoch !== currentAccountEpoch() ||
+    !stored.some(p => p.id === op.id) ||
+    (op.accountIden && op.accountIden !== storedAccount)
+  ) {
+    startedOps.delete(op.id);
+    return true;
+  }
+
+  try {
+    await processOperation(op, accountEpoch);
     opOutcomes.set(op.id, { status: 'sent' });
   } catch (error) {
     console.error('Failed to process operation:', op.id, error);
     startedOps.delete(op.id);
+
+    if (error instanceof AccountChangedError) {
+      return true;
+    }
 
     if (isPermanentFailure(error)) {
       opOutcomes.set(op.id, {
@@ -228,22 +420,13 @@ async function processPendingOp(op: PushbridgeOp): Promise<boolean> {
       return true;
     }
 
-    // Being offline isn't the message's fault: keep it and try again later.
-    const retryCount = op.retryCount + 1;
-    const delay = Math.min(RETRY_BASE_DELAY * 2 ** retryCount, RETRY_MAX_DELAY);
-    await updatePendingOps(ops =>
-      ops.map(p =>
-        p.id === op.id
-          ? {
-              ...p,
-              retryCount,
-              nextAttemptAt: Date.now() + delay,
-              attemptStartedAt: undefined,
-            }
-          : p
-      )
-    );
-    return false;
+    // Being offline isn't the message's fault: keep it and try again later. Only a
+    // clear refusal from the server means this attempt didn't get through.
+    const refused =
+      (error as Error)?.name === 'RateLimitError' ||
+      ((error as { status?: number })?.status ?? 0) >= 400 &&
+        ((error as { status?: number })?.status ?? 0) < 500;
+    return tryAgainLater({ mayHaveBeenSent: uncertain || !refused });
   }
 
   deliveredOps.add(op.id);
@@ -270,6 +453,8 @@ export async function processQueue(): Promise<void> {
 
     console.log(`Processing ${pendingOps.length} queued operations`);
 
+    const checkDelivery = createDeliveryChecker(pendingOps);
+
     // Process operations one by one with rate limiting
     let isFirst = true;
     for (const op of pendingOps) {
@@ -278,7 +463,7 @@ export async function processQueue(): Promise<void> {
         await new Promise(resolve => setTimeout(resolve, PROCESSING_INTERVAL));
       }
       isFirst = false;
-      if (!(await processPendingOp(op))) {
+      if (!(await processPendingOp(op, checkDelivery))) {
         break;
       }
     }
@@ -292,10 +477,16 @@ export async function processQueue(): Promise<void> {
 /**
  * Process a single operation
  */
-async function processOperation(op: PushbridgeOp): Promise<void> {
+async function processOperation(
+  op: PushbridgeOp,
+  accountEpoch: number
+): Promise<void> {
   switch (op.type) {
     case 'pushSend':
-      await createPush(op.payload as PushPayload, { silent: true });
+      await createPush(op.payload as PushPayload, {
+        silent: true,
+        accountEpoch,
+      });
       break;
 
     case 'smsSend':

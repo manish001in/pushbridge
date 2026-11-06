@@ -13,6 +13,7 @@ import { getNotificationPrefs } from './notificationPrefs';
 import { formatToThreeDecimals } from './numberUtils';
 import { getPushHistory } from './pushManager';
 import { isPushForThisBrowser, showPushNotification } from './pushNotifications';
+import { rateLimitManager } from './rateLimitManager';
 import { syncAllSmsData } from './simpleSmsSync';
 import { getLocal, getSession, setLocal, setSession } from './storage';
 import { unifiedNotificationTracker } from './unifiedNotificationTracker';
@@ -51,7 +52,6 @@ const ENCRYPTION_WARNED_KEY = 'pb_encryption_warned';
 // Limit tabs opened at once when catching up after sleep; the rest stay in Messages.
 const MAX_CATCH_UP_TABS = 10;
 // Enough for a long absence without paging through a whole account's history.
-const MAX_CATCH_UP_PAGES = 5;
 // A backlog shouldn't flood the desktop; the rest stay in Messages and on the badge.
 const MAX_NOTIFICATIONS_PER_SCAN = 10;
 const RECONNECT_DELAYS = [2000, 4000, 8000, 16000, 32000]; // Exponential backoff
@@ -286,9 +286,19 @@ const PUSH_SCAN_WATERMARK_KEY = 'pb_push_scan_watermark';
 // tracker already knows which of those were handled.
 const PUSH_SCAN_OVERLAP_SECONDS = 5;
 
+const PUSH_SCAN_STATE_KEY = 'pb_push_scan_progress';
+export const PUSH_SCAN_ALARM = 'pb_push_scan_resume';
+const PAGES_PER_SCAN_PASS = 5;
+
 /** Forget how far scans have got, because the account changed. */
 export async function resetPushScan(): Promise<void> {
-  await setLocal(PUSH_SCAN_WATERMARK_KEY, 0);
+  await chrome.alarms.clear(PUSH_SCAN_ALARM);
+}
+
+/** One more pass of a long scan, from its alarm. */
+export function resumePushScan(): Promise<void> {
+  pushSyncChain = pushSyncChain.then(() => handlePushTickle(true, true));
+  return pushSyncChain;
 }
 
 let pushSyncChain: Promise<void> = Promise.resolve();
@@ -311,53 +321,83 @@ function schedulePushSync(catchUp = false): Promise<void> {
   return pushSyncChain;
 }
 
-/**
- * Pushes to look at, oldest first. The API sorts by modified time, so paging stops
- * only once a page has nothing modified since the user last looked, and creation
- * order comes from sorting.
- */
-async function fetchPushesToProcess(catchUp: boolean): Promise<any[]> {
-  const pushes: any[] = [];
-  let cursor: string | undefined = '';
-  // The API charges per row read, so ask only for what changed since the last scan.
-  const scannedUpTo = await getLocal<number>(PUSH_SCAN_WATERMARK_KEY);
-  const since = scannedUpTo ? scannedUpTo - PUSH_SCAN_OVERLAP_SECONDS : 0;
+/** A scan of everything changed since the watermark, resumable across workers. */
+interface PushScan {
+  since: number;
+  cursor: string;
+  newestSeen: number;
+  oldestFailed?: number;
+  tabsOpened: number;
+  notificationsShown: number;
+  heldBack: number;
+}
 
-  for (let page = 0; page < MAX_CATCH_UP_PAGES; page++) {
+/**
+ * Read one pass of a scan, oldest first. The API sorts by modified time, so `done`
+ * means there's no cursor left, or the rest was modified before the user last looked.
+ */
+async function readScanPages(
+  scan: PushScan,
+  catchUp: boolean
+): Promise<{ pushes: any[]; done: boolean }> {
+  const pushes: any[] = [];
+
+  for (let page = 0; page < PAGES_PER_SCAN_PASS; page++) {
+    if (page > 0 && rateLimitManager.isQuotaLow()) {
+      return { pushes: sortByCreated(pushes), done: false };
+    }
     const history: { pushes?: any[]; cursor?: string } = await getPushHistory(
       50,
-      since,
-      cursor
+      scan.since,
+      scan.cursor
     );
     const batch = history.pushes ?? [];
     pushes.push(...batch);
-    cursor = history.cursor;
+    scan.cursor = history.cursor ?? '';
 
     const oldest = batch[batch.length - 1];
     if (
-      !cursor ||
-      !oldest ||
-      !(await unifiedNotificationTracker.isNewerThanLastSeen(oldest.modified)) ||
-      // A live scan has caught up once it reaches one it has already handled. With a
-      // watermark the query itself says where to stop, and an old push that was only
-      // dismissed mustn't hide new ones behind it.
-      (!catchUp &&
-        !since &&
-        batch.some(push =>
-          unifiedNotificationTracker.wasProcessed('push', push.iden)
-        ))
+      !scan.cursor ||
+      (oldest &&
+        (!(await unifiedNotificationTracker.isNewerThanLastSeen(
+          oldest.modified
+        )) ||
+          // A live scan has caught up once it reaches one it has already handled.
+          // With a watermark the query itself says where to stop, and an old push
+          // that was only dismissed mustn't hide new ones behind it.
+          (!catchUp &&
+            !scan.since &&
+            batch.some(push =>
+              unifiedNotificationTracker.wasProcessed('push', push.iden)
+            ))))
     ) {
-      break;
+      return { pushes: sortByCreated(pushes), done: true };
     }
   }
 
+  // Without a baseline there's nothing to stop an old account's whole history.
+  const done = !(await unifiedNotificationTracker.hasBaseline());
+  return { pushes: sortByCreated(pushes), done };
+}
+
+function sortByCreated(pushes: any[]): any[] {
   return pushes.sort((a, b) => a.created - b.created);
+}
+
+/** The alarm, not tickles or reconnects, paces a long scan. */
+async function ensureScanAlarm(): Promise<void> {
+  if (!(await chrome.alarms.get(PUSH_SCAN_ALARM))) {
+    await chrome.alarms.create(PUSH_SCAN_ALARM, { delayInMinutes: 1 });
+  }
 }
 
 /**
  * Handle push tickle by syncing history using unified tracker
  */
-async function handlePushTickle(catchUp = false): Promise<void> {
+async function handlePushTickle(
+  catchUp = false,
+  fromAlarm = false
+): Promise<void> {
   try {
     console.log(
       catchUp
@@ -372,15 +412,32 @@ async function handlePushTickle(catchUp = false): Promise<void> {
       return;
     }
 
-    let showFailed = false;
-    let tabsOpened = 0;
-    let notificationsShown = 0;
-    let notificationsHeldBack = 0;
+    const saved = await getLocal<PushScan | null>(PUSH_SCAN_STATE_KEY);
+    if (saved && (!fromAlarm || rateLimitManager.isQuotaLow())) {
+      // Finish the scan in progress first. New arrivals are picked up right after.
+      await ensureScanAlarm();
+      return;
+    }
+    if (!saved && fromAlarm) {
+      return;
+    }
+
+    const scannedUpTo = await getLocal<number>(PUSH_SCAN_WATERMARK_KEY);
+    const scan: PushScan = saved ?? {
+      since: scannedUpTo ? scannedUpTo - PUSH_SCAN_OVERLAP_SECONDS : 0,
+      cursor: '',
+      newestSeen: scannedUpTo ?? 0,
+      tabsOpened: 0,
+      notificationsShown: 0,
+      heldBack: 0,
+    };
 
     // Get recent pushes and process them
     const accountEpoch = currentAccountEpoch();
     const deviceIden = await getLocal<string>('pb_device_iden');
-    const pushes = await fetchPushesToProcess(catchUp);
+    const { pushes, done } = await readScanPages(scan, catchUp);
+    // Only a backlog is capped. A scan long enough to need resuming is one.
+    const capped = catchUp || !!saved || !done;
 
     if (pushes.length > 0) {
       console.log(`🔄 [WebSocket] Found ${pushes.length} pushes to process`);
@@ -424,29 +481,37 @@ async function handlePushTickle(catchUp = false): Promise<void> {
             
             // Handle specific push types
             let openedInTab = false;
+            let heldBack = false;
             if (push.type === 'link') {
               console.log('🔗 [WebSocket] Processing link push from history');
-              if (!catchUp || tabsOpened < MAX_CATCH_UP_TABS) {
+              if (!capped || scan.tabsOpened < MAX_CATCH_UP_TABS) {
                 openedInTab = await handleLinkPush(push);
-                if (openedInTab) tabsOpened++;
+                if (openedInTab) scan.tabsOpened++;
               }
             }
 
             // The new tab already shows a link that opened.
             if (!openedInTab) {
               // Only a backlog is capped. The rest get one summary, below.
-              if (catchUp && notificationsShown >= MAX_NOTIFICATIONS_PER_SCAN) {
+              if (
+                capped &&
+                scan.notificationsShown >= MAX_NOTIFICATIONS_PER_SCAN
+              ) {
+                heldBack = true;
                 if (isPushForThisBrowser(push, deviceIden)) {
-                  notificationsHeldBack++;
+                  scan.heldBack++;
                 }
               } else {
                 try {
                   if (await showPushNotification(push)) {
-                    notificationsShown++;
+                    scan.notificationsShown++;
                   }
                 } catch {
                   // Not shown. Leave it unprocessed so the next scan retries.
-                  showFailed = true;
+                  scan.oldestFailed = Math.min(
+                    scan.oldestFailed ?? Infinity,
+                    push.modified ?? 0
+                  );
                   continue;
                 }
               }
@@ -456,11 +521,15 @@ async function handlePushTickle(catchUp = false): Promise<void> {
             if (isPushForThisBrowser(push, deviceIden)) {
               await notificationBadge.addPushNotifications(1);
             }
-            await unifiedNotificationTracker.markAsProcessed(
-              'push',
-              push.iden,
-              new Date(formatToThreeDecimals(push.created)*1000).getTime()
-            );
+            // Later passes read older pushes, which no scan reads again. The tracker only
+            // remembers so many, and they mustn't push out the recent ones it needs.
+            if (!heldBack || !saved) {
+              await unifiedNotificationTracker.markAsProcessed(
+                'push',
+                push.iden,
+                new Date(formatToThreeDecimals(push.created)*1000).getTime()
+              );
+            }
             newPushesCount++;
           } else {
             console.log(
@@ -472,31 +541,52 @@ async function handlePushTickle(catchUp = false): Promise<void> {
         }
       }
 
-      if (notificationsHeldBack > 0) {
+      if (scan.heldBack > 0) {
         const prefs = await getNotificationPrefs();
         if (prefs.enabled) {
           await chrome.notifications.create('push_backlog_summary', {
             type: 'basic',
             iconUrl: 'icons/48.png',
             title: 'More pushes',
-            message: `${notificationsHeldBack} more while you were away. See Messages.`,
+            message: `${scan.heldBack} more while you were away. See Messages.`,
             silent: !prefs.sound,
           });
         }
       }
 
       console.log(
-        `🔄 [WebSocket] Processed ${processedCount} pushes, ${newPushesCount} new pushes from tickle`
+        `🔄 [WebSocket] Processed ${processedCount} pushes, ${newPushesCount} new pushes`
       );
 
-      // Only after handling them, so a failure gets another look next scan.
-      if (!showFailed && accountEpoch === currentAccountEpoch()) {
-        const newest = Math.max(...pushes.map(push => push.modified ?? 0));
-        const scannedUpTo = await getLocal<number>(PUSH_SCAN_WATERMARK_KEY);
-        if (newest > (scannedUpTo ?? 0)) {
-          await setLocal(PUSH_SCAN_WATERMARK_KEY, newest);
-        }
-      }
+      scan.newestSeen = Math.max(
+        scan.newestSeen,
+        ...pushes.map(push => push.modified ?? 0)
+      );
+    }
+
+    if (accountEpoch !== currentAccountEpoch()) {
+      return;
+    }
+
+    if (!done) {
+      await setLocal(PUSH_SCAN_STATE_KEY, scan);
+      await ensureScanAlarm();
+      return;
+    }
+
+    // The scan is complete, so nothing older is left unread. Only a push that failed
+    // to show needs another look.
+    const reachedTo =
+      scan.oldestFailed === undefined
+        ? scan.newestSeen
+        : Math.max(scan.since, scan.oldestFailed - 1);
+    if (reachedTo > (scannedUpTo ?? 0)) {
+      await setLocal(PUSH_SCAN_WATERMARK_KEY, reachedTo);
+    }
+    if (saved) {
+      await setLocal(PUSH_SCAN_STATE_KEY, null);
+      // Anything that arrived during the scan.
+      void schedulePushSync();
     }
   } catch (error) {
     console.error('Failed to handle push tickle:', error);

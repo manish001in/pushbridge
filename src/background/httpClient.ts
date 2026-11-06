@@ -50,12 +50,27 @@ class HttpClient {
    * @param options - Request options
    * @returns Promise resolving to Response
    */
-  async fetch(url: string, options: RequestInit = {}): Promise<Response> {
+  /**
+   * With `failFast`, a request that would have to wait for quota throws RateLimitError
+   * instead, for callers with someone waiting on the answer.
+   */
+  async fetch(
+    url: string,
+    options: RequestInit = {},
+    { failFast = false }: { failFast?: boolean } = {}
+  ): Promise<Response> {
     const requestId = Math.random().toString(36).substr(2, 9);
     const method = options.method || 'GET';
 
     console.log(`🌐 [HTTP-${requestId}] ${method} ${url}`);
     // Headers hold the access token and bodies hold message text; never log them.
+
+    if (
+      failFast &&
+      (rateLimitManager.isBackoffActive() || !tokenBucket.canConsume(1))
+    ) {
+      throw new RateLimitError('Rate limited');
+    }
 
     // 1. Check if backoff is active
     if (rateLimitManager.isBackoffActive()) {

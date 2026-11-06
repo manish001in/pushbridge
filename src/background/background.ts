@@ -5,7 +5,11 @@ console.log('Pushbridge background service worker started');
 import { base64ToBytes } from '../popup/fileTransport';
 import { TransferRecord } from '../types/pushbullet';
 
-import { bumpAccountEpoch, currentAccountEpoch } from './accountEpoch';
+import {
+  bumpAccountEpoch,
+  currentAccountEpoch,
+  setAccountChanging,
+} from './accountEpoch';
 import { initializeKeepAlive, registerKeepAliveListener } from './alarm';
 import {
   clearAllChannelCaches,
@@ -65,7 +69,7 @@ import {
   enqueue,
   getQueueStatus,
   clearQueue,
-  wasGuidDelivered,
+  checkGuidDelivered,
   type EnqueueOutcome,
 } from './queue';
 import { initializeQuotaMonitor, registerQuotaListener } from './quotaMonitor';
@@ -78,10 +82,14 @@ import {
   reloadSmsThread,
   markConversationRead,
 } from './simpleSmsSync';
-import { sendSms } from './smsBridge';
-import { clearSmsSightings } from './smsNotificationIdentity';
+import { smsApiClient } from './smsApiClient';
 import {
+  clearSmsCache, sendSms } from './smsBridge';
+import { clearSmsSightings, SMS_RETRY_ALARM } from './smsNotificationIdentity';
+import {
+  PUSH_SCAN_ALARM,
   resetPushScan,
+  resumePushScan,
   initializeWebSocket,
   connectOnWorkerStart,
   disconnectWebSocket,
@@ -101,6 +109,11 @@ const POPUP_LAST_OPENED_KEY = 'pb_last_popup_opened';
 const SMS_SYNC_ALARM = 'pb_sms_sync';
 const SMS_SYNC_INTERVAL_MINUTES = 6 * 60;
 const ONE_HOUR_MS = 3600000; // 1 hour in milliseconds
+const KEPT_ACROSS_ACCOUNTS = new Set([
+  'pb_settings',
+  'pb_rate_state',
+  'pb_backoff_state',
+]);
 
 
 
@@ -251,6 +264,10 @@ registerKeepAliveListener();
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === SMS_SYNC_ALARM) {
     void triggerSmsSync('periodic');
+  } else if (alarm.name === SMS_RETRY_ALARM) {
+    void triggerSmsSync('notification_retry');
+  } else if (alarm.name === PUSH_SCAN_ALARM) {
+    void resumePushScan();
   }
 });
 registerQuotaListener();
@@ -515,12 +532,21 @@ async function handleTokenVerification(
       const userData = await response.json();
       console.log('Token verified successfully for user:', userData.name);
 
-      // Store the token and user ID
-      bumpAccountEpoch();
-      await setLocal('pb_token', token);
-      await setLocal('pb_user_iden', userData.iden);
-      // Another account's history has its own timeline.
-      await resetPushScan();
+      // Store the token and user ID. Signing back in as the same user keeps everything,
+      // but another account's data must not survive into this one.
+      await inAccountOrder(async () => {
+        const previous = await getLocal<string>('pb_user_iden');
+        if (previous && previous !== userData.iden) {
+          await clearAccountData();
+        }
+        await chrome.storage.local.set({
+          pb_token: token,
+          pb_user_iden: userData.iden,
+        });
+        if (previous !== userData.iden) {
+          bumpAccountEpoch();
+        }
+      });
 
       // Register Chrome device
       try {
@@ -734,12 +760,29 @@ async function handleClearContactCache(sendResponse: (response: any) => void) {
  * Handle push creation requests from popup
  */
 async function handleCreatePush(
-  payload: PushPayload & { isRetry?: boolean },
+  payload: PushPayload & { isRetry?: boolean; attemptStartedAt?: number },
   sendResponse: (response: any) => void
 ) {
+  const accountEpoch = currentAccountEpoch();
+  const startedAt = Date.now();
   // Fixed before the first attempt, so a retry can tell if that one went through.
-  const { isRetry, ...push } = payload;
+  const { isRetry, attemptStartedAt, ...push } = payload;
   push.guid = push.guid ?? crypto.randomUUID();
+
+  /** Saved for later, without keeping the composer waiting for it to go out. */
+  const saveForLater = async (mayHaveBeenSent: boolean) => {
+    respondToQueued(
+      await enqueue(
+        {
+          type: 'pushSend',
+          payload: push,
+          mayHaveBeenSent,
+          firstAttemptAt: attemptStartedAt ?? startedAt,
+        },
+        { waitForSend: false, accountEpoch }
+      )
+    );
+  };
 
   const respondToQueued = (outcome: EnqueueOutcome) => {
     if (outcome.status === 'rejected') {
@@ -750,30 +793,39 @@ async function handleCreatePush(
   };
 
   try {
-    // The user retried after a failure that may have been a lost response.
-    if (isRetry && (await wasGuidDelivered(push.guid))) {
-      sendResponse({ ok: true, queued: false });
+    // Before anything that could wait for quota, including the check just below.
+    if (rateLimitManager.isBackoffActive() || !tokenBucket.canConsume(1)) {
+      await saveForLater(!!isRetry);
       return;
+    }
+
+    // The user retried after a failure that may have been a lost response.
+    if (isRetry) {
+      const delivery = await checkGuidDelivered(push.guid, attemptStartedAt);
+      if (delivery === 'delivered') {
+        sendResponse({ ok: true, queued: false });
+        return;
+      }
+      if (delivery === 'unknown') {
+        await saveForLater(true);
+        return;
+      }
     }
 
     // Check if we're online
     if (!isWebSocketHealthy()) {
-      respondToQueued(await enqueue({ type: 'pushSend', payload: push }));
-      return;
-    }
-
-    if (rateLimitManager.isBackoffActive()) {
       respondToQueued(
-        await enqueue(
-          { type: 'pushSend', payload: push },
-          { waitForSend: false }
-        )
+        await enqueue({ type: 'pushSend', payload: push }, { accountEpoch })
       );
       return;
     }
 
     // Failures are reported to the composer that's waiting for this answer.
-    const created = await createPush(push, { silent: true });
+    const created = await createPush(push, {
+      silent: true,
+      accountEpoch,
+      failFast: true,
+    });
 
     // Broadcast to any listening popups that a new push was created
     try {
@@ -799,16 +851,21 @@ async function handleCreatePush(
     const rateLimited = error instanceof RateLimitError;
     if (noAnswer || rateLimited) {
       try {
-        respondToQueued(
-          await enqueue(
-            {
-              type: 'pushSend',
-              payload: push,
-              mayHaveBeenSent: noAnswer,
-            },
-            { waitForSend: !rateLimited }
-          )
-        );
+        if (rateLimited) {
+          await saveForLater(!!isRetry);
+        } else {
+          respondToQueued(
+            await enqueue(
+              {
+                type: 'pushSend',
+                payload: push,
+                mayHaveBeenSent: true,
+                firstAttemptAt: attemptStartedAt ?? startedAt,
+              },
+              { accountEpoch }
+            )
+          );
+        }
         return;
       } catch (queueError) {
         console.error('Failed to queue push:', queueError);
@@ -1250,18 +1307,31 @@ async function handleUploadFile(
     channel_tag?: string;
     guid?: string;
     isRetry?: boolean;
+    attemptStartedAt?: number;
   },
   sendResponse: (response: any) => void
 ) {
+  const accountEpoch = currentAccountEpoch();
   try {
     const { fileData, targetDeviceIden, email, title, body, channel_tag, isRetry } =
       payload;
     const guid = payload.guid ?? crypto.randomUUID();
 
     // The user retried after a failure that may have been a lost response.
-    if (isRetry && (await wasGuidDelivered(guid))) {
-      sendResponse({ success: true });
-      return;
+    if (isRetry) {
+      const delivery = await checkGuidDelivered(guid, payload.attemptStartedAt);
+      if (delivery === 'delivered') {
+        sendResponse({ success: true });
+        return;
+      }
+      if (delivery === 'unknown') {
+        sendResponse({
+          success: false,
+          error:
+            "Couldn't confirm whether the file already went through. Please check before sending it again.",
+        });
+        return;
+      }
     }
 
     // Reconstruct the File object from the ArrayBuffer data
@@ -1271,7 +1341,6 @@ async function handleUploadFile(
     });
 
     // Request upload from Pushbullet
-    const accountEpoch = currentAccountEpoch();
     const uploadInfo = await requestUpload(file);
 
     // Upload file to S3 with progress tracking
@@ -1310,7 +1379,8 @@ async function handleUploadFile(
         body,
         channel_tag,
         email,
-        guid
+        guid,
+        accountEpoch
       );
 
       // Add transfer record
@@ -1727,7 +1797,7 @@ export async function triggerSmsSync(reason: string = 'manual'): Promise<void> {
 
     // Opening the popup only needs what changed. The periodic sync checks everything.
     await syncAllSmsData(defaultDevice.iden, {
-      incremental: reason === 'popup_open',
+      incremental: reason === 'popup_open' || reason === 'notification_retry',
     });
   } catch (error) {
     console.error(`❌ [Background] SMS sync failed (${reason}):`, error);
@@ -2348,18 +2418,35 @@ async function handleClearSmsNotifications(
 /**
  * Handle clearing all data including cursors
  */
-async function handleClearAllData(sendResponse: (response: any) => void) {
-  try {
-    console.log('🧹 [Background] Starting complete data clear...');
+let accountChanges: Promise<unknown> = Promise.resolve();
 
+/** One account change at a time. */
+function inAccountOrder<T>(change: () => Promise<T>): Promise<T> {
+  const result = accountChanges.then(change, change);
+  accountChanges = result.catch(() => undefined);
+  return result;
+}
+
+/**
+ * Remove everything belonging to the signed-in account, keeping general preferences.
+ * Stops work first, so nothing running can write it back.
+ */
+async function clearAccountData(): Promise<void> {
+  bumpAccountEpoch();
+  setAccountChanging(true);
+  try {
     // Stop the stream first, or it keeps delivering the old account's
     // notifications and writing to storage after the reset.
-    bumpAccountEpoch();
     disconnectWebSocket();
     operationQueue.clearQueue();
+    await resetPushScan();
+    await chrome.alarms.clear(SMS_RETRY_ALARM);
     await clearAllChannelCaches();
-    contextManager.clearContext();
-    clearSmsSightings();
+    await contextManager.clearContext();
+    await clearSmsCache();
+    smsApiClient.reset();
+    await clearQueue();
+    await clearSmsSightings();
 
     // Notifications from the old account shouldn't stay on screen.
     const visible = await new Promise<object>(resolve =>
@@ -2369,46 +2456,40 @@ async function handleClearAllData(sendResponse: (response: any) => void) {
       Object.keys(visible).map(id => chrome.notifications.clear(id))
     );
 
-    // Clear ALL storage from chrome.storage.local (this clears everything)
-    await chrome.storage.local.clear();
-    console.log('🧹 [Background] All chrome.storage.local data cleared');
+    // Before storage, because it writes its own state there.
+    await unifiedNotificationTracker.clearAllNotifications();
 
-    // Clear ALL storage from chrome.storage.session
+    const everything = await chrome.storage.local.get(null);
+    await chrome.storage.local.remove(
+      Object.keys(everything).filter(key => !KEPT_ACROSS_ACCOUNTS.has(key))
+    );
+
+    // Devices in the settings belonged to the old account.
+    const { defaultDevice, defaultSmsDevice, ...settings } =
+      (everything.pb_settings as Record<string, unknown>) ?? {};
+    void defaultDevice;
+    void defaultSmsDevice;
+    await chrome.storage.local.set({ pb_settings: settings });
+
     await chrome.storage.session.clear();
-    console.log('🧹 [Background] All chrome.storage.session data cleared');
+    await notificationBadge.refreshBadge();
+  } finally {
+    setAccountChanging(false);
+  }
+}
 
-    // Reset essential in-memory state
-    try {
-      // Reset token bucket
+async function handleClearAllData(sendResponse: (response: any) => void) {
+  try {
+    console.log('🧹 [Background] Starting complete data clear...');
+
+    await inAccountOrder(async () => {
+      await clearAccountData();
+
+      // Beyond what any account owns: settings and rate limit state too.
+      await chrome.storage.local.clear();
       tokenBucket.reset();
-      console.log('🧹 [Background] Token bucket reset');
-    } catch (error) {
-      console.warn('🧹 [Background] Failed to reset token bucket:', error);
-    }
-
-    try {
-      // Reset rate limit manager
       await rateLimitManager.clearState();
-      console.log('🧹 [Background] Rate limit manager reset');
-    } catch (error) {
-      console.warn('🧹 [Background] Failed to reset rate limit manager:', error);
-    }
-
-    try {
-      // Reset notification tracker
-      await unifiedNotificationTracker.clearAllNotifications();
-      console.log('🧹 [Background] Notification tracker reset');
-    } catch (error) {
-      console.warn('🧹 [Background] Failed to reset notification tracker:', error);
-    }
-
-    // Clear any active operations
-    try {
-      await clearQueue();
-      console.log('🧹 [Background] Operation queue cleared');
-    } catch (error) {
-      console.warn('🧹 [Background] Failed to clear operation queue:', error);
-    }
+    });
 
     console.log('🎉 [Background] All extension data cleared successfully');
     sendResponse({ success: true, message: 'All extension data has been cleared' });

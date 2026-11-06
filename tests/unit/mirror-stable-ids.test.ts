@@ -2,6 +2,7 @@
  * Android re-posts a notification when it updates (progress, new message count).
  * Each update must replace the desktop notification rather than add another.
  */
+import { bumpAccountEpoch } from '../../src/background/accountEpoch';
 import {
   getActiveMirrors,
   handleMirror,
@@ -19,6 +20,7 @@ jest.mock('../../src/background/unifiedNotificationTracker', () => ({
     getLastSeenMs: jest.fn(),
     shouldShowNotification: jest.fn().mockResolvedValue(true),
     claimNotification: jest.fn().mockResolvedValue(true),
+    releaseClaim: jest.fn(),
   },
 }));
 jest.mock('../../src/background/smsBridge', () => ({
@@ -156,4 +158,34 @@ describe('mirrored notification identity', () => {
     await handleMirror(sms);
     expect(new Set(ids()).size).toBe(1);
   });
+
+  test('an SMS whose notification failed is not recorded as handled', async () => {
+    (chrome.alarms.get as jest.Mock).mockResolvedValue(undefined);
+    create().mockRejectedValueOnce(new Error('no'));
+    const tracker = unifiedNotificationTracker as jest.Mocked<
+      typeof unifiedNotificationTracker
+    >;
+    await handleMirror(
+      mirror({
+        application_name: 'SMS',
+        title: 'Failed sender',
+        body: 'failed text',
+        notification_id: '77',
+      })
+    );
+    expect(tracker.releaseClaim).toHaveBeenCalled();
+    expect(tracker.markAsProcessed).not.toHaveBeenCalled();
+    expect(chrome.alarms.create).toHaveBeenCalledWith(
+      'pb_sms_notification_retry',
+      { delayInMinutes: 1 }
+    );
+  });
+
+  test('a mirror for a previous account does nothing', async () => {
+    const pending = handleMirror(mirror({ notification_id: '88' }));
+    bumpAccountEpoch();
+    await pending;
+    expect(create()).not.toHaveBeenCalled();
+  });
+
 });

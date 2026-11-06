@@ -2,6 +2,7 @@
  * A full sync must not lose anything newer or anything it failed to fetch, and
  * reading a conversation must stay read across syncs.
  */
+import { rateLimitManager } from '../../src/background/rateLimitManager';
 import * as smsSync from '../../src/background/simpleSmsSync';
 import { smsApiClient } from '../../src/background/smsApiClient';
 import { unifiedNotificationTracker } from '../../src/background/unifiedNotificationTracker';
@@ -25,6 +26,7 @@ jest.mock('../../src/background/unifiedNotificationTracker', () => ({
     getState: jest.fn(),
     shouldShowNotification: jest.fn().mockResolvedValue(false),
     claimNotification: jest.fn().mockResolvedValue(false),
+    releaseClaim: jest.fn(),
     markAsProcessed: jest.fn(),
     setCount: jest.fn(),
   },
@@ -163,11 +165,15 @@ describe('SMS cache', () => {
     });
 
     describe('incremental sync', () => {
-      const withLatest = (id: string, latestId: string) => ({
-        id,
-        recipients: [{ name: id, number: id, address: id }],
-        latest: { id: latestId, timestamp: 1, direction: 'incoming', body: 'x' },
-      });
+      const latest: Record<string, string> = {};
+      const withLatest = (id: string, latestId: string) => {
+        latest[id] = latestId;
+        return {
+          id,
+          recipients: [{ name: id, number: id, address: id }],
+          latest: { id: latestId, timestamp: 1, direction: 'incoming', body: 'x' },
+        };
+      };
       const fetchedIds = () =>
         api.getSmsThreadMessages.mock.calls.map(call => call[1]);
 
@@ -175,9 +181,10 @@ describe('SMS cache', () => {
         api.getSmsThreadsList.mockResolvedValue({
           threads: [withLatest('t1', 'a'), withLatest('t2', 'b')],
         } as any);
-        api.getSmsThreadMessages.mockResolvedValue({
-          thread: [apiMsg('m', T)],
-        } as any);
+        api.getSmsThreadMessages.mockImplementation(
+          async (_device: string, id: string) =>
+            ({ thread: [apiMsg(latest[id], T)] }) as any
+        );
         await smsSync.syncAllSmsData(DEVICE);
         api.getSmsThreadMessages.mockClear();
       });
@@ -199,6 +206,82 @@ describe('SMS cache', () => {
       test('a full sync still fetches everything', async () => {
         await smsSync.syncAllSmsData(DEVICE);
         expect(fetchedIds()).toEqual(['t1', 't2']);
+      });
+
+      test('a list naming a message the fetch lacks certifies nothing', async () => {
+        api.getSmsThreadsList.mockResolvedValue({
+          threads: [withLatest('t1', 'unseen'), withLatest('t2', 'b')],
+        } as any);
+        api.getSmsThreadMessages.mockResolvedValue({
+          thread: [apiMsg('a', T)],
+        } as any);
+        await smsSync.syncAllSmsData(DEVICE, { incremental: true });
+        expect(cachedThread('t1').latestKey).toBeUndefined();
+
+        api.getSmsThreadMessages.mockClear();
+        await smsSync.syncAllSmsData(DEVICE, { incremental: true });
+        expect(fetchedIds()).toEqual(['t1']);
+      });
+
+      test('a message only in the cache certifies nothing', async () => {
+        api.getSmsThreadsList.mockResolvedValue({
+          threads: [withLatest('t1', 'a2'), withLatest('t2', 'b')],
+        } as any);
+        api.getSmsThreadMessages.mockResolvedValue({
+          thread: [apiMsg('other', T + 1)],
+        } as any);
+        await smsSync.syncAllSmsData(DEVICE, { incremental: true });
+        expect(cachedThread('t1').latestKey).toBeUndefined();
+      });
+
+      test('reloading reads the list first, so it cannot overstate', async () => {
+        const order: string[] = [];
+        api.getSmsThreadsList.mockImplementation(async () => {
+          order.push('list');
+          return { threads: [withLatest('t1', 'a')] } as any;
+        });
+        api.getSmsThreadMessages.mockImplementation(async () => {
+          order.push('messages');
+          return { thread: [apiMsg('a', T), apiMsg('arrived', T + 1)] } as any;
+        });
+        await smsSync.reloadSmsThread(DEVICE, 't1');
+        expect(order).toEqual(['list', 'messages']);
+      });
+
+      test('a failed notification gets another try without another SMS', async () => {
+        (chrome.alarms.get as jest.Mock).mockResolvedValue(undefined);
+        (chrome.alarms.create as jest.Mock).mockClear();
+        tracker.claimNotification.mockResolvedValueOnce(true);
+        (chrome.notifications.create as jest.Mock) = jest
+          .fn()
+          .mockRejectedValueOnce(new Error('no'))
+          .mockResolvedValue('id');
+        api.getSmsThreadsList.mockResolvedValue({
+          threads: [withLatest('t1', 'new'), withLatest('t2', 'b')],
+        } as any);
+        await smsSync.syncAllSmsData(DEVICE, { incremental: true });
+
+        expect(tracker.releaseClaim).toHaveBeenCalledWith('sms', 'new');
+        expect(cachedThread('t1').messages.map((m: any) => m.id)).toContain('new');
+        expect(cachedThread('t1').latestKey).toBeUndefined();
+        expect(chrome.alarms.create).toHaveBeenCalledWith(
+          'pb_sms_notification_retry',
+          { delayInMinutes: 1 }
+        );
+
+        // What the alarm does, with nothing new on the phone.
+        tracker.claimNotification.mockResolvedValueOnce(true);
+        await smsSync.syncAllSmsData(DEVICE, { incremental: true });
+        expect(chrome.notifications.create).toHaveBeenCalledTimes(2);
+        expect(cachedThread('t1').latestKey).toBeDefined();
+      });
+
+      test('quota running low skips the sync', async () => {
+        const low = jest.spyOn(rateLimitManager, 'isQuotaLow').mockReturnValue(true);
+        api.getSmsThreadsList.mockClear();
+        await smsSync.syncAllSmsData(DEVICE, { incremental: true });
+        low.mockRestore();
+        expect(api.getSmsThreadsList).not.toHaveBeenCalled();
       });
     });
 

@@ -15,6 +15,7 @@ import {
   FilePush,
 } from '../types/pushbullet';
 
+import { assertSameAccount } from './accountEpoch';
 import { reportError, PBError } from './errorManager';
 import { httpClient } from './httpClient';
 import { PushEnricher } from './pushEnricher';
@@ -65,7 +66,11 @@ export class PushApiError extends Error {
 
 export async function createPush(
   payload: PushPayload,
-  { silent = false }: { silent?: boolean } = {}
+  {
+    silent = false,
+    accountEpoch,
+    failFast = false,
+  }: { silent?: boolean; accountEpoch?: number; failFast?: boolean } = {}
 ): Promise<PushbulletPush> {
   try {
     // Validate payload
@@ -95,6 +100,9 @@ export async function createPush(
     if (!sourceDeviceIden) {
       throw new Error('Chrome device not registered');
     }
+
+    // The token and device above must belong to whoever this message came from.
+    assertSameAccount(accountEpoch);
 
     // Prepare push data
     const pushData: Record<string, unknown> = {
@@ -139,7 +147,8 @@ export async function createPush(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(pushData),
-      }
+      },
+      { failFast }
     );
 
     if (!response.ok) {
@@ -280,10 +289,12 @@ export async function createFilePush(
   body?: string,
   channel_tag?: string,
   email?: string,
-  guid?: string
+  guid?: string,
+  accountEpoch?: number
 ): Promise<FilePush> {
   try {
     const token = await getLocal<string>('pb_token');
+    assertSameAccount(accountEpoch);
     if (!token) {
       throw new Error('No token available');
     }
